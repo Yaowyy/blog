@@ -2,16 +2,38 @@
 import Layout from '../layouts/Layout.astro';
 ---
 
-<Layout>
-  <main class="max-w-2xl mx-auto px-4 py-16">
-    <h1 class="text-4xl font-bold mb-4">Hi, I'm Andrii 👋</h1>
-    <p class="text-lg text-gray-600 mb-12">Marketing student exploring front-end, data analysis & marketing research.</p>
+<Layout page="blog">
+  <div class="not-prose">
 
-    <h2 class="text-2xl font-semibold mb-6">Latest Posts</h2>
-    <ul class="space-y-4">
-      <li>
-        <a href="/posts/first-post" class="text-blue-600 hover:underline text-lg">My First Post</a>
-      </li>
-    </ul>
-  </main>
+    <div class="mb-16">
+      <p class="text-xs uppercase tracking-widest text-gray-300 mb-4">Marketing & Tech</p>
+      <h1 class="text-5xl font-medium tracking-tight leading-tight mb-4">Andrii</h1>
+      <p class="text-gray-400 text-lg leading-relaxed max-w-md">Marketing student exploring front-end development, data analysis & marketing research.</p>
+    </div>
+
+    <div class="mb-16">
+      <p class="text-xs uppercase tracking-widest text-gray-300 mb-6">Writing</p>
+      <div class="divide-y divide-gray-100">
+        <a href="/posts/first-post" class="flex justify-between items-baseline py-4 group">
+          <span class="text-sm font-medium group-hover:text-gray-400 transition-colors">My First Post</span>
+          <span class="text-xs text-gray-300">Jun 2026</span>
+        </a>
+      </div>
+    </div>
+
+    <div class="mb-16">
+      <p class="text-xs uppercase tracking-widest text-gray-300 mb-6">Projects</p>
+      <div class="grid grid-cols-2 gap-3">
+        <a href="https://calmservers.com" class="border border-gray-100 rounded-xl p-5 hover:border-gray-200 transition-colors group">
+          <p class="text-sm font-medium mb-1 group-hover:text-gray-400 transition-colors">calmservers.com</p>
+          <p class="text-xs text-gray-400">Rust game server community</p>
+        </a>
+        <a href="https://andrii.blog" class="border border-gray-100 rounded-xl p-5 hover:border-gray-200 transition-colors group">
+          <p class="text-sm font-medium mb-1 group-hover:text-gray-400 transition-colors">andrii.blog</p>
+          <p class="text-xs text-gray-400">This blog — built with Astro</p>
+        </a>
+      </div>
+    </div>
+
+  </div>
 </Layout>

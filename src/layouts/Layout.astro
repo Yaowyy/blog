@@ -1,5 +1,27 @@
 ---
 import '../styles/global.css';
+const { page = 'blog' } = Astro.props;
+
+const logos = {
+  blog: 'andrii.blog',
+  portfolio: 'andrii.portfolio',
+  contact: 'andrii.contact',
+};
+
+const navLinks = {
+  blog: [
+    { href: '/portfolio', label: 'portfolio' },
+    { href: '/contact', label: 'contact' },
+  ],
+  portfolio: [
+    { href: '/', label: 'blog' },
+    { href: '/contact', label: 'contact' },
+  ],
+  contact: [
+    { href: '/portfolio', label: 'portfolio' },
+    { href: '/', label: 'blog' },
+  ],
+};
 ---
 
 <!doctype html>
@@ -16,10 +38,14 @@ import '../styles/global.css';
     <!-- Navigation -->
     <nav class="border-b border-gray-200 px-4 py-4">
       <div class="max-w-2xl mx-auto flex justify-between items-center">
-        <a href="/" class="font-bold text-lg">andrii.blog</a>
-        <div class="flex gap-6 text-sm text-gray-600">
-          <a href="/" class="hover:text-black">Home</a>
-          <a href="/about" class="hover:text-black">About</a>
+        <a href="/" class="text-2xl font-bold tracking-tight group">
+          <span class="group-hover:hidden">{logos[page]}</span>
+          <span class="hidden group-hover:inline">andrii.kashevskyi</span>
+        </a>
+        <div class="flex gap-6 text-gray-400" style="font-size: 15px;">
+          {navLinks[page].map(link => (
+          <a href={link.href} class="hover:text-gray-900 transition-colors">{link.label}</a>
+          ))}
         </div>
       </div>
     </nav>
