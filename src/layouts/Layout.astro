@@ -1,25 +1,34 @@
 ---
 import '../styles/global.css';
-const { page = 'blog' } = Astro.props;
+const { page = 'home' } = Astro.props;
 
 const logos = {
+  home: 'andrii.kashevskyi',
   blog: 'andrii.blog',
   portfolio: 'andrii.portfolio',
   contact: 'andrii.contact',
 };
 
 const navLinks = {
+  home: [
+    { href: '/blog', label: 'blog' },
+    { href: '/portfolio', label: 'portfolio' },
+    { href: '/contact', label: 'contact' },
+  ],
   blog: [
+    { href: '/', label: 'home' },
     { href: '/portfolio', label: 'portfolio' },
     { href: '/contact', label: 'contact' },
   ],
   portfolio: [
-    { href: '/', label: 'blog' },
+    { href: '/', label: 'home' },
+    { href: '/blog', label: 'blog' },
     { href: '/contact', label: 'contact' },
   ],
   contact: [
+    { href: '/', label: 'home' },
+    { href: '/blog', label: 'blog' },
     { href: '/portfolio', label: 'portfolio' },
-    { href: '/', label: 'blog' },
   ],
 };
 ---
@@ -32,6 +41,15 @@ const navLinks = {
     <link rel="icon" type="image/png" href="/favicon.png" />
     <meta name="generator" content={Astro.generator} />
     <title>Andrii's Blog</title>
+    <style>
+      @keyframes fadein {
+        from { opacity: 0; }
+        to { opacity: 1; }
+      }
+      main {
+        animation: fadein 1s ease forwards;
+      }
+    </style>
   </head>
   <body class="bg-white text-gray-900 font-sans">
 

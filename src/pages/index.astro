@@ -2,37 +2,34 @@
 import Layout from '../layouts/Layout.astro';
 ---
 
-<Layout page="blog">
-  <div class="not-prose">
+<Layout page="home">
+  <div class="not-prose space-y-16">
 
-    <div class="mb-16">
-      <p class="text-xs uppercase tracking-widest text-gray-300 mb-4">Marketing & Tech</p>
-      <h1 class="text-5xl font-medium tracking-tight leading-tight mb-4">Andrii</h1>
-      <p class="text-gray-400 text-lg leading-relaxed max-w-md">Marketing student exploring front-end development, data analysis & marketing research.</p>
+    <div>
+      <p class="text-xs uppercase tracking-widest text-gray-300 mb-4">who is this guy</p>
+      <p class="text-gray-500 text-lg leading-relaxed max-w-md">Marketing student exploring front-end development, data analysis & marketing research.</p>
     </div>
 
-    <div class="mb-16">
-      <p class="text-xs uppercase tracking-widest text-gray-300 mb-6">Writing</p>
+    <div>
+      <p class="text-xs uppercase tracking-widest text-gray-300 mb-6">my projects</p>
+      <a href="https://calmservers.com" target="_blank" class="border border-gray-100 rounded-xl p-5 flex justify-between items-center hover:border-gray-200 transition-colors group">
+        <div>
+          <p class="text-sm font-medium mb-1">calmservers.com</p>
+          <p class="text-xs text-gray-400">Rust game server community</p>
+        </div>
+        <span class="text-gray-200 group-hover:text-gray-400 transition-colors">↗</span>
+      </a>
+    </div>
+
+    <div>
+      <p class="text-xs uppercase tracking-widest text-gray-300 mb-6">readme</p>
       <div class="divide-y divide-gray-100">
         <a href="/posts/first-post" class="flex justify-between items-baseline py-4 group">
           <span class="text-sm font-medium group-hover:text-gray-400 transition-colors">My First Post</span>
           <span class="text-xs text-gray-300">Jun 2026</span>
         </a>
       </div>
-    </div>
-
-    <div class="mb-16">
-      <p class="text-xs uppercase tracking-widest text-gray-300 mb-6">Projects</p>
-      <div class="grid grid-cols-2 gap-3">
-        <a href="https://calmservers.com" class="border border-gray-100 rounded-xl p-5 hover:border-gray-200 transition-colors group">
-          <p class="text-sm font-medium mb-1 group-hover:text-gray-400 transition-colors">calmservers.com</p>
-          <p class="text-xs text-gray-400">Rust game server community</p>
-        </a>
-        <a href="https://andrii.blog" class="border border-gray-100 rounded-xl p-5 hover:border-gray-200 transition-colors group">
-          <p class="text-sm font-medium mb-1 group-hover:text-gray-400 transition-colors">andrii.blog</p>
-          <p class="text-xs text-gray-400">This blog — built with Astro</p>
-        </a>
-      </div>
+      <a href="/blog" class="text-xs text-gray-300 hover:text-gray-500 transition-colors mt-4 inline-block">all posts →</a>
     </div>
 
   </div>
