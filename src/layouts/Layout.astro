@@ -7,6 +7,7 @@ const logos = {
   blog: 'andrii.blog',
   portfolio: 'andrii.portfolio',
   contact: 'andrii.contact',
+  hk: 'andrii.香港',
 };
 
 const navLinks = {
@@ -14,21 +15,31 @@ const navLinks = {
     { href: '/blog', label: 'blog' },
     { href: '/portfolio', label: 'portfolio' },
     { href: '/contact', label: 'contact' },
+    { href: '/hk-planner.html', label: '香港' },
   ],
   blog: [
     { href: '/', label: 'home' },
     { href: '/portfolio', label: 'portfolio' },
     { href: '/contact', label: 'contact' },
+    { href: '/hk-planner.html', label: '香港' },
   ],
   portfolio: [
     { href: '/', label: 'home' },
     { href: '/blog', label: 'blog' },
     { href: '/contact', label: 'contact' },
+    { href: '/hk-planner.html', label: '香港' },
   ],
   contact: [
     { href: '/', label: 'home' },
     { href: '/blog', label: 'blog' },
     { href: '/portfolio', label: 'portfolio' },
+    { href: '/hk-planner.html', label: '香港' },
+  ],
+  hk: [
+    { href: '/', label: 'home' },
+    { href: '/blog', label: 'blog' },
+    { href: '/portfolio', label: 'portfolio' },
+    { href: '/contact', label: 'contact' },
   ],
 };
 ---
@@ -52,7 +63,7 @@ const navLinks = {
     </style>
   </head>
   <body class="bg-white text-gray-900 font-sans">
-
+    
     <!-- Navigation -->
     <nav class="border-b border-gray-200 px-4 py-4">
       <div class="max-w-2xl mx-auto flex justify-between items-center">
@@ -69,7 +80,7 @@ const navLinks = {
     </nav>
 
     <!-- Page content -->
-    <main class="max-w-2xl mx-auto px-4 py-12 prose">
+    <main class={page === 'hk' ? 'w-full p-0' : 'max-w-2xl mx-auto px-4 py-12 prose'}>
       <slot />
     </main>
 
