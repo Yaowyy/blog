@@ -1,0 +1,602 @@
+---
+import Layout from '../layouts/Layout.astro';
+---
+
+<Layout page="hk">
+
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&family=Noto+Sans+HK:wght@400;500&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@tabler/icons-webfont@latest/dist/tabler-icons.min.css">
+
+<style is:global>
+  .hk-wrap { --bg: #ffffff; --surface: #ffffff; --surface2: #f5f5f5; --border: rgba(0,0,0,0.08); --border-strong: rgba(0,0,0,0.15); --text: #1a1916; --text2: #6b6860; --text3: #9c9a95; --green: #3B6D11; --green-light: #EAF3DE; --green-mid: #639922; --coral: #D85A30; --coral-light: #FAECE7; --purple: #7F77DD; --purple-light: #EEEDFE; --amber: #BA7517; --amber-light: #FAEEDA; --blue: #378ADD; --blue-light: #E6F1FB; --red: #A32D2D; --red-light: #FCEBEB; --radius: 10px; --radius-lg: 14px; }
+  .hk-wrap.dark { --bg: #18181a; --surface: #222224; --surface2: #2a2a2d; --border: rgba(255,255,255,0.10); --border-strong: rgba(255,255,255,0.18); --text: #f0ede6; --text2: #9c9a95; --text3: #6b6860; --green-light: #173404; --coral-light: #4A1B0C; --purple-light: #26215C; --amber-light: #412402; --blue-light: #042C53; --red-light: #501313; }
+  .hk-wrap { font-family: 'Inter', system-ui, sans-serif; background: var(--bg); color: var(--text); line-height: 1.5; }
+  .hk-container { max-width: 900px; margin: 0 auto; padding: 1.5rem 1rem 4rem; }
+  .tabs { display: flex; gap: 4px; margin-bottom: 1.5rem; background: var(--surface2); padding: 4px; border-radius: var(--radius); width: fit-content; }
+  .tab { padding: 7px 16px; font-size: 13px; font-weight: 500; cursor: pointer; border: none; background: none; color: var(--text2); border-radius: 7px; transition: all .15s; font-family: inherit; }
+  .tab.active { background: var(--surface); color: var(--text); box-shadow: 0 1px 3px rgba(0,0,0,0.1); }
+  .section { display: none; }
+  .section.active { display: block; }
+  .metrics { display: grid; grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)); gap: 10px; margin-bottom: 1.5rem; }
+  .metric { background: var(--surface); border: 0.5px solid var(--border); border-radius: var(--radius); padding: 0.9rem 1rem; }
+  .metric-label { font-size: 11px; color: var(--text3); text-transform: uppercase; letter-spacing: 0.05em; margin-bottom: 4px; }
+  .metric-value { font-size: 22px; font-weight: 600; letter-spacing: -0.02em; }
+  .metric-value.good { color: var(--green); }
+  .metric-value.warn { color: var(--amber); }
+  .metric-value.bad { color: var(--red); }
+  .cal-nav { display: flex; align-items: center; justify-content: space-between; margin-bottom: 1rem; }
+  .cal-nav button { background: var(--surface); border: 0.5px solid var(--border); padding: 6px 14px; border-radius: var(--radius); cursor: pointer; color: var(--text); font-size: 13px; font-family: inherit; transition: background .1s; }
+  .cal-nav button:hover { background: var(--surface2); }
+  .cal-month { font-size: 16px; font-weight: 600; letter-spacing: -0.01em; }
+  .cal-header { display: grid; grid-template-columns: repeat(7,1fr); gap: 4px; margin-bottom: 4px; }
+  .cal-day-label { text-align: center; font-size: 11px; color: var(--text3); font-weight: 500; padding: 4px 0; }
+  .cal-grid { display: grid; grid-template-columns: repeat(7,1fr); gap: 4px; }
+  .cal-cell { min-height: 76px; border-radius: 8px; border: 0.5px solid var(--border); padding: 5px 6px; font-size: 10px; cursor: pointer; transition: all .12s; background: var(--surface); }
+  .cal-cell:hover { border-color: var(--border-strong); }
+  .cal-cell.other-month { opacity: 0.28; pointer-events: none; }
+  .cal-cell.today { border: 1.5px solid var(--blue); }
+  .cal-cell.has-cantonese { background: var(--green-light); }
+  .cal-cell.has-hours { border-color: var(--amber); }
+  .cal-cell.has-cantonese.has-hours { background: var(--green-light); border-color: var(--amber); }
+  .day-num { font-size: 12px; font-weight: 500; margin-bottom: 3px; }
+  .cal-cell.today .day-num { color: var(--blue); }
+  .hours-badge { display: inline-block; font-size: 9px; font-weight: 600; color: var(--amber); background: var(--amber-light); border-radius: 3px; padding: 1px 4px; margin-top: 2px; }
+  .pip { display: inline-block; width: 5px; height: 5px; border-radius: 50%; margin-right: 2px; flex-shrink: 0; vertical-align: middle; }
+  .pip.finance { background: var(--coral); }
+  .pip.cantonese { background: var(--green-mid); }
+  .pip.trip { background: var(--purple); }
+  .event-line { display: flex; align-items: flex-start; gap: 2px; margin-top: 2px; line-height: 1.3; }
+  .event-text { font-size: 9px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 100%; color: var(--text2); }
+  .legend { display: flex; gap: 14px; margin-bottom: 1rem; flex-wrap: wrap; }
+  .legend-item { display: flex; align-items: center; gap: 5px; font-size: 12px; color: var(--text2); }
+  .legend-swatch { width: 10px; height: 10px; border-radius: 2px; }
+  .goal-card { background: var(--surface); border: 0.5px solid var(--border); border-radius: var(--radius-lg); padding: 1rem 1.25rem; margin-bottom: 8px; }
+  .goal-header { display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 6px; }
+  .goal-title { font-size: 14px; font-weight: 500; display: flex; align-items: center; gap: 8px; }
+  .goal-sub { font-size: 12px; color: var(--text2); display: flex; justify-content: space-between; }
+  .badge { font-size: 11px; font-weight: 500; padding: 3px 9px; border-radius: 20px; flex-shrink: 0; margin-left: 8px; }
+  .badge.urgent { background: var(--red-light); color: var(--red); }
+  .badge.pending { background: var(--amber-light); color: var(--amber); }
+  .badge.soon { background: var(--amber-light); color: var(--amber); }
+  .badge.done { background: var(--green-light); color: var(--green); }
+  .rate-box { background: var(--surface2); border-radius: var(--radius-lg); padding: 1rem 1.25rem; margin-bottom: 1rem; }
+  .rate-row { display: flex; justify-content: space-between; padding: 5px 0; font-size: 13px; border-bottom: 0.5px solid var(--border); }
+  .rate-row:last-child { border-bottom: none; font-weight: 600; font-size: 14px; padding-top: 8px; }
+  .earnings-card { background: var(--surface); border: 0.5px solid var(--border); border-radius: var(--radius-lg); padding: 1rem 1.25rem; margin-bottom: 1rem; }
+  .earnings-title { font-size: 13px; font-weight: 500; margin-bottom: 10px; display: flex; align-items: center; gap: 6px; color: var(--text2); }
+  .earnings-bar-wrap { height: 10px; background: var(--surface2); border-radius: 5px; overflow: hidden; margin: 8px 0 6px; }
+  .earnings-bar-fill { height: 100%; border-radius: 5px; transition: width .4s ease; }
+  .earnings-row { display: flex; justify-content: space-between; font-size: 12px; color: var(--text2); }
+  .fc-card { background: var(--surface); border: 0.5px solid var(--border); border-radius: var(--radius-lg); padding: 1.25rem; margin-bottom: 1rem; }
+  .fc-header { display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 12px; }
+  .fc-title { font-size: 15px; font-weight: 600; }
+  .fc-sub { font-size: 12px; color: var(--text2); margin-top: 2px; }
+  .fc-count { font-size: 28px; font-weight: 600; color: var(--green); letter-spacing: -0.03em; }
+  .fc-count-label { font-size: 11px; color: var(--text3); margin-top: 2px; text-align: right; }
+  .progress-bar { height: 7px; background: var(--surface2); border-radius: 4px; overflow: hidden; margin: 8px 0 4px; }
+  .progress-fill { height: 100%; border-radius: 4px; transition: width .4s ease; }
+  .fc-grid { display: grid; grid-template-columns: repeat(10,1fr); gap: 5px; margin-top: 14px; }
+  .fc-dot { width: 100%; aspect-ratio: 1; border-radius: 4px; border: 0.5px solid var(--border); background: var(--surface2); cursor: pointer; transition: background .12s, border-color .12s; }
+  .fc-dot:hover { border-color: var(--border-strong); }
+  .fc-dot.done { background: var(--green-mid); border-color: var(--green); }
+  .fc-dot.today-dot { border: 1.5px solid var(--blue); }
+  .study-info { background: var(--surface2); border-radius: var(--radius); padding: 0.9rem 1.25rem; margin-bottom: 1rem; }
+  .info-row { display: flex; justify-content: space-between; padding: 4px 0; font-size: 13px; border-bottom: 0.5px solid var(--border); }
+  .info-row:last-child { border-bottom: none; font-weight: 500; }
+  .modal-overlay { display: none; position: fixed; inset: 0; background: rgba(0,0,0,0.35); z-index: 100; align-items: center; justify-content: center; padding: 1rem; }
+  .modal-overlay.open { display: flex; }
+  .modal { background: var(--surface); border-radius: var(--radius-lg); padding: 1.5rem; max-width: 340px; width: 100%; border: 0.5px solid var(--border); }
+  .modal-head { display: flex; justify-content: space-between; align-items: center; margin-bottom: 14px; }
+  .modal-title { font-size: 15px; font-weight: 600; }
+  .modal-close { cursor: pointer; color: var(--text2); font-size: 18px; line-height: 1; border: none; background: none; padding: 2px; font-family: inherit; }
+  .modal-event { padding: 8px 0; font-size: 13px; border-bottom: 0.5px solid var(--border); display: flex; align-items: center; gap: 8px; }
+  .modal-event:last-child { border-bottom: none; }
+  .modal-empty { font-size: 13px; color: var(--text2); }
+  .modal-section-label { font-size: 11px; color: var(--text3); text-transform: uppercase; letter-spacing: 0.05em; padding: 10px 0 4px; }
+  .hours-input-wrap { display: flex; align-items: center; gap: 8px; padding: 6px 0; }
+  .hours-input-wrap label { font-size: 13px; flex: 1; }
+  .hours-input { width: 72px; padding: 6px 8px; border: 0.5px solid var(--border-strong); border-radius: 6px; font-size: 14px; font-family: inherit; background: var(--surface2); color: var(--text); text-align: right; }
+  .hours-input:focus { outline: none; border-color: var(--blue); }
+  .save-btn { width: 100%; margin-top: 10px; padding: 9px; font-size: 13px; font-weight: 500; border-radius: var(--radius); cursor: pointer; border: none; background: var(--text); color: var(--bg); font-family: inherit; transition: opacity .1s; }
+  .save-btn:hover { opacity: 0.85; }
+  .priority-banner { background: var(--red-light); border: 0.5px solid rgba(163,45,45,0.25); border-radius: var(--radius); padding: 0.75rem 1rem; margin-bottom: 1rem; display: flex; align-items: flex-start; gap: 10px; font-size: 13px; color: var(--red); }
+  .priority-banner i { font-size: 16px; flex-shrink: 0; margin-top: 1px; }
+  .readonly-banner { background: var(--blue-light); border: 0.5px solid rgba(55,138,221,0.25); border-radius: var(--radius); padding: 0.6rem 1rem; margin-bottom: 1rem; font-size: 12px; color: var(--blue); display: none; }
+  .sync-indicator { font-size: 11px; color: var(--text3); margin-left: 8px; }
+  @media (max-width: 600px) {
+    .hk-container { padding: 1rem 0.75rem 4rem; }
+    .cal-cell { min-height: 60px; }
+    .metrics { grid-template-columns: 1fr 1fr; }
+  }
+</style>
+
+<!-- Auth overlay -->
+<div id="auth-overlay" style="position:fixed;inset:0;background:#fff;z-index:999;display:flex;align-items:center;justify-content:center;font-family:'Inter',sans-serif;">
+  <div style="text-align:center;max-width:320px;width:100%;padding:2rem;">
+    <div style="font-size:22px;font-weight:700;letter-spacing:-0.5px;margin-bottom:8px;">andrii.香港</div>
+    <div style="font-size:14px;color:#9c9a95;margin-bottom:24px;">This page is private.</div>
+    <input id="pwd-input" type="password" placeholder="enter password" style="width:100%;padding:10px 14px;border:0.5px solid rgba(0,0,0,0.15);border-radius:8px;font-size:14px;font-family:inherit;outline:none;margin-bottom:8px;">
+    <div id="pwd-error" style="font-size:12px;color:#A32D2D;margin-bottom:8px;display:none;">incorrect password</div>
+    <button onclick="checkPassword()" style="width:100%;padding:10px;background:#1a1916;color:#fff;border:none;border-radius:8px;font-size:14px;font-family:inherit;cursor:pointer;">enter</button>
+  </div>
+</div>
+
+<div class="hk-wrap">
+  <div class="hk-container">
+    <div id="readonly-banner" class="readonly-banner">👁 view only — you can see everything but not make changes</div>
+
+    <div class="tabs">
+      <button class="tab active" onclick="showTab('calendar')"><i class="ti ti-calendar"></i> Calendar</button>
+      <button class="tab" onclick="showTab('finances')"><i class="ti ti-currency-pound"></i> Finances</button>
+      <button class="tab" onclick="showTab('cantonese')"><i class="ti ti-language"></i> Cantonese</button>
+    </div>
+
+    <!-- CALENDAR -->
+    <div id="calendar" class="section active">
+      <div class="metrics" id="cal-metrics"></div>
+      <div class="legend">
+        <div class="legend-item"><span class="pip finance"></span> Financial event</div>
+        <div class="legend-item"><span class="pip cantonese"></span> Study day</div>
+        <div class="legend-item"><span class="legend-swatch" style="background:var(--green-light);border:0.5px solid var(--green-mid)"></span> Studied</div>
+        <div class="legend-item"><span class="legend-swatch" style="background:var(--amber-light);border:0.5px solid var(--amber);border-radius:2px"></span> Hours logged</div>
+        <div class="legend-item"><span class="pip trip"></span> Trip milestone</div>
+      </div>
+      <div class="cal-nav">
+        <button onclick="prevMonth()"><i class="ti ti-chevron-left"></i></button>
+        <span class="cal-month" id="month-title"></span>
+        <button onclick="nextMonth()"><i class="ti ti-chevron-right"></i></button>
+      </div>
+      <div class="cal-header">
+        <div class="cal-day-label">Mon</div><div class="cal-day-label">Tue</div><div class="cal-day-label">Wed</div>
+        <div class="cal-day-label">Thu</div><div class="cal-day-label">Fri</div><div class="cal-day-label">Sat</div><div class="cal-day-label">Sun</div>
+      </div>
+      <div class="cal-grid" id="cal-grid"></div>
+    </div>
+
+    <!-- FINANCES -->
+    <div id="finances" class="section">
+      <div class="priority-banner">
+        <i class="ti ti-alert-triangle"></i>
+        <div><strong>Flight tickets (£1,000) are your top priority.</strong> Consider booking on a credit card now and paying it back over the coming weeks — you have 10+ weeks of income ahead.</div>
+      </div>
+      <div class="metrics" id="fin-metrics"></div>
+      <div id="earnings-section"></div>
+      <div class="rate-box">
+        <div class="rate-row"><span>Hourly rate (gross)</span><span>£13.60</span></div>
+        <div class="rate-row"><span>Income tax (20%)</span><span style="color:var(--red)">−£2.72</span></div>
+        <div class="rate-row"><span>Net per hour</span><span>£10.88</span></div>
+        <div class="rate-row" style="border-top:0.5px solid var(--border);margin-top:4px;padding-top:8px"></div>
+        <div class="rate-row"><span>Weekly food (£50)</span><span>= 4.7 hrs</span></div>
+        <div class="rate-row"><span>Weekly transport (£30)</span><span>= 2.8 hrs</span></div>
+        <div class="rate-row"><span>Total hours still needed</span><span id="total-hrs"></span></div>
+      </div>
+      <div id="goal-list"></div>
+    </div>
+
+    <!-- CANTONESE -->
+    <div id="cantonese" class="section">
+      <div class="fc-card">
+        <div class="fc-header">
+          <div>
+            <div class="fc-title">Flashcard progress</div>
+            <div class="fc-sub">10 cards/day · 22 Jun – 30 Aug 2026</div>
+          </div>
+          <div style="text-align:right">
+            <div class="fc-count" id="fc-count">0</div>
+            <div class="fc-count-label">cards learned</div>
+          </div>
+        </div>
+        <div class="progress-bar">
+          <div class="progress-fill" id="fc-bar" style="background:var(--green-mid);width:0%"></div>
+        </div>
+        <div style="font-size:11px;color:var(--text3)" id="fc-pct">0 of 700 · 0%</div>
+        <div class="fc-grid" id="fc-grid"></div>
+        <div style="font-size:11px;color:var(--text3);margin-top:10px">Click a dot to mark that day as studied</div>
+      </div>
+      <div class="study-info">
+        <div class="info-row"><span>Study period</span><span>22 Jun – 30 Aug 2026</span></div>
+        <div class="info-row"><span>Total days</span><span>70</span></div>
+        <div class="info-row"><span>Cards per day</span><span>10</span></div>
+        <div class="info-row"><span>Total cards</span><span>700</span></div>
+      </div>
+      <div id="days-progress" style="margin-bottom:1rem">
+        <div style="display:flex;justify-content:space-between;font-size:13px;margin-bottom:6px">
+          <span style="font-weight:500">Days studied</span>
+          <span id="days-label" style="color:var(--text2)"></span>
+        </div>
+        <div class="progress-bar" style="height:9px">
+          <div class="progress-fill" id="days-bar" style="background:var(--green);width:0%"></div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- MODAL -->
+  <div class="modal-overlay" id="modal" onclick="closeModalOutside(event)">
+    <div class="modal">
+      <div class="modal-head">
+        <span class="modal-title" id="modal-title"></span>
+        <button class="modal-close" onclick="closeModal()"><i class="ti ti-x"></i></button>
+      </div>
+      <div id="modal-body"></div>
+    </div>
+  </div>
+</div>
+
+<script is:inline>
+  const SUPABASE_URL = 'https://brewadlywcjchngirykq.supabase.co';
+  const SUPABASE_KEY = 'sb_publishable_wSdiLiEAVlg9n20Lnud5qA_O0fgd9aQ';
+  const API = `${SUPABASE_URL}/rest/v1/hk_data`;
+
+  // Sync dark mode with site toggle
+  const hkWrap = document.querySelector('.hk-wrap');
+  if (document.documentElement.classList.contains('dark')) hkWrap.classList.add('dark');
+  const observer = new MutationObserver(() => {
+    hkWrap.classList.toggle('dark', document.documentElement.classList.contains('dark'));
+  });
+  observer.observe(document.documentElement, { attributeFilter: ['class'] });
+
+  let readOnly = false;
+
+  async function dbLoad() {
+    try {
+      setSync('loading...');
+      const res = await fetch(`${API}?id=eq.1`, {
+        headers: { 'apikey': SUPABASE_KEY, 'Authorization': `Bearer ${SUPABASE_KEY}` }
+      });
+      const rows = await res.json();
+      if (rows && rows[0]) {
+        studyDays = rows[0].study_days || [];
+        hoursLog = rows[0].hours_log || {};
+        goalsCompleted = rows[0].goals_completed || {};
+      }
+      setSync('synced ✓');
+    } catch(e) {
+      setSync('offline');
+    }
+  }
+
+  async function dbSave() {
+    if (readOnly) return;
+    try {
+      setSync('saving...');
+      await fetch(`${API}?id=eq.1`, {
+        method: 'PATCH',
+        headers: {
+          'apikey': SUPABASE_KEY,
+          'Authorization': `Bearer ${SUPABASE_KEY}`,
+          'Content-Type': 'application/json',
+          'Prefer': 'return=minimal'
+        },
+        body: JSON.stringify({
+          study_days: studyDays,
+          hours_log: hoursLog,
+          goals_completed: goalsCompleted,
+          updated_at: new Date().toISOString()
+        })
+      });
+      setSync('synced ✓');
+    } catch(e) {
+      setSync('sync failed');
+    }
+  }
+
+  function setSync(msg) {
+    const el = document.getElementById('sync-indicator');
+    if (el) el.textContent = msg;
+  }
+
+  document.getElementById('pwd-input').addEventListener('keydown', function(e) {
+    if (e.key === 'Enter') checkPassword();
+  });
+
+  function checkPassword() {
+    const val = document.getElementById('pwd-input').value;
+    const wrap = document.querySelector('.hk-wrap');
+    const isDark = document.documentElement.classList.contains('dark');
+    if (val === 'andrii') {
+      readOnly = false;
+      document.getElementById('auth-overlay').style.display = 'none';
+      document.getElementById('readonly-banner').style.display = 'none';
+      if (isDark) wrap.classList.add('dark');
+      dbLoad().then(() => { renderCalendar(); renderFinances(); renderCantonese(); });
+    } else if (val === 'hannah') {
+      readOnly = true;
+      document.getElementById('auth-overlay').style.display = 'none';
+      document.getElementById('readonly-banner').style.display = 'block';
+      if (isDark) wrap.classList.add('dark');
+      dbLoad().then(() => { renderCalendar(); renderFinances(); renderCantonese(); });
+    } else {
+      document.getElementById('pwd-error').style.display = 'block';
+      document.getElementById('pwd-input').value = '';
+    }
+  }
+
+  const TODAY = new Date();
+  TODAY.setHours(0,0,0,0);
+  const STUDY_START = new Date(2026,5,22);
+  const STUDY_END   = new Date(2026,7,30);
+  const TRIP_DATE   = new Date(2026,8,5);
+  const NET_HOURLY  = 10.88;
+  const WEEKLY_COSTS = 80;
+
+  const GOALS = [
+    {id:'tickets',label:'Return flights to Hong Kong',amount:1000,due:null,icon:'ti-plane',priority:true,asap:true},
+    {id:'debt',   label:'Debt repayment',             amount:100, due:new Date(2026,6,4), icon:'ti-credit-card'},
+    {id:'rent1',  label:'Flat rent (July)',            amount:750, due:new Date(2026,6,25),icon:'ti-home'},
+    {id:'gift',   label:"Wife's gift",                amount:300, due:new Date(2026,6,29),icon:'ti-gift'},
+    {id:'rent2',  label:'Flat rent (August)',          amount:750, due:new Date(2026,7,29),icon:'ti-home'},
+  ];
+
+  const EVENTS = {};
+  function addEvent(date, type, label, amount) {
+    const k = dk(date);
+    if (!EVENTS[k]) EVENTS[k] = [];
+    EVENTS[k].push({type, label, amount});
+  }
+  GOALS.forEach(g => { if (g.due) addEvent(g.due, 'finance', g.label, g.amount); });
+  addEvent(TRIP_DATE, 'trip', 'Fly to Hong Kong ✈');
+
+  function dk(d) { return d.getFullYear()+'-'+(d.getMonth()+1)+'-'+d.getDate(); }
+  function fmt(n) { return '£'+Math.round(n).toLocaleString('en-GB'); }
+  function fmtDec(n) { return '£'+n.toFixed(2); }
+  function isStudyDay(d) { return d >= STUDY_START && d <= STUDY_END; }
+
+  let studyDays = [];
+  let hoursLog = {};
+  let goalsCompleted = {};
+
+  function saveAll() { if (!readOnly) dbSave(); }
+  function toggleGoal(id) { if (readOnly) return; goalsCompleted[id] = !goalsCompleted[id]; if (!goalsCompleted[id]) delete goalsCompleted[id]; saveAll(); renderFinances(); }
+
+  function totalHoursWorked() { return Object.values(hoursLog).reduce((s,v) => s + (parseFloat(v)||0), 0); }
+  function totalEarned() { return totalHoursWorked() * NET_HOURLY; }
+
+  let currentMonth = new Date(TODAY.getFullYear(), TODAY.getMonth(), 1);
+
+  function renderCalendar() {
+    const y = currentMonth.getFullYear(), m = currentMonth.getMonth();
+    document.getElementById('month-title').textContent =
+      currentMonth.toLocaleString('en-GB', {month:'long', year:'numeric'});
+
+    const first = new Date(y, m, 1);
+    let startDow = first.getDay(); if (startDow === 0) startDow = 7;
+    const cells = [];
+    for (let i = 1; i < startDow; i++) cells.unshift({date: new Date(y,m,1-i), other:true});
+    const dim = new Date(y, m+1, 0).getDate();
+    for (let d = 1; d <= dim; d++) cells.push({date: new Date(y,m,d), other:false});
+    while (cells.length % 7 !== 0) {
+      const last = cells[cells.length-1].date;
+      cells.push({date: new Date(last.getFullYear(),last.getMonth(),last.getDate()+1), other:true});
+    }
+
+    const grid = document.getElementById('cal-grid');
+    grid.innerHTML = '';
+    cells.forEach(({date, other}) => {
+      const k = dk(date);
+      const events = EVENTS[k] || [];
+      const studied = studyDays.includes(k);
+      const hrs = hoursLog[k] ? parseFloat(hoursLog[k]) : 0;
+      const isToday = k === dk(TODAY);
+      const study = !other && isStudyDay(date);
+
+      const cell = document.createElement('div');
+      let cls = 'cal-cell';
+      if (other) cls += ' other-month';
+      if (study && studied) cls += ' has-cantonese';
+      if (hrs > 0) cls += ' has-hours';
+      if (isToday) cls += ' today';
+      cell.className = cls;
+
+      let html = `<div class="day-num">${date.getDate()}</div>`;
+      if (hrs > 0) html += `<div><span class="hours-badge">${hrs}h · ${fmt(hrs * NET_HOURLY)}</span></div>`;
+      if (study) html += `<div class="event-line"><span class="pip cantonese"></span><span class="event-text">10 cards</span></div>`;
+      events.forEach(e => {
+        html += `<div class="event-line"><span class="pip ${e.type}"></span><span class="event-text">${e.label}${e.amount ? ' '+fmt(e.amount) : ''}</span></div>`;
+      });
+      cell.innerHTML = html;
+      if (!other && !readOnly) cell.onclick = () => openDay(date, events, study, studyDays.includes(dk(date)), dk(date));
+      grid.appendChild(cell);
+    });
+    renderCalMetrics();
+  }
+
+  function renderCalMetrics() {
+    const daysToTrip = Math.round((TRIP_DATE - TODAY) / 864e5);
+    const done = studyDays.length;
+    const pct = Math.round(done/70*100);
+    const earned = totalEarned();
+    document.getElementById('cal-metrics').innerHTML = `
+      <div class="metric"><div class="metric-label">Days to Hong Kong</div><div class="metric-value">${daysToTrip}</div></div>
+      <div class="metric"><div class="metric-label">Study days done</div><div class="metric-value ${pct>=50?'good':'warn'}">${done}<span style="font-size:14px;font-weight:400;color:var(--text2)">/70</span></div></div>
+      <div class="metric"><div class="metric-label">Hours logged</div><div class="metric-value">${totalHoursWorked().toFixed(1)}</div></div>
+      <div class="metric"><div class="metric-label">Earned so far</div><div class="metric-value good">${fmt(earned)}</div></div>
+    `;
+  }
+
+  function openDay(date, events, study, studied, k) {
+    if (readOnly) return;
+    document.getElementById('modal-title').textContent =
+      date.toLocaleDateString('en-GB', {weekday:'long', day:'numeric', month:'long'});
+
+    const currentHrs = hoursLog[k] || '';
+    let body = '';
+
+    body += `<div class="modal-section-label"><i class="ti ti-clock" style="font-size:12px"></i> Hours worked</div>`;
+    body += `<div class="hours-input-wrap">
+      <label for="hrs-input">Hours worked this day</label>
+      <input class="hours-input" type="number" id="hrs-input" min="0" max="24" step="0.5" value="${currentHrs}" placeholder="0">
+    </div>`;
+
+    if (study) {
+      const checked = studied ? 'checked' : '';
+      body += `<div class="modal-section-label"><i class="ti ti-language" style="font-size:12px"></i> Cantonese</div>`;
+      body += `<div class="modal-event"><label style="display:flex;align-items:center;gap:10px;cursor:pointer;width:100%">
+        <input type="checkbox" ${checked} onchange="toggleStudy('${k}',this.checked)" style="width:16px;height:16px;cursor:pointer">
+        <span>10 Cantonese flashcards studied</span></label></div>`;
+    }
+
+    if (events.length > 0) {
+      body += `<div class="modal-section-label"><i class="ti ti-calendar-event" style="font-size:12px"></i> Events</div>`;
+      events.forEach(e => {
+        const icon = e.type==='finance' ? 'ti-currency-pound' : e.type==='trip' ? 'ti-plane' : 'ti-calendar';
+        body += `<div class="modal-event"><i class="ti ${icon}" style="color:var(--text3);font-size:16px"></i>${e.label}${e.amount ? ' — '+fmt(e.amount) : ''}</div>`;
+      });
+    }
+
+    body += `<button class="save-btn" onclick="saveHoursFromModal('${k}')">Save</button>`;
+
+    document.getElementById('modal-body').innerHTML = body;
+    document.getElementById('modal').classList.add('open');
+    setTimeout(() => { const inp = document.getElementById('hrs-input'); if(inp) inp.focus(); }, 100);
+  }
+
+  function saveHoursFromModal(k) {
+    if (readOnly) return;
+    const inp = document.getElementById('hrs-input');
+    const val = parseFloat(inp ? inp.value : 0) || 0;
+    if (val > 0) hoursLog[k] = val;
+    else delete hoursLog[k];
+    saveAll();
+    closeModal();
+    renderCalendar();
+    renderFinances();
+  }
+
+  function toggleStudy(k, val) {
+    if (readOnly) return;
+    if (val && !studyDays.includes(k)) studyDays.push(k);
+    else studyDays = studyDays.filter(d => d !== k);
+    saveAll();
+    renderCalendar();
+    renderCantonese();
+  }
+
+  function closeModal() { document.getElementById('modal').classList.remove('open'); }
+  function closeModalOutside(e) { if (e.target === document.getElementById('modal')) closeModal(); }
+  function prevMonth() { currentMonth = new Date(currentMonth.getFullYear(), currentMonth.getMonth()-1, 1); renderCalendar(); }
+  function nextMonth() { currentMonth = new Date(currentMonth.getFullYear(), currentMonth.getMonth()+1, 1); renderCalendar(); }
+
+  function weeksUntil(d) { return Math.max(0, Math.ceil((d - TODAY) / (7*864e5))); }
+
+  function renderFinances() {
+    const totalFixed = GOALS.reduce((s,g) => s+g.amount, 0);
+    const weeksToTrip = weeksUntil(TRIP_DATE);
+    const totalLiving = weeksToTrip * WEEKLY_COSTS;
+    const totalNeeded = totalFixed + totalLiving;
+    const earned = totalEarned();
+    const remaining = Math.max(0, totalNeeded - earned);
+    const hoursStillNeeded = Math.ceil(remaining / NET_HOURLY);
+    document.getElementById('total-hrs').textContent = hoursStillNeeded + ' hrs';
+
+    const pctEarned = Math.min(100, Math.round(earned / totalNeeded * 100));
+    const barColor = pctEarned >= 80 ? 'var(--green)' : pctEarned >= 40 ? 'var(--amber)' : 'var(--coral)';
+
+    document.getElementById('fin-metrics').innerHTML = `
+      <div class="metric"><div class="metric-label">Total needed</div><div class="metric-value">${fmt(totalNeeded)}</div></div>
+      <div class="metric"><div class="metric-label">Earned so far</div><div class="metric-value good">${fmt(earned)}</div></div>
+      <div class="metric"><div class="metric-label">Still needed</div><div class="metric-value ${remaining>0?'bad':'good'}">${fmt(remaining)}</div></div>
+      <div class="metric"><div class="metric-label">Hours worked</div><div class="metric-value">${totalHoursWorked().toFixed(1)}</div></div>
+    `;
+
+    document.getElementById('earnings-section').innerHTML = `
+      <div class="earnings-card">
+        <div class="earnings-title"><i class="ti ti-trending-up" style="font-size:15px;color:var(--green)"></i> Earnings progress toward total goal</div>
+        <div class="earnings-bar-wrap">
+          <div class="earnings-bar-fill" style="width:${pctEarned}%;background:${barColor}"></div>
+        </div>
+        <div class="earnings-row">
+          <span>${fmt(earned)} earned</span>
+          <span>${pctEarned}% of ${fmt(totalNeeded)}</span>
+          <span>${fmt(remaining)} to go</span>
+        </div>
+      </div>
+    `;
+
+    let html = '';
+    GOALS.forEach(g => {
+      const hrs = Math.ceil(g.amount / NET_HOURLY);
+      const isDone = !!goalsCompleted[g.id];
+      let badgeClass, badgeLabel, dueStr;
+      if (isDone) {
+        badgeClass = 'done'; badgeLabel = 'Paid ✓';
+        dueStr = g.asap ? 'Completed' : 'Due ' + g.due.toLocaleDateString('en-GB',{day:'numeric',month:'short',year:'numeric'});
+      } else if (g.asap) {
+        badgeClass = 'urgent'; badgeLabel = 'Book ASAP'; dueStr = 'No fixed deadline — buy now';
+      } else {
+        const overdue = g.due < TODAY;
+        const daysLeft = Math.round((g.due - TODAY) / 864e5);
+        dueStr = 'Due ' + g.due.toLocaleDateString('en-GB',{day:'numeric',month:'short',year:'numeric'});
+        badgeClass = 'pending'; badgeLabel = daysLeft + 'd left';
+        if (overdue) { badgeClass = 'urgent'; badgeLabel = 'Overdue'; }
+        else if (daysLeft <= 14) { badgeClass = 'urgent'; badgeLabel = daysLeft + 'd left'; }
+        else if (daysLeft <= 30) { badgeClass = 'soon'; badgeLabel = daysLeft + 'd left'; }
+      }
+      const border = (!isDone && g.priority) ? 'border-left:3px solid var(--red);' : '';
+      const doneStyle = isDone ? 'opacity:0.55;' : '';
+      const titleStyle = isDone ? 'text-decoration:line-through;color:var(--text3);' : '';
+      const checkboxAttr = readOnly ? 'disabled style="width:15px;height:15px;cursor:not-allowed;opacity:0.4;accent-color:var(--green)"' : `onchange="toggleGoal('${g.id}')" style="width:15px;height:15px;cursor:pointer;accent-color:var(--green)"`;
+      html += `<div class="goal-card" style="${border}${doneStyle}">
+        <div class="goal-header">
+          <div class="goal-title" style="${titleStyle}"><i class="ti ${g.icon}" style="color:var(--text3);font-size:16px"></i>${g.label}</div>
+          <div style="display:flex;align-items:center;gap:8px;flex-shrink:0">
+            <span class="badge ${badgeClass}">${badgeLabel}</span>
+            <label style="display:flex;align-items:center;gap:5px;cursor:${readOnly?'default':'pointer'};font-size:12px;color:var(--text2);white-space:nowrap">
+              <input type="checkbox" ${isDone ? 'checked' : ''} ${checkboxAttr}>
+              Done
+            </label>
+          </div>
+        </div>
+        <div class="goal-sub">
+          <span>${dueStr}</span>
+          <span>${fmt(g.amount)} = ${hrs} hrs work</span>
+        </div>
+      </div>`;
+    });
+    html += `<div class="goal-card">
+      <div class="goal-title" style="margin-bottom:6px"><i class="ti ti-shopping-bag" style="color:var(--text3);font-size:16px"></i>Weekly living costs (${weeksToTrip} weeks remaining)</div>
+      <div class="goal-sub"><span>£30 transport + £50 food per week</span><span>${fmt(totalLiving)} = ${Math.ceil(totalLiving/NET_HOURLY)} hrs</span></div>
+    </div>`;
+    document.getElementById('goal-list').innerHTML = html;
+  }
+
+  function renderCantonese() {
+    const done = studyDays.length;
+    const cards = done * 10;
+    const pct = Math.round(cards/700*100);
+    document.getElementById('fc-count').textContent = cards;
+    document.getElementById('fc-bar').style.width = pct + '%';
+    document.getElementById('fc-pct').textContent = `${cards} of 700 cards · ${pct}%`;
+    document.getElementById('days-label').textContent = `${done} of 70 days`;
+    document.getElementById('days-bar').style.width = Math.round(done/70*100) + '%';
+
+    const grid = document.getElementById('fc-grid');
+    grid.innerHTML = '';
+    for (let i = 0; i < 70; i++) {
+      const d = new Date(STUDY_START);
+      d.setDate(d.getDate() + i);
+      const k = dk(d);
+      const isT = k === dk(TODAY);
+      const dot = document.createElement('div');
+      dot.className = 'fc-dot' + (studyDays.includes(k) ? ' done' : '') + (isT ? ' today-dot' : '');
+      dot.title = d.toLocaleDateString('en-GB', {day:'numeric',month:'short'});
+      if (!readOnly) dot.onclick = () => { toggleStudy(k, !studyDays.includes(k)); };
+      else dot.style.cursor = 'default';
+      grid.appendChild(dot);
+    }
+  }
+
+  function showTab(name) {
+    document.querySelectorAll('.section').forEach(s => s.classList.remove('active'));
+    document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
+    document.getElementById(name).classList.add('active');
+    document.querySelectorAll('.tab').forEach(t => {
+      if (t.getAttribute('onclick').includes(name)) t.classList.add('active');
+    });
+    if (name === 'finances') renderFinances();
+  }
+</script>
+
+</Layout>

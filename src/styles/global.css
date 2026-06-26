@@ -1,2 +1,26 @@
 @import "tailwindcss";
 @plugin "@tailwindcss/typography";
+
+:root {
+  --bg: #ffffff;
+  --text: #111827;
+  --text-muted: #6b7280;
+  --text-faint: #d1d5db;
+  --border: #e5e7eb;
+  --nav-border: #e5e7eb;
+}
+
+.dark {
+  --bg: #0f0f0f;
+  --text: #f3f4f6;
+  --text-muted: #9ca3af;
+  --text-faint: #374151;
+  --border: #1f1f1f;
+  --nav-border: #1f1f1f;
+}
+
+body {
+  background-color: var(--bg);
+  color: var(--text);
+  transition: background-color 0.2s ease, color 0.2s ease;
+}
