@@ -1,5 +1,5 @@
 ---
-layout: ../../layouts/Layout.astro
+layout: ../../layouts/PostLayout.astro
 title: My First Post
 date: 2026-06-10
 ---

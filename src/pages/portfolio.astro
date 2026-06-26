@@ -3,8 +3,59 @@ import Layout from '../layouts/Layout.astro';
 ---
 
 <Layout page="portfolio">
-  <div class="not-prose">
-    <h1 class="text-5xl font-medium tracking-tight mb-4">Portfolio</h1>
-    <p class="text-gray-400">Coming soon.</p>
+  <div class="not-prose space-y-16">
+
+    <!-- Education -->
+    <div>
+      <p class="text-xs uppercase tracking-widest text-gray-300 mb-6">Education</p>
+      <div class="flex justify-between items-baseline">
+        <div>
+          <p class="text-sm font-medium">Anglia Ruskin University London</p>
+          <p class="text-sm text-gray-400">Digital Marketing · Year 2</p>
+        </div>
+        <span class="text-xs text-gray-300">2025 — present</span>
+      </div>
+    </div>
+
+    <!-- Certificates -->
+    <div>
+      <p class="text-xs uppercase tracking-widest text-gray-300 mb-6">Certificates</p>
+      <div class="grid grid-cols-2 gap-4">
+        <div class="border border-gray-100 rounded-xl aspect-[4/3] flex items-center justify-center text-xs text-gray-300">
+          certificate placeholder
+        </div>
+        <div class="border border-gray-100 rounded-xl aspect-[4/3] flex items-center justify-center text-xs text-gray-300">
+          certificate placeholder
+        </div>
+      </div>
+    </div>
+
+    <!-- Work Experience -->
+    <div>
+      <p class="text-xs uppercase tracking-widest text-gray-300 mb-6">Work Experience</p>
+      <div class="divide-y divide-gray-100">
+        <div class="grid grid-cols-3 py-4 text-sm">
+          <span class="font-medium">Current work</span>
+          <span class="text-gray-400">Skill</span>
+          <span class="text-gray-300 text-right">Experience</span>
+        </div>
+        <div class="grid grid-cols-3 py-4 text-sm">
+          <span class="font-medium">Work one</span>
+          <span class="text-gray-400">Skill</span>
+          <span class="text-gray-300 text-right">Experience</span>
+        </div>
+        <div class="grid grid-cols-3 py-4 text-sm">
+          <span class="font-medium">Work two</span>
+          <span class="text-gray-400">Skill</span>
+          <span class="text-gray-300 text-right">Experience</span>
+        </div>
+        <div class="grid grid-cols-3 py-4 text-sm">
+          <span class="font-medium">Work three</span>
+          <span class="text-gray-400">Skill</span>
+          <span class="text-gray-300 text-right">Experience</span>
+        </div>
+      </div>
+    </div>
+
   </div>
 </Layout>

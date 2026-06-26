@@ -1,10 +1,20 @@
 ---
 import Layout from '../layouts/Layout.astro';
+const postFiles = import.meta.glob('./posts/*.md', { eager: true });
+const posts = Object.values(postFiles) as any[];
+const sorted = posts.sort((a, b) => new Date(b.frontmatter.date) - new Date(a.frontmatter.date));
 ---
 
 <Layout page="blog">
   <div class="not-prose">
-    <h1 class="text-5xl font-medium tracking-tight mb-4">Blog</h1>
-    <p class="text-gray-400">Coming soon.</p>
+    <h1 class="text-5xl font-medium tracking-tight mb-8">Blog</h1>
+    <div class="divide-y divide-gray-100">
+      {sorted.map(post => (
+        <a href={post.url} class="flex justify-between items-baseline py-4 group">
+          <span class="text-sm font-medium group-hover:text-gray-400 transition-colors">{post.frontmatter.title}</span>
+          <span class="text-xs text-gray-300">{new Date(post.frontmatter.date).toLocaleDateString('en-GB', { month: 'short', year: 'numeric' })}</span>
+        </a>
+      ))}
+    </div>
   </div>
 </Layout>

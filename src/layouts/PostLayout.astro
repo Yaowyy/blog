@@ -1,0 +1,11 @@
+---
+import Layout from './Layout.astro';
+const { frontmatter } = Astro.props;
+---
+
+<Layout page="blog">
+  <div class="not-prose mb-8 flex justify-end">
+    <a href="/blog" class="text-gray-300 hover:text-gray-900 transition-colors text-xl leading-none">✕</a>
+  </div>
+  <slot />
+</Layout>
