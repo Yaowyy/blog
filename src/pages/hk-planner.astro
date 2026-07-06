@@ -30,10 +30,10 @@ import Layout from '../layouts/Layout.astro';
   .cal-nav button { background: var(--surface); border: 0.5px solid var(--border); padding: 6px 14px; border-radius: var(--radius); cursor: pointer; color: var(--text); font-size: 13px; font-family: inherit; transition: background .1s; }
   .cal-nav button:hover { background: var(--surface2); }
   .cal-month { font-size: 16px; font-weight: 600; letter-spacing: -0.01em; }
-  .cal-header { display: grid; grid-template-columns: repeat(7,1fr); gap: 4px; margin-bottom: 4px; }
-  .cal-day-label { text-align: center; font-size: 11px; color: var(--text3); font-weight: 500; padding: 4px 0; }
-  .cal-grid { display: grid; grid-template-columns: repeat(7,1fr); gap: 4px; }
-  .cal-cell { min-height: 76px; border-radius: 8px; border: 0.5px solid var(--border); padding: 5px 6px; font-size: 10px; cursor: pointer; transition: all .12s; background: var(--surface); }
+  .cal-header { display: grid; grid-template-columns: repeat(7,1fr); gap: 4px; margin-bottom: 4px; min-width: 0; }
+  .cal-day-label { text-align: center; font-size: 11px; color: var(--text3); font-weight: 500; padding: 4px 0; min-width: 0; }
+  .cal-grid { display: grid; grid-template-columns: repeat(7,1fr); gap: 4px; min-width: 0; }
+  .cal-cell { min-height: 76px; min-width: 0; box-sizing: border-box; border-radius: 8px; border: 0.5px solid var(--border); padding: 5px 6px; font-size: 10px; cursor: pointer; transition: all .12s; background: var(--surface); overflow: hidden; }
   .cal-cell:hover { border-color: var(--border-strong); }
   .cal-cell.other-month { opacity: 0.28; pointer-events: none; }
   .cal-cell.today { border: 1.5px solid var(--blue); }
@@ -106,9 +106,13 @@ import Layout from '../layouts/Layout.astro';
   .readonly-banner { background: var(--blue-light); border: 0.5px solid rgba(55,138,221,0.25); border-radius: var(--radius); padding: 0.6rem 1rem; margin-bottom: 1rem; font-size: 12px; color: var(--blue); display: none; }
   .sync-indicator { font-size: 11px; color: var(--text3); margin-left: 8px; }
   @media (max-width: 600px) {
-    .hk-container { padding: 1rem 0.75rem 4rem; }
-    .cal-cell { min-height: 90px; padding: 6px 7px; font-size: 11px; }
-    .day-num { font-size: 14px; }
+    .hk-container { padding: 1rem 0.75rem 4rem; overflow-x: hidden; }
+    .cal-header { display: none; }
+    .cal-grid { grid-template-columns: repeat(3, 1fr); gap: 8px; }
+    .cal-cell { min-height: 104px; padding: 8px 9px; font-size: 11px; }
+    .day-num { font-size: 13px; font-weight: 600; }
+    .event-text { font-size: 10px; }
+    .hours-badge { font-size: 9px; padding: 1px 4px; }
     .metrics { grid-template-columns: 1fr 1fr; }
   }
 </style>
@@ -353,9 +357,31 @@ import Layout from '../layouts/Layout.astro';
   function totalHoursWorked() { return Object.values(hoursLog).reduce((s,v) => s + (parseFloat(v)||0), 0); }
   function totalEarned() { return totalHoursWorked() * NET_HOURLY; }
 
+  const WINDOW_DAYS = 15; // ~2 weeks, shown as a 3x5 grid on mobile
+  function isMobileView() { return window.innerWidth <= 600; }
+  function addDays(d, n) { const r = new Date(d); r.setDate(r.getDate() + n); return r; }
+
   let currentMonth = new Date(TODAY.getFullYear(), TODAY.getMonth(), 1);
+  let windowStart = new Date(TODAY.getFullYear(), TODAY.getMonth(), TODAY.getDate());
 
   function renderCalendar() {
+    const mobile = isMobileView();
+    const headerEl = document.querySelector('.cal-header');
+    const gridEl = document.getElementById('cal-grid');
+    if (mobile) {
+      headerEl.style.display = 'none';
+      gridEl.style.gridTemplateColumns = 'repeat(3, 1fr)';
+      gridEl.style.gap = '8px';
+    } else {
+      headerEl.style.display = 'grid';
+      gridEl.style.gridTemplateColumns = 'repeat(7, 1fr)';
+      gridEl.style.gap = '4px';
+    }
+    if (mobile) renderCalendarWindow();
+    else renderCalendarMonth();
+  }
+
+  function renderCalendarMonth() {
     const y = currentMonth.getFullYear(), m = currentMonth.getMonth();
     document.getElementById('month-title').textContent =
       currentMonth.toLocaleString('en-GB', {month:'long', year:'numeric'});
@@ -399,6 +425,45 @@ import Layout from '../layouts/Layout.astro';
       if (!other && !readOnly) cell.onclick = () => openDay(date, events, study, studyDays.includes(dk(date)), dk(date));
       grid.appendChild(cell);
     });
+    renderCalMetrics();
+  }
+
+  function renderCalendarWindow() {
+    const start = windowStart;
+    const end = addDays(start, WINDOW_DAYS - 1);
+    const fmtRange = d => d.toLocaleDateString('en-GB', {day:'numeric', month:'short'});
+    const yearSuffix = start.getFullYear() !== end.getFullYear() || start.getFullYear() !== TODAY.getFullYear() ? ' ' + end.getFullYear() : '';
+    document.getElementById('month-title').textContent = `${fmtRange(start)} – ${fmtRange(end)}${yearSuffix}`;
+
+    const grid = document.getElementById('cal-grid');
+    grid.innerHTML = '';
+    for (let i = 0; i < WINDOW_DAYS; i++) {
+      const date = addDays(start, i);
+      const k = dk(date);
+      const events = EVENTS[k] || [];
+      const studied = studyDays.includes(k);
+      const hrs = hoursLog[k] ? parseFloat(hoursLog[k]) : 0;
+      const isToday = k === dk(TODAY);
+      const study = isStudyDay(date);
+
+      const cell = document.createElement('div');
+      let cls = 'cal-cell';
+      if (study && studied) cls += ' has-cantonese';
+      if (hrs > 0) cls += ' has-hours';
+      if (isToday) cls += ' today';
+      cell.className = cls;
+
+      const wd = date.toLocaleDateString('en-GB', {weekday:'short'});
+      let html = `<div class="day-num">${wd} ${date.getDate()}</div>`;
+      if (hrs > 0) html += `<div><span class="hours-badge">${hrs}h · ${fmt(hrs * NET_HOURLY)}</span></div>`;
+      if (study) html += `<div class="event-line"><span class="pip cantonese"></span><span class="event-text">10 cards</span></div>`;
+      events.forEach(e => {
+        html += `<div class="event-line"><span class="pip ${e.type}"></span><span class="event-text">${e.label}${e.amount ? ' '+fmt(e.amount) : ''}</span></div>`;
+      });
+      cell.innerHTML = html;
+      if (!readOnly) cell.onclick = () => openDay(date, events, study, studied, k);
+      grid.appendChild(cell);
+    }
     renderCalMetrics();
   }
 
@@ -475,8 +540,21 @@ import Layout from '../layouts/Layout.astro';
 
   function closeModal() { document.getElementById('modal').classList.remove('open'); }
   function closeModalOutside(e) { if (e.target === document.getElementById('modal')) closeModal(); }
-  function prevMonth() { currentMonth = new Date(currentMonth.getFullYear(), currentMonth.getMonth()-1, 1); renderCalendar(); }
-  function nextMonth() { currentMonth = new Date(currentMonth.getFullYear(), currentMonth.getMonth()+1, 1); renderCalendar(); }
+  function prevMonth() {
+    if (isMobileView()) windowStart = addDays(windowStart, -WINDOW_DAYS);
+    else currentMonth = new Date(currentMonth.getFullYear(), currentMonth.getMonth()-1, 1);
+    renderCalendar();
+  }
+  function nextMonth() {
+    if (isMobileView()) windowStart = addDays(windowStart, WINDOW_DAYS);
+    else currentMonth = new Date(currentMonth.getFullYear(), currentMonth.getMonth()+1, 1);
+    renderCalendar();
+  }
+  let _wasMobileView = isMobileView();
+  window.addEventListener('resize', () => {
+    const nowMobile = isMobileView();
+    if (nowMobile !== _wasMobileView) { _wasMobileView = nowMobile; renderCalendar(); }
+  });
 
   function weeksUntil(d) { return Math.max(0, Math.ceil((d - TODAY) / (7*864e5))); }
 
