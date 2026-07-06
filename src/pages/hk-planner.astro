@@ -107,7 +107,8 @@ import Layout from '../layouts/Layout.astro';
   .sync-indicator { font-size: 11px; color: var(--text3); margin-left: 8px; }
   @media (max-width: 600px) {
     .hk-container { padding: 1rem 0.75rem 4rem; }
-    .cal-cell { min-height: 60px; }
+    .cal-cell { min-height: 90px; padding: 6px 7px; font-size: 11px; }
+    .day-num { font-size: 14px; }
     .metrics { grid-template-columns: 1fr 1fr; }
   }
 </style>
@@ -157,10 +158,6 @@ import Layout from '../layouts/Layout.astro';
 
     <!-- FINANCES -->
     <div id="finances" class="section">
-      <div class="priority-banner">
-        <i class="ti ti-alert-triangle"></i>
-        <div><strong>Flight tickets (£1,000) are your top priority.</strong> Consider booking on a credit card now and paying it back over the coming weeks — you have 10+ weeks of income ahead.</div>
-      </div>
       <div class="metrics" id="fin-metrics"></div>
       <div id="earnings-section"></div>
       <div class="rate-box">
@@ -226,6 +223,8 @@ import Layout from '../layouts/Layout.astro';
 </div>
 
 <script is:inline>
+  const themeToggle = document.querySelector('.toggle-switch');
+  if (themeToggle) themeToggle.style.display = 'none';
   const SUPABASE_URL = 'https://brewadlywcjchngirykq.supabase.co';
   const SUPABASE_KEY = 'sb_publishable_wSdiLiEAVlg9n20Lnud5qA_O0fgd9aQ';
   const API = `${SUPABASE_URL}/rest/v1/hk_data`;
@@ -300,17 +299,16 @@ import Layout from '../layouts/Layout.astro';
       readOnly = false;
       document.getElementById('auth-overlay').style.display = 'none';
       document.getElementById('readonly-banner').style.display = 'none';
+      if (themeToggle) themeToggle.style.display = '';
       if (isDark) wrap.classList.add('dark');
       dbLoad().then(() => { renderCalendar(); renderFinances(); renderCantonese(); });
     } else if (val === 'hannah') {
       readOnly = true;
       document.getElementById('auth-overlay').style.display = 'none';
       document.getElementById('readonly-banner').style.display = 'block';
+      if (themeToggle) themeToggle.style.display = '';
       if (isDark) wrap.classList.add('dark');
       dbLoad().then(() => { renderCalendar(); renderFinances(); renderCantonese(); });
-    } else {
-      document.getElementById('pwd-error').style.display = 'block';
-      document.getElementById('pwd-input').value = '';
     }
   }
 
@@ -323,7 +321,8 @@ import Layout from '../layouts/Layout.astro';
   const WEEKLY_COSTS = 80;
 
   const GOALS = [
-    {id:'tickets',label:'Return flights to Hong Kong',amount:1000,due:null,icon:'ti-plane',priority:true,asap:true},
+    {id:'tickets',label:'Return flights to Hong Kong',amount:550,due:null,icon:'ti-plane',priority:true,asap:true},
+    {id:'accommodation',label:'Hong Kong accommodation',amount:350,due:null,icon:'ti-bed',priority:true,asap:true},
     {id:'debt',   label:'Debt repayment',             amount:100, due:new Date(2026,6,4), icon:'ti-credit-card'},
     {id:'rent1',  label:'Flat rent (July)',            amount:750, due:new Date(2026,6,25),icon:'ti-home'},
     {id:'gift',   label:"Wife's gift",                amount:300, due:new Date(2026,6,29),icon:'ti-gift'},
