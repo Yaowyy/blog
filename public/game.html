@@ -375,25 +375,34 @@
   const ARRIVE = { right: (x, y) => [1, y, 1, 0], left: (x, y) => [COLS - 2, y, -1, 0],
                    up: (x, y) => [x, ROWS - 2, 0, -1], down: (x, y) => [x, 1, 0, 1] };
 
-  // ---- city border wall (concrete wall with razor wire, partly demolished) --------------------
+  // ---- border walls (city all round, factory entrance right + bottom; concrete wall with razor wire, partly demolished) --------------------
   // Corner art has arms to the left and bottom; rot = clockwise quarter turns: 0 = left+bottom, 1 = top+left,
   // 2 = right+top, 3 = bottom+right. Straight/broken art runs left-right; rot 1 makes it run top-bottom.
   // End art: wall comes in from the left and breaks off on the right (rot 1: from the top, broken end pointing down).
   // Tiles counted from 1. Some straight tiles are demolished ('broken'), never two in a row; fixed seed, same every game.
-  function cityCoils() {
-    const c = [], add = (x, y, kind, rot) => c.push({ x, y, kind, rot });
-    const exitRows = ZONE_EXITS['0:0'].filter(e => e.dir === 'right').flatMap(e => e.tiles.map(t => t[1] + 1));
-    const lo = Math.min(...exitRows), hi = Math.max(...exitRows);
-    add(1, 1, 'corner', 3); add(COLS, 1, 'corner', 0); add(1, ROWS, 'corner', 2); add(COLS, ROWS, 'corner', 1);
-    add(COLS, lo - 1, 'end', 1);   // right edge, above the exit: comes from the top, broken off toward the exit
-    add(COLS, hi + 1, 'end', 3);   // right edge, below the exit: comes from the bottom, broken off toward the exit
-    let seed = 4711, prev = false;
+  function borderWalls(id, sides, seed = 4711) {   // sides: any of 'top', 'bottom', 'left', 'right'
+    const c = [], has = new Set(sides), gap = new Set();
+    for (const e of ZONE_EXITS[id]) if (has.has(e.dir === 'up' ? 'top' : e.dir === 'down' ? 'bottom' : e.dir)) for (const [tx, ty] of e.tiles) gap.add(`${tx + 1},${ty + 1}`);
+    const CORNERS = [['top', 'left', 1, 1, 3], ['top', 'right', COLS, 1, 0], ['bottom', 'left', 1, ROWS, 2], ['bottom', 'right', COLS, ROWS, 1]];
+    const corner = new Set();
+    for (const [a, b, x, y, rot] of CORNERS) if (has.has(a) && has.has(b)) { c.push({ x, y, kind: 'corner', rot }); corner.add(`${x},${y}`); }
     const rnd = () => (seed = (seed * 16807) % 2147483647) / 2147483647;
-    const wall = (x, y, rot) => { const b = !prev && rnd() < 0.3; prev = b; add(x, y, b ? 'broken' : 'straight', rot); };
-    for (let x = 2; x <= COLS - 1; x++) wall(x, 1, 0);
-    prev = false; for (let x = 2; x <= COLS - 1; x++) wall(x, ROWS, 0);
-    prev = false; for (let y = 2; y <= ROWS - 1; y++) wall(1, y, 1);
-    prev = false; for (let y = 2; y <= ROWS - 1; y++) if (y < lo - 1 || y > hi + 1) wall(COLS, y, 1); else prev = false;
+    for (const side of sides) {
+      const flat = side === 'top' || side === 'bottom', n = flat ? COLS : ROWS;
+      const at = i => flat ? [i, side === 'top' ? 1 : ROWS] : [side === 'left' ? 1 : COLS, i];
+      const isGap = i => i >= 1 && i <= n && gap.has(at(i).join(','));
+      let prev = false;
+      for (let i = 1; i <= n; i++) {
+        const [x, y] = at(i), key = `${x},${y}`;
+        if (corner.has(key) || isGap(i)) { prev = false; continue; }
+        if (isGap(i + 1) || isGap(i - 1)) {   // broken-off end pointing into the passage
+          const toNext = isGap(i + 1);
+          c.push({ x, y, kind: 'end', rot: flat ? (toNext ? 0 : 2) : (toNext ? 1 : 3) }); prev = false; continue;
+        }
+        const broken = !prev && rnd() < 0.3; prev = broken;
+        c.push({ x, y, kind: broken ? 'broken' : 'straight', rot: flat ? 0 : 1 });
+      }
+    }
     return c;
   }
 
@@ -423,7 +432,8 @@
     { x: 17, y: 7, w: 2, h: 2, color: '#3a4257', art: 'ruinApartment', artW: 3.2 },
   ];
   AREAS['0:0'].decals = true;   // city: the default detail mix
-  AREAS['0:0'].coils = cityCoils();
+  AREAS['0:0'].coils = borderWalls('0:0', ['top', 'bottom', 'left', 'right']);
+  AREAS['1:-1'].coils = borderWalls('1:-1', ['right', 'bottom'], 9001);   // factory entrance: walled on the right and bottom, gaps at its passages
   // toxic lake: one lake where the 4 lake zones meet; each zone shows its quarter (about 1/4 of the zone).
   // art: that quarter's picture, drawn flat on the ground at x, y (px). rows: '#' = water tile (blocked; spells fly over it).
   const LAKE = {
@@ -1513,8 +1523,8 @@
       if (AREAS[areaName].decals) placeDecals(gx);
       const lake = AREAS[areaName].lake;   // toxic lake quarter, flat on the ground
       if (lake && ready(ART[lake.art])) gx.drawImage(ART[lake.art], lake.x, lake.y);
-      drawCoils(gx);
       drawTar(gx);
+      drawCoils(gx);   // walls on top of the tar puddles at the passages
       return g;
     }
 
