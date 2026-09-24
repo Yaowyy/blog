@@ -283,10 +283,10 @@
     { name: 'magic tar',  class: 'skill', gain: {}, art: 'magicTart', value: 90, rarity: 'rare' },
     { name: 'scrap',      class: 'resource', stack: 64, gain: {}, value: 1, art: 'scrap', rarity: 'common' },   // from selling equipment; also sold by the Scrap Dealer
     // not obtainable yet (code only; the cheat menu can give them)
-    { name: 'MutaGen',    class: 'resource', stack: 32, gain: {}, value: 26, rarity: 'rare' },
-    { name: 'Tar Orb',    class: 'upgrade',  stack: 16, gain: {}, value: 60, rarity: 'rare',   // crafted at SpellTech; Space in the inventory consumes one: +1 mana cap
+    { name: 'MutaGen',    class: 'resource', stack: 32, gain: {}, value: 26, rarity: 'rare', art: 'mutagen' },
+    { name: 'Tar Orb',    class: 'upgrade',  stack: 16, gain: {}, value: 60, rarity: 'rare', art: 'tarOrb',   // crafted at SpellTech; Space in the inventory consumes one: +1 mana cap
       desc: 'A magic orb that fuses magic power and body', consume: { manaCap: 1 } },
-    { name: 'AI chip',    class: 'resource', stack: 32, gain: {}, value: 24, rarity: 'rare' },
+    { name: 'AI chip',    class: 'resource', stack: 32, gain: {}, value: 24, rarity: 'rare', art: 'aiChip' },
   ];
   // Scrap Dealer (slums): buys equipment for 40% of its shop price plus 1% of that price in scrap (rounded down),
   // resources for 100% of their value (whole stack at once), and sells scrap for 2$ each. Skills and equipped items can't be sold.
@@ -592,6 +592,7 @@
     magicTart: 'art/magicTart.png',   // magic tart item + spell icon
     scrapDealer: 'art/scrapDealer.png',   // slums scrap dealer building, front turned slightly left
     scrap: 'art/scrap.png',
+    mutagen: 'art/mutagen.png', tarOrb: 'art/tarOrb.png', aiChip: 'art/aiChip.png',   // item icons
     spellTech: 'art/spellTech.png',   // SpellTech crafting station (3 x 2), turned slightly like the shop
     ruinApartment: 'art/ruinApartment.png', ruinMarket: 'art/ruinMarket.png', ruinNoodleBar: 'art/ruinNoodleBar.png',   // destroyed buildings (decorative)   // scrap resource icon
     heroPortrait: 'art/heroPortrait.png',
