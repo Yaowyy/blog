@@ -375,6 +375,7 @@
     heroSprite:   'art/heroSprite.png',
     heroFull:     'art/heroFull.png',
     mapFog: 'art/mapFog.jpg',   // seamless fog texture for undiscovered zones on the maps
+    heroFall: 'art/heroFall.png', heroDefeated: 'art/heroDefeated.png',   // death: 4-frame fall (faces right) + Game over picture
     statusRooted: 'art/statusRooted.png', statusInjured: 'art/statusInjured.png',   // status effect icons (badge with a coloured border)
     heroPunchSide: 'art/heroPunchSide.png', heroPunchDown: 'art/heroPunchDown.png', heroPunchUp: 'art/heroPunchUp.png',   // attack sheets, 4 frames each
     heroSwordSide: 'art/heroSwordSide.png', heroSwordDown: 'art/heroSwordDown.png', heroSwordUp: 'art/heroSwordUp.png',
@@ -791,6 +792,7 @@
     function closeAll() { if (locked()) return; ui = null; closePanels(); }
 
     function choose(i) {
+      if (ui && ui.kind === 'gameover' && deathT() < DEATH.showAt) return;   // wait for the Game over screen to appear
       const list = rows();
       if (!ui || i < 0 || i >= list.length) return;
       ui.cursor = i;
@@ -1178,8 +1180,13 @@
       return list;
     }
 
+    // death sequence (real time from deathStart): the screen dims to black over 4 s; the fall plays over the first 2 s;
+    // from 3 s to 4 s the defeated picture and the Game over text fade in. "new game" can be chosen once they appear.
+    const DEATH = { dimMs: 4000, fallMs: 2000, showAt: 3000, showMs: 1000, fall: { cellW: 296, cellH: 285, ax: 139.3, foot: 7.5 } };
+    let deathStart = 0;
+    const deathT = () => performance.now() - deathStart;
     function gameOver() {
-      closePanels();
+      closePanels(); deathStart = performance.now(); moving = false;
       ui = { kind: 'gameover', cursor: 0, msg: `${heroName || DEFAULT_NAME} fell in the ${areaLabel(areaName)}. Deals made: ${dealsDone}.` };
       held.clear(); tapped.clear();
     }
@@ -1660,6 +1667,12 @@
       if (gameTime - heroHurtStart < 300 && Math.floor((gameTime - heroHurtStart) / 60) % 2 === 0) ctx.globalAlpha = 0.35;   // hit blink
       ctx.imageSmoothingQuality = 'high';
       ctx.translate(cx, feet);
+      if (ui && ui.kind === 'gameover' && ready(ART.heroFall)) {   // dying: fall frames over 2 s, then he stays down
+        const c = DEATH.fall, f = Math.min(3, Math.floor(deathT() / (DEATH.fallMs / 4)));
+        if (lookX < 0) ctx.scale(-1, 1);
+        ctx.drawImage(ART.heroFall, f * c.cellW, 0, c.cellW, c.cellH, -c.ax * k, -(c.cellH - c.foot - 2) * k, c.cellW * k, c.cellH * k);
+        ctx.restore(); return;
+      }
       const since = gameTime - heroAttackStart;
       const key = since < HERO_ATTACK_ANIM_MS && HERO_ATTACK_SHEETS[hasSword() ? 'sword' : 'punch'][heroAttackDir];
       if (key && ready(ART[key])) {   // attack frame
@@ -1702,6 +1715,7 @@
 
     function drawWindow() {
       if (ui.kind === 'map') { drawBigMap(); return; }
+      if (ui.kind === 'gameover') { drawGameOver(); return; }
       const list = rows();
       const info = ui.kind === 'controls';          // read-only list, nothing to select
       const rowH = info ? 38 : ui.kind === 'shop' || ui.kind === 'loot' || ui.kind === 'scrap' ? 88 : ui.kind === 'cheat' ? 50 : 64;   // shop and loot rows are taller for the item pictures
@@ -1770,6 +1784,26 @@
       ctx.fillStyle = '#8a8a8a';
       ctx.font = '22px ' + MONO;
       ctx.fillText(hero ? 'H or Esc close' : ui.kind === 'gameover' ? 'Space start a new game' : inv ? 'A/D/W/S choose · Space equip/learn/unequip · I or Esc close' : ui.kind === 'loot' ? 'W/S choose · Space take · Esc close' : ui.kind === 'cheat' ? 'W/S choose · Space apply · P or Esc close' : ui.kind === 'scrap' ? 'W/S choose · Space buy / sell · Esc close' : ui.kind === 'rest' ? (restReadyAt > Date.now() ? (ui.back ? 'Esc back' : 'Esc close') : 'Space confirm · Esc close') : info ? (ui.back ? 'Esc back' : 'Esc close') : (ui.back ? 'W/S choose · Space select · Esc back' : 'W/S choose · Space select · Esc close'), px + 40, py + ph - 40);
+    }
+
+    // ---- game over ------------------------------------------------------------------------
+    function drawGameOver() {
+      const t = deathT();
+      ctx.fillStyle = `rgba(0, 0, 0, ${Math.min(1, t / DEATH.dimMs)})`;   // the world dims to black
+      ctx.fillRect(0, 0, canvas.width, canvas.height);
+      const a = Math.max(0, Math.min(1, (t - DEATH.showAt) / DEATH.showMs));
+      if (!a) return;
+      ctx.save(); ctx.globalAlpha = a;
+      const im = ART.heroDefeated, cx = canvas.width / 2;
+      let y = 150;
+      if (ready(im)) { const w = 640, h = w * im.naturalHeight / im.naturalWidth; ctx.imageSmoothingQuality = 'high'; ctx.drawImage(im, cx - w / 2, y, w, h); y += h + 40; }
+      ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+      ctx.fillStyle = '#e5484d'; ctx.font = '700 72px ' + MONO; ctx.fillText('Game over', cx, y + 30);
+      ctx.fillStyle = '#cfcfcf'; ctx.font = '28px ' + MONO; ctx.fillText(ui.msg, cx, y + 110);
+      ctx.fillStyle = '#fff'; ctx.font = '600 32px ' + MONO; ctx.fillText('> new game', cx, y + 190);
+      ctx.fillStyle = '#8a8a8a'; ctx.font = '22px ' + MONO; ctx.fillText('Space start a new game', cx, y + 240);
+      rowRects.push({ x: cx - 200, y: y + 165, w: 400, h: 50, i: 0 });
+      ctx.restore();
     }
 
     // ---- maps ----------------------------------------------------------------------------
