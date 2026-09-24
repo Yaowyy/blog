@@ -181,21 +181,25 @@
   // in the shop, starting at lvl 0) and raises that patch's price by 15%, rounded up.
   // Food: never rises on purchase; instead it inflates by FOOD_INFLATION after every work shift (shown rounded up).
   const SHOP_ITEMS = [
-    { name: 'food',      price: 1,   gain: { energy: 10, health: 1 }, art: 'food' },
-    { name: 'smile patch',   price: 30,  gain: { charisma: 1 }, patch: true, art: 'smilePatch' },
-    { name: 'social patch',  price: 90,  gain: { charisma: 2 }, patch: true, art: 'socialPatch' },
-    { name: 'persona patch', price: 240, gain: { charisma: 3 }, patch: true, art: 'personaPatch' },
+    { name: 'food',      price: 1,   gain: { energy: 10, health: 1 }, art: 'food', rarity: 'common' },
+    { name: 'smile patch',   price: 30,  gain: { charisma: 1 }, patch: true, art: 'smilePatch', rarity: 'common' },
+    { name: 'social patch',  price: 90,  gain: { charisma: 2 }, patch: true, art: 'socialPatch', rarity: 'common' },
+    { name: 'persona patch', price: 240, gain: { charisma: 3 }, patch: true, art: 'personaPatch', rarity: 'common' },
     // class 'equipment': goes to the inventory, gives its bonus only once equipped (I → A/D → Space).
     // kind: only one item per kind (e.g. one sword), counting inventory and equipped items. Bought once.
-    { name: 'banana sword', price: 400, gain: { strength: 4, charisma: 1 }, class: 'equipment', kind: 'sword', art: 'bananaSword' },
+    { name: 'banana sword', price: 400, gain: { strength: 4, charisma: 1 }, class: 'equipment', kind: 'sword', art: 'bananaSword', rarity: 'common' },
   ];
   // items that are never sold, only looted
   // class 'resource': stacks (up to `stack` per inventory slot), used for crafting later.
   // class 'skill': doesn't stack; Space in the inventory learns it and puts it in an ability slot (effects come later).
   const LOOT_ITEMS = [
-    { name: 'tar',        class: 'resource', stack: 64, gain: {}, art: 'tart', value: 2 },   // value: price per piece (the Scrap Dealer pays this)
-    { name: 'magic tar',  class: 'skill', gain: {}, art: 'magicTart' },
-    { name: 'scrap',      class: 'resource', stack: 64, gain: {}, value: 1, art: 'scrap' },   // from selling equipment; also sold by the Scrap Dealer
+    { name: 'tar',        class: 'resource', stack: 64, gain: {}, art: 'tart', value: 2, rarity: 'common' },   // value: price per piece (the Scrap Dealer pays this for resources)
+    { name: 'magic tar',  class: 'skill', gain: {}, art: 'magicTart', value: 90, rarity: 'rare' },
+    { name: 'scrap',      class: 'resource', stack: 64, gain: {}, value: 1, art: 'scrap', rarity: 'common' },   // from selling equipment; also sold by the Scrap Dealer
+    // not obtainable yet (code only; the cheat menu can give them)
+    { name: 'MutaGen',    class: 'resource', stack: 32, gain: {}, value: 26, rarity: 'rare' },
+    { name: 'Tar Orb',    class: 'upgrade',  stack: 16, gain: {}, value: 60, rarity: 'rare' },   // class 'upgrade': used to upgrade things later
+    { name: 'AI chip',    class: 'resource', stack: 32, gain: {}, value: 24, rarity: 'rare' },
   ];
   // Scrap Dealer (slums): buys equipment for 40% of its shop price plus 1% of that price in scrap (rounded down),
   // resources for 100% of their value (whole stack at once), and sells scrap for 2$ each. Skills and equipped items can't be sold.
@@ -205,12 +209,16 @@
   // spells (learned from 'skill' items). Magic tar: a projectile toward the closest enemy, up to `range` tiles.
   // On hit the enemy can't move for `rootMs` and takes dot[0]–dot[1] damage every second, `ticks` times.
   const SPELLS = {
-    'magic tar': { mana: 1, range: 5, speed: 9, rootMs: 3000, dot: [1, 2], ticks: 3, tickMs: 1000 },
+    'magic tar': { mana: 3, range: 5, speed: 9, rootMs: 2000, dot: [1, 2], ticks: 2, tickMs: 1000 },   // root 2 s + 1-2 damage per second for 2 s
   };
   // critical strike (spells only): 0.03% per charisma point, capped at 15%. A crit adds the hero's strength to the damage.
   const CRIT_PER_CHA = 0.0003, CRIT_CAP = 0.15;
   const HERO_MANA_REGEN_MS = 30000;   // hero gets 1 mana back every 30 s of game time (up to the mana cap)
   const EQUIP_SLOTS = 3;   // shown on the right of the hero view (H)
+  // item rarity: the colour of the item's name, and a coloured edge in its slot (not for common)
+  const RARITY = { common: '#ffffff', rare: '#4ea1ff', mythical: '#b36bff', legendary: '#ff9a2e', titanic: '#ff3b3b', transcendent: '#ff5fd2' };
+  const rarityOf = name => (itemDef(name) || {}).rarity || 'common';
+  const rarityColor = name => RARITY[rarityOf(name)];
   const itemDef = name => SHOP_ITEMS.find(it => it.name === name) || LOOT_ITEMS.find(it => it.name === name);
   const DEFAULT_NAME = 'hero';
   const cleanName = v => v.replace(/[^\p{L}]/gu, '').slice(0, 10);   // letters only (any alphabet), up to 10
@@ -345,14 +353,14 @@
 
   // ---- enemies ----------------------------------------------------------------
   // Drip: half human, half oil slime. Every slums zone has 1 (2 where a map coordinate is 3 or more).
-  // When the hero comes within `aggro` tiles (diagonals count as 1) he chases at 1 tile per second
-  // and keeps chasing until the hero leaves the slums. Next to the hero (diagonals too) he attacks once per second.
-  // Each attack has a 33% chance to also cast Tart (costs 3 mana): the hero can't move for 2 s.
-  // Mana comes back at 1 per 5 s. Beaten: lies as a puddle that can be looted (face it, Space) for money, tar and
-  // a rare magic tar; comes back after 60 s or when the slums are re-entered (unlooted loot is lost then).
-  // All timers run on game time, which stops while a window is open.
-  const DRIP = { name: 'Drip', hp: 10, atk: [1, 2], mana: 3, manaRegenMs: 5000, aggro: 4, stepMs: 1000, attackMs: 1000,
-                 windupMs: 400, tart: { chance: 1 / 3, cost: 3, rootMs: 2000 }, respawnMs: 60000,
+  // All Drips in the world are spawned when a game starts and keep their state when the hero leaves a zone
+  // (living ones go back home and forget him). When the hero comes within `aggro` tiles (diagonals count as 1) he locks on:
+  // chases at 1 tile per second until the hero leaves the zone, attacks once per second when next to him, and only then
+  // starts restoring mana (spawns with 0 of 3, +1 per 4 s). At 3 mana he casts Magic Tar at the hero (same spell as the hero's).
+  // Beaten: his puddle can be looted for 30 s (face it, Space), then fades out over 2 s and is gone with any loot left.
+  // He comes back 60–90 s after dying. All timers run on game time, which stops while a window is open.
+  const DRIP = { name: 'Drip', hp: 10, atk: [1, 2], mana: 3, manaRegenMs: 4000, aggro: 4, stepMs: 1000, attackMs: 1000,
+                 windupMs: 400, spell: 'magic tar', respawnMs: [60000, 90000], lootMs: 30000, fadeMs: 2000,
                  loot: { money: [4, 8], tar: [0, 1], magicTarChance: 0.01 },   // rolled when he dies, taken with Space
                  spawns: [[{ x: 11, y: 7 }], [{ x: 8, y: 5 }, { x: 14, y: 9 }]] };   // spawn tiles (from 1) for 1 and for 2 Drips
   const HERO_ATTACK_MS = 1000;   // hero: Space while facing an enemy hits for `strength`, at most once per second
@@ -366,6 +374,7 @@
   const ART_SRC = {
     heroSprite:   'art/heroSprite.png',
     heroFull:     'art/heroFull.png',
+    mapFog: 'art/mapFog.jpg',   // seamless fog texture for undiscovered zones on the maps
     statusRooted: 'art/statusRooted.png', statusInjured: 'art/statusInjured.png',   // status effect icons (badge with a coloured border)
     heroPunchSide: 'art/heroPunchSide.png', heroPunchDown: 'art/heroPunchDown.png', heroPunchUp: 'art/heroPunchUp.png',   // attack sheets, 4 frames each
     heroSwordSide: 'art/heroSwordSide.png', heroSwordDown: 'art/heroSwordDown.png', heroSwordUp: 'art/heroSwordUp.png',
@@ -447,7 +456,7 @@
     const levels = { ...startLevels(), ...(saved.levels || {}) };   // installed level of each patch
     // open window: null, or { kind: 'shop' | 'work' | 'menu', cursor, msg }
     let ui = null;
-    window.claude?.hot?.snapshot?.(() => ({ x: player.x, y: player.y, fx: facing.x, fy: facing.y, stats, deals, prices, dealsDone, heroName, inventory, equipped, skills, areaName, restReadyAt, levels }));
+    window.claude?.hot?.snapshot?.(() => ({ x: player.x, y: player.y, fx: facing.x, fy: facing.y, stats, deals, prices, dealsDone, heroName, inventory, equipped, skills, areaName, restReadyAt, levels, discovered: [...discovered] }));
 
     document.getElementById('portrait').style.backgroundImage = `url(${ART_SRC.heroPortrait})`;
     document.getElementById('inv-btn').style.backgroundImage = `url(${ART_SRC.invIcon}), url(${ART_SRC.slot})`;
@@ -592,6 +601,8 @@
     }
     function newGame() {
       Object.assign(stats, START_STATS); dealsDone = 0; Object.assign(prices, startPrices()); deals = newDeals(stats.charisma);
+      discovered.clear();
+      areaName = '0:0'; spawnAllDrips();
       enterArea('0:0', START.x, START.y, 1, true);
       inventory.length = 0; equipped.length = 0; skills.length = 0; restReadyAt = 0; Object.assign(levels, startLevels());
       rootedUntil = 0; floaters.length = 0; Object.assign(CAPS, BASE_CAPS);
@@ -603,7 +614,7 @@
     function snapshot() {
       return { x: player.x, y: player.y, fx: facing.x, fy: facing.y, stats: { ...stats }, deals, prices: { ...prices }, dealsDone,
                inventory: inventory.map(it => ({ ...it })), equipped: equipped.map(it => ({ ...it })), skills: [...skills],
-               areaName, restReadyAt, levels: { ...levels }, manaCap: CAPS.mana };
+               areaName, restReadyAt, levels: { ...levels }, manaCap: CAPS.mana, discovered: [...discovered], enemies: saveEnemies() };
     }
     function applySave(s) {
       Object.assign(CAPS, BASE_CAPS, s.manaCap !== undefined ? { mana: s.manaCap } : {});
@@ -614,7 +625,9 @@
       equipped.length = 0; equipped.push(...(s.equipped || []));
       skills.length = 0; skills.push(...(s.skills || []));
       restReadyAt = s.restReadyAt || 0; rootedUntil = 0; floaters.length = 0; closePanels();
+      discovered.clear(); for (const id of s.discovered || ['0:0']) discovered.add(AREA_ALIAS[id] || id);
       const sa = AREA_ALIAS[s.areaName] || s.areaName, area = AREAS[sa] ? sa : '0:0';
+      areaName = area; spawnAllDrips(); loadEnemies(s.enemies);   // enemies come back as saved (older saves: all spawned)
       enterArea(area, s.x ?? START.x, s.y ?? START.y, s.fx || 1, true);
       facing.x = s.fx ?? 1; facing.y = s.fy ?? 0;
       if (!free(player.x, player.y)) { player.x = START.x; player.y = START.y; fromX = player.x; fromY = player.y; }
@@ -703,12 +716,13 @@
         row('strength', '+5 ⚔', () => { stats.strength += 5; return `Strength ${stats.strength}.`; }),
         row('magic tar', 'into inventory', () => give('magic tar', 1)),
         row('tar', '+10 into inventory', () => give('tar', 10)),
+        row('new items', 'MutaGen, Tar Orb, AI chip', () => ['MutaGen', 'Tar Orb', 'AI chip'].map(n => give(n, 1)).join(' ')),
         row('banana sword', 'into inventory', () => { if (inventory.length >= INVENTORY_SLOTS) return 'Inventory full.'; inventory.push({ name: 'banana sword', kind: 'sword', class: 'equipment' }); return 'Added banana sword.'; }),
         row('rest cooldown', 'reset', () => { restReadyAt = 0; return 'HomeDome can be used again.'; }),
         row('Drip', !drips.length ? 'none in this zone' : drips.some(d => !d.dead) ? 'defeat nearest (loot drops)' : 'respawn', () => {
           if (!drips.length) return 'No Drips live in this zone.';
           const alive = drips.filter(d => !d.dead).sort((a, b) => cheb(a.x, a.y, player.x, player.y) - cheb(b.x, b.y, player.x, player.y));
-          if (!alive.length) { drips = drips.map(d => makeDrip(d.spawn)); return 'The Drips are back.'; }
+          if (!alive.length) { drips.forEach((d, i) => { drips[i] = makeDrip(d.spawn); }); return 'The Drips are back.'; }
           drip = alive[0]; damageDrip(drip.hp, 'cheat', '#8a8a8a'); return 'Drip defeated. His loot is on the puddle.';
         }),
         (() => {   // teleport through the zones in map order
@@ -725,7 +739,7 @@
       ];
     }
     const TITLES = { shop: 'ATB-Market', work: 'TradeCorp', menu: 'Menu', controls: 'Controls', hero: 'Hero', inventory: 'Inventory', gameover: 'Game over', loot: 'Loot · Drip', rest: 'HomeDome', cheat: 'Cheats (testing)', scrap: 'Scrap Dealer',
-                     restart: 'Restart', save: 'Save', load: 'Load game', logout: 'Log out', guest: 'Playing as guest' };
+                     map: 'Map', restart: 'Restart', save: 'Save', load: 'Load game', logout: 'Log out', guest: 'Playing as guest' };
     // windows with a paragraph above their options
     const WINDOW_TEXT = {
       restart: 'Are you sure?',
@@ -742,6 +756,7 @@
       ['Esc (nothing open)', 'menu'],
       ['H', 'hero (left)'],
       ['I', 'inventory (bottom right)'],
+      ['M', 'world map'],
       ['H / I (both open)', 'switch focus'],
       ['W / S (hero)', 'choose equipped item'],
       ['Space (hero)', 'unequip'],
@@ -801,6 +816,7 @@
         renderStats(); return;
       }
       if (def.class === 'resource') { pn.msg = `${item.name} is a resource, used for crafting later.`; return; }
+      if (def.class === 'upgrade') { pn.msg = `${item.name} is an upgrade material, used later.`; return; }
       equipSelected(item, def, pn);
     }
     // Space on an equipped slot in the hero panel: the item goes back to the backpack and its bonuses are removed
@@ -854,7 +870,11 @@
     let drips = [];    // the Drips in this zone (alive or lying as puddles)
     let drip = null;   // the Drip currently being updated / drawn / hit (the enemy code works on this one)
     let lootTarget = null;   // the beaten Drip whose loot window is open
-    let rootedUntil = 0;   // "root" state: hero can't move until this game time (Drip's Tart applies it)
+    const discovered = new Set(saved.discovered || ['0:0']);   // zones the hero has been to (the map shows the rest as fog)
+    discovered.add(areaName);
+    let rootedUntil = 0;   // "root" state: hero can't move until this game time (an enemy's Magic Tar applies it)
+    let rootTotal = 2000;  // length of the current root (for the puddle's fade)
+    let heroDot = null;    // damage over time on the hero: { spell, left, next }
     // ---- hero states ----------------------------------------------------------------
     // root: can't move, for a set time. injured: health at or below 10% of max health → walks 40% slower.
     // icon: ART key (a drawn placeholder is used until the art exists); color: placeholder border / symbol
@@ -896,31 +916,69 @@
     const heroFree = (x, y) => free(x, y) && !dripAt(x, y);
     const cheb = (ax, ay, bx, by) => Math.max(Math.abs(ax - bx), Math.abs(ay - by));
 
-    function spawnZoneDrips() {
-      drips = []; drip = null;
-      const n = AREAS[areaName].drips || 0;
-      for (let i = 0; i < n; i++) drips.push(makeDrip(DRIP.spawns[n - 1][i]));
+    // every zone's Drips, kept for the whole game (zone id -> list); `drips` is the current zone's list
+    let zoneDrips = {};
+    function spawnAllDrips() {   // start of a game (new game, load, page open): every enemy is spawned
+      zoneDrips = {};
+      for (const id in AREAS) {
+        const n = AREAS[id].drips || 0;
+        zoneDrips[id] = [];
+        for (let i = 0; i < n; i++) zoneDrips[id].push(makeDrip(DRIP.spawns[n - 1][i], id));
+      }
+      drips = zoneDrips[areaName] || []; drip = null;
     }
-    const takenByDrip = (x, y, self) => drips.some(o => o !== self && !o.dead && o.x === x && o.y === y);
-    function makeDrip(spawn) {
+    // enemy timers in saves. Game time restarts at 0 on every page load, so times are stored relative:
+    // how long ago a Drip died and how long until he respawns. Living Drips keep their health.
+    function saveEnemies() {
+      const out = {};
+      for (const id in zoneDrips) out[id] = zoneDrips[id].map(d => d.dead
+        ? { dead: true, x: d.x, y: d.y, since: gameTime - d.deadAt, respawnIn: Math.max(0, d.respawnAt - gameTime), loot: d.loot || null }
+        : { hp: d.hp });
+      return out;
+    }
+    function loadEnemies(saved) {
+      if (!saved) return;
+      for (const id in saved) (saved[id] || []).forEach((e, i) => {
+        const d = zoneDrips[id] && zoneDrips[id][i];
+        if (!d) return;
+        if (!e.dead) { d.hp = Math.max(1, Math.min(DRIP.hp, e.hp ?? DRIP.hp)); return; }
+        Object.assign(d, { dead: true, hp: 0, x: e.x, y: e.y, fromX: e.x, fromY: e.y, aggro: false,
+                           deadAt: gameTime - e.since, respawnAt: gameTime + e.respawnIn, loot: e.loot });
+      });
+    }
+    // hero enters a zone: its living Drips are back at their spawn spot, not locked on, with no mana (they keep their health)
+    function settleZoneDrips(id) {
+      const list = zoneDrips[id] || [];
+      list.forEach((d, i) => { if (!d.dead) { const n = makeDrip(d.spawn, id); n.hp = d.hp; list[i] = n; } });
+      drips = list; drip = null;
+    }
+    const takenByDrip = (x, y, self, list = drips) => list.some(o => o !== self && !o.dead && o.x === x && o.y === y);
+    function makeDrip(spawn, zoneId = areaName) {
+      const saveWalls = WALLS; WALLS = AREAS[zoneId].walls;   // free() checks the walls of the zone being filled
+      const list = zoneDrips[zoneId] || [], here = zoneId === areaName;
+      const blocked = (x, y) => !free(x, y) || takenByDrip(x, y, null, list) || (here && x === player.x && y === player.y);
       let sx = spawn.x - 1, sy = spawn.y - 1;
-      if (!free(sx, sy) || takenByDrip(sx, sy) || (sx === player.x && sy === player.y)) {   // nearest free tile that isn't the hero's
+      if (blocked(sx, sy)) {   // nearest free tile
         let best = null;
         for (let y = 0; y < ROWS; y++) for (let x = 0; x < COLS; x++) {
-          if (!free(x, y) || exitAt(x, y) || takenByDrip(x, y) || (x === player.x && y === player.y)) continue;
+          if (blocked(x, y) || AREAS[zoneId].exits.some(e => e.tiles.some(([tx, ty]) => tx === x && ty === y))) continue;
           const d = Math.hypot(x - sx, y - sy); if (!best || d < best.d) best = { x, y, d };
         }
         if (best) { sx = best.x; sy = best.y; }
       }
-      return { x: sx, y: sy, fromX: sx, fromY: sy, stepStart: -1e9, hp: DRIP.hp, mana: DRIP.mana, manaT: gameTime, spawn,
+      WALLS = saveWalls;
+      return { x: sx, y: sy, fromX: sx, fromY: sy, stepStart: -1e9, hp: DRIP.hp, mana: 0, manaT: 0, spawn,
                aggro: false, nextAttack: 0, attackStart: -1e9, hitAt: 0, hurtStart: -1e9, dead: false, deadAt: 0, lookX: -1 };
     }
 
     function updateDrips() {
-      drips.forEach((d, i) => {
-        if (d.dead && gameTime - d.deadAt >= DRIP.respawnMs) { if (lootTarget === d) lootTarget = null; drips[i] = makeDrip(d.spawn); return; }
-        drip = drips[i]; updateDrip();
+      // world-wide timers: loot expiry, fade-out and respawn run in every zone (cheap: a few timestamps)
+      for (const id in zoneDrips) zoneDrips[id].forEach((d, i, list) => {
+        if (!d.dead) return;
+        if (d.loot && gameTime >= d.deadAt + DRIP.lootMs) { d.loot = null; if (lootTarget === d) lootTarget = null; }
+        if (gameTime >= d.respawnAt) list[i] = makeDrip(d.spawn, id);
       });
+      drips.forEach(d => { drip = d; updateDrip(); });   // only the hero's zone is simulated
     }
     function updateDrip() {
       if (!drip) return;
@@ -932,11 +990,20 @@
         if (drip.dead) return;
         if (--drip.dot.left <= 0) drip.dot = null; else drip.dot.next += sp.tickMs;
       }
-      if (drip.mana >= DRIP.mana) drip.manaT = t;   // regen timer only runs while mana is missing
-      while (drip.mana < DRIP.mana && t - drip.manaT >= DRIP.manaRegenMs) { drip.mana++; drip.manaT += DRIP.manaRegenMs; }
       const dist = cheb(player.x, player.y, drip.x, drip.y);
-      if (!drip.aggro && dist <= DRIP.aggro) drip.aggro = true;
+      if (!drip.aggro && dist <= DRIP.aggro) { drip.aggro = true; drip.manaT = t; }
       if (!drip.aggro) return;
+      // locked on: mana comes back (+1 per 4 s); full mana → cast Magic Tar at the hero when he's in range
+      if (drip.mana >= DRIP.mana) drip.manaT = t;
+      while (drip.mana < DRIP.mana && t - drip.manaT >= DRIP.manaRegenMs) { drip.mana++; drip.manaT += DRIP.manaRegenMs; }
+      const sp = SPELLS[DRIP.spell];
+      if (drip.mana >= sp.mana && Math.hypot(player.x - drip.x, player.y - drip.y) <= sp.range - 0.5 && stats.health > 0) {
+        drip.mana -= sp.mana; drip.manaT = t;
+        const d = dripPos(), sx = d.x + 0.5, sy = d.y + 0.5, dx = player.x + 0.5 - sx, dy = player.y + 0.5 - sy, len = Math.hypot(dx, dy) || 1;
+        projectiles.push({ x: sx, y: sy, dx: dx / len, dy: dy / len, flown: 0, spell: sp, t, enemy: true });
+        drip.attackStart = t;   // casting pose
+        float('Magic Tar!', '#ff2bd6', drip.x + 0.5, drip.y - 1.3);
+      }
       if (player.x !== drip.x) drip.lookX = player.x > drip.x ? 1 : -1;
       if (drip.hitAt && t >= drip.hitAt) { drip.hitAt = 0; dripStrikes(); }
       if (t - drip.stepStart < DRIP.stepMs) return;              // still gliding to the next tile
@@ -966,11 +1033,6 @@
       stats.health = Math.max(0, stats.health - dmg);
       heroHurtStart = gameTime;
       float(`-${dmg}`, '#e5484d', player.x + 0.5, player.y - 0.6);
-      if (drip.mana >= DRIP.tart.cost && Math.random() < DRIP.tart.chance) {
-        drip.mana -= DRIP.tart.cost;
-        rootedUntil = gameTime + DRIP.tart.rootMs;
-        float('Tart!', '#ff2bd6', player.x + 0.5, player.y - 1.1);
-      }
       renderStats();
       if (stats.health <= 0) gameOver();
     }
@@ -991,6 +1053,7 @@
       float(text, color, drip.x + 0.5, drip.y - 0.9);
       if (drip.hp <= 0) {   // nothing is given yet: the loot waits on his puddle
         drip.dead = true; drip.deadAt = gameTime; drip.hitAt = 0; drip.dot = null; drip.stunUntil = 0;
+        drip.respawnAt = gameTime + rand(DRIP.respawnMs[0], DRIP.respawnMs[1]);   // respawn timer starts now
         const L = DRIP.loot, items = [];
         const tars = rand(L.tar[0], L.tar[1]);
         if (tars) items.push({ name: 'tar', count: tars });
@@ -1033,7 +1096,14 @@
         const pr = projectiles[i], step = Math.min(pr.spell.speed * dt / 1000, pr.spell.range - pr.flown);
         pr.x += pr.dx * step; pr.y += pr.dy * step; pr.flown += step;
         let gone = false;
-        for (const e of drips) {   // hit check first, so a target right at the end of the range still counts
+        if (pr.enemy && Math.hypot(player.x + 0.5 - pr.x, player.y + 0.5 - pr.y) < 0.55) {   // an enemy's Magic Tar hits the hero
+          rootedUntil = Math.max(rootedUntil, gameTime + pr.spell.rootMs); rootTotal = pr.spell.rootMs;
+          heroDot = { spell: pr.spell, left: pr.spell.ticks, next: gameTime + pr.spell.tickMs };
+          heroHurtStart = gameTime;
+          float('rooted!', '#ff2bd6', player.x + 0.5, player.y - 1.1);
+          gone = true;
+        }
+        for (const e of (pr.enemy ? [] : drips)) {   // hit check first, so a target right at the end of the range still counts
           if (gone || e.dead) continue;
           drip = e;
           const d = dripPos();
@@ -1050,6 +1120,17 @@
       }
     }
 
+    // damage over time on the hero (enemy Magic Tar)
+    function updateHeroDot() {
+      while (heroDot && gameTime >= heroDot.next && stats.health > 0) {
+        const dmg = rand(heroDot.spell.dot[0], heroDot.spell.dot[1]);
+        stats.health = Math.max(0, stats.health - dmg); heroHurtStart = gameTime;
+        float(`-${dmg}`, '#ff2bd6', player.x + 0.5, player.y - 0.6);
+        renderStats();
+        if (stats.health <= 0) { heroDot = null; gameOver(); return; }
+        if (--heroDot.left <= 0) heroDot = null; else heroDot.next += heroDot.spell.tickMs;
+      }
+    }
     function updateHeroMana() {
       if (stats.mana >= CAPS.mana) { heroManaT = gameTime + HERO_MANA_REGEN_MS; return; }
       if (gameTime >= heroManaT) { stats.mana = capped('mana', stats.mana + 1); heroManaT = gameTime + HERO_MANA_REGEN_MS; renderStats(); }
@@ -1176,7 +1257,7 @@
       const dt = !anyOpen() && !naming() ? Math.min(100, now - lastFrame) : 0;
       gameTime += dt;   // game clock pauses behind windows
       lastFrame = now;
-      if (dt) { updateDrips(); updateProjectiles(dt); updateHeroMana(); }
+      if (dt) { updateDrips(); updateProjectiles(dt); updateHeroDot(); updateHeroMana(); }
       // keys still held when Tart wears off (or a blocking enemy moves): start walking again
       if (!moving && !comboTimer && held.size && !anyOpen()) tryStep(now);
       let rx = player.x, ry = player.y;
@@ -1205,12 +1286,12 @@
     let groundLayer = null;   // rebuilt when the area changes
     let areaFade = 0, areaBanner = 0;   // timestamps for the transition fade and the area name banner
     function enterArea(name, x, y, face, instant, faceY = 0) {
-      areaName = name; WALLS = AREAS[name].walls;
+      areaName = name; WALLS = AREAS[name].walls; discovered.add(name);
       player.x = x; player.y = y; fromX = x; fromY = y;
       facing.x = face; facing.y = faceY; if (face) lookX = face; moving = false;
       groundLayer = null;
-      rootedUntil = 0; projectiles.length = 0;
-      spawnZoneDrips();   // the zone's Drips are back at full health every time it's entered
+      rootedUntil = 0; heroDot = null; projectiles.length = 0;
+      settleZoneDrips(name);
       if (!instant) { areaFade = performance.now(); areaBanner = areaFade; setTimeout(() => autosave(), 0); }
       renderStats();
     }
@@ -1396,6 +1477,7 @@
 
       rowRects = [];
       drawStates();
+      if (!(ui && ui.kind === 'map')) drawMinimap();
       drawPanels();
       if (ui) drawWindow();
     }
@@ -1482,6 +1564,9 @@
     function drawDrip(d) {
       const t = gameTime, cx = (d.x + 0.5) * TILE, feet = (d.y + 1) * TILE - 2;
       if (drip.dead) {
+        const since = t - drip.deadAt;
+        if (since >= DRIP.lootMs + DRIP.fadeMs) return;   // puddle gone
+        ctx.save(); if (since > DRIP.lootMs) ctx.globalAlpha = 1 - (since - DRIP.lootMs) / DRIP.fadeMs;   // 2 s fade-out
         if (ready(ART.dripHurt)) drawDripCell(ART.dripHurt, DRIP_ART.hurt, 1, cx, feet, 1, drip.loot && lootable() === drip && !anyOpen() ? NEON.building : null);
         if (drip.loot) {   // loot waiting: a pulsing gold glint over the puddle, "loot" when faced
           const k = 0.5 + 0.5 * Math.sin(performance.now() / 250), gy = feet - 52;
@@ -1494,6 +1579,7 @@
             ctx.fillText('loot (Space)', cx, feet - 70);
           }
         }
+        ctx.restore();
         return;
       }
       const sinceAtk = t - drip.attackStart, sinceHurt = t - drip.hurtStart;
@@ -1513,7 +1599,7 @@
     }
     // Tart: the hero stands stuck in a glossy oil puddle
     function drawTart(rx, ry) {
-      const cx = (rx + 0.5) * TILE, cy = (ry + 1) * TILE - 10, left = (rootedUntil - gameTime) / DRIP.tart.rootMs;
+      const cx = (rx + 0.5) * TILE, cy = (ry + 1) * TILE - 10, left = (rootedUntil - gameTime) / rootTotal;
       ctx.save();
       ctx.globalAlpha = Math.min(1, left * 4);
       ctx.fillStyle = '#10131C'; ctx.beginPath(); ctx.ellipse(cx, cy, 40, 15, 0, 0, Math.PI * 2); ctx.fill();
@@ -1614,6 +1700,7 @@
     }
 
     function drawWindow() {
+      if (ui.kind === 'map') { drawBigMap(); return; }
       const list = rows();
       const info = ui.kind === 'controls';          // read-only list, nothing to select
       const rowH = info ? 38 : ui.kind === 'shop' || ui.kind === 'loot' || ui.kind === 'scrap' ? 88 : ui.kind === 'cheat' ? 50 : 64;   // shop and loot rows are taller for the item pictures
@@ -1655,14 +1742,14 @@
         const y = top + i * rowH + gapY, sel = !info && i === ui.cursor;
         rowRects.push({ x: px + 24, y, w: pw - 48, h: rowH - 8, i });
         if (sel) { ctx.fillStyle = 'rgba(255, 220, 0, 0.12)'; ctx.fillRect(px + 24, y, pw - 48, rowH - 8); }
-        ctx.fillStyle = r.dim ? '#6a6a6a' : sel || info ? '#fff' : '#cfcfcf';
+        ctx.fillStyle = r.dim ? '#6a6a6a' : r.item && rarityOf(r.item.name) !== 'common' ? rarityColor(r.item.name) : sel || info ? '#fff' : '#cfcfcf';
         ctx.font = (sel ? '600 ' : '') + (info ? '22px ' : ui.kind === 'cheat' ? '26px ' : '30px ') + MONO;
         ctx.textAlign = 'left';
         let tx = px + 40;
         if (r.pic !== undefined) {   // item picture slot (shop)
           const sz = rowH - 12, sx = px + 74, sy = y + (rowH - 8 - sz) / 2;
           drawSlot(sx, sy, sz, r.item || (r.pic ? { name: r.left } : null));
-          ctx.fillStyle = sel ? '#fff' : '#cfcfcf'; ctx.font = (sel ? '600 ' : '') + '30px ' + MONO;
+          ctx.fillStyle = r.item && rarityOf(r.item.name) !== 'common' ? rarityColor(r.item.name) : sel ? '#fff' : '#cfcfcf'; ctx.font = (sel ? '600 ' : '') + '30px ' + MONO;   // name in its rarity colour
           ctx.textAlign = 'left'; ctx.textBaseline = 'middle';
           if (sel) ctx.fillText('>', px + 40, y + (rowH - 8) / 2);
           tx = sx + sz + 16;
@@ -1682,6 +1769,136 @@
       ctx.fillStyle = '#8a8a8a';
       ctx.font = '22px ' + MONO;
       ctx.fillText(hero ? 'H or Esc close' : ui.kind === 'gameover' ? 'Space start a new game' : inv ? 'A/D/W/S choose · Space equip/learn/unequip · I or Esc close' : ui.kind === 'loot' ? 'W/S choose · Space take · Esc close' : ui.kind === 'cheat' ? 'W/S choose · Space apply · P or Esc close' : ui.kind === 'scrap' ? 'W/S choose · Space buy / sell · Esc close' : ui.kind === 'rest' ? (restReadyAt > Date.now() ? (ui.back ? 'Esc back' : 'Esc close') : 'Space confirm · Esc close') : info ? (ui.back ? 'Esc back' : 'Esc close') : (ui.back ? 'W/S choose · Space select · Esc back' : 'W/S choose · Space select · Esc close'), px + 40, py + ph - 40);
+    }
+
+    // ---- maps ----------------------------------------------------------------------------
+    // Zone cells keep the zone's 21:13 shape. Undiscovered zones are fog (a drawn placeholder until fog art exists).
+    const MAP_BOUNDS = (() => { const c = Object.keys(ZONE_LIST).map(coordOf);
+      return { aMin: Math.min(...c.map(v => v[0])), aMax: Math.max(...c.map(v => v[0])), bMin: Math.min(...c.map(v => v[1])), bMax: Math.max(...c.map(v => v[1])) }; })();
+    const ZONE_COLORS = { city: '#8a93a6', slums: '#58617a', lake: '#2f8a45', factoryIn: '#6a5a4a', factory: '#57493c' };
+    const fogCache = new Map();
+    function fogTile(w, h) {   // soft grey clouds, same pattern every time for a given size
+      const key = `${w}x${h}`;
+      if (fogCache.has(key)) return fogCache.get(key);
+      const c = document.createElement('canvas'); c.width = w; c.height = h;
+      const g = c.getContext('2d');
+      g.fillStyle = '#0d0f15'; g.fillRect(0, 0, w, h);
+      let seed = 4242; const rnd = () => (seed = (seed * 16807) % 2147483647) / 2147483647;
+      for (let i = 0; i < 14; i++) {
+        const x = rnd() * w, y = rnd() * h, r = (0.25 + rnd() * 0.45) * Math.max(w, h);
+        const gr = g.createRadialGradient(x, y, 0, x, y, r);
+        gr.addColorStop(0, `rgba(120, 130, 150, ${0.06 + rnd() * 0.08})`); gr.addColorStop(1, 'rgba(120, 130, 150, 0)');
+        g.fillStyle = gr; g.fillRect(0, 0, w, h);
+      }
+      fogCache.set(key, c); return c;
+    }
+    // draws zones with map rows aTop..aBottom (top = higher a) and columns bLeft..bRight into the box at x, y
+    let fogPattern = null;
+    function drawMapGrid(x, y, cw, ch, aTop, aBottom, bLeft, bRight, big) {
+      const cellX = b => x + (b - bLeft) * cw, cellY = a => y + (aTop - a) * ch;
+      // whole-pixel cell edges, so neighbouring cells meet with no gap or line between them
+      const rectOf = (a, b) => { const x0 = Math.round(cellX(b)), y0 = Math.round(cellY(a)); return [x0, y0, Math.round(cellX(b + 1)) - x0, Math.round(cellY(a - 1)) - y0]; };
+      // fog: one continuous seamless texture, anchored to the world, so fogged zones blend into one cloud
+      if (!fogPattern && ready(ART.mapFog)) fogPattern = ctx.createPattern(ART.mapFog, 'repeat');
+      if (fogPattern) {
+        const tile = cw * 2.2, ox = cellX(MAP_BOUNDS.bMin), oy = cellY(MAP_BOUNDS.aMax);
+        fogPattern.setTransform(new DOMMatrix().translate(ox, oy).scale(tile / ART.mapFog.naturalWidth));
+      }
+      for (let a = aTop; a >= aBottom; a--) for (let b = bLeft; b <= bRight; b++) {
+        const id = `${a}:${b}`;
+        if (discovered.has(id)) continue;   // everything not yet discovered is fog, including map cells with no zone, so the layout stays hidden
+        const [rx, ry, rw, rh] = rectOf(a, b);
+        if (fogPattern) { ctx.fillStyle = fogPattern; ctx.fillRect(rx, ry, rw, rh); }
+        else ctx.drawImage(fogTile(rw, rh), rx, ry);
+      }
+      for (let a = aTop; a >= aBottom; a--) for (let b = bLeft; b <= bRight; b++) {
+        const id = `${a}:${b}`, type = ZONE_LIST[id], cx = cellX(b), cy = cellY(a);
+        if (!type) continue;   // no zone here
+        if (discovered.has(id)) {
+          const [rx, ry, rw, rh] = rectOf(a, b);
+          ctx.fillStyle = ZONE_COLORS[type]; ctx.fillRect(rx, ry, rw, rh);
+          if (big) {   // name + coordinates
+            ctx.fillStyle = '#e6e6e6'; ctx.font = `600 ${Math.round(ch * 0.17)}px ` + MONO; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+            const words = AREAS[id].name.split(' '), lines = words.length > 2 ? [words.slice(0, 2).join(' '), words.slice(2).join(' ')] : [words.join(' ')];
+            lines.forEach((l, i) => ctx.fillText(l, cx + cw / 2, cy + ch / 2 + (i - (lines.length - 1) / 2) * ch * 0.2 - ch * 0.08));
+            ctx.fillStyle = '#d0d0d0'; ctx.font = `${Math.round(ch * 0.14)}px ` + MONO;
+            ctx.fillText(id, cx + cw / 2, cy + ch * 0.8);
+          }
+        }
+      }
+      // discovered zones: faint white neon edge (5%); the current zone gets a yellow one (10%)
+      const neon = (a, b, color, alpha) => {
+        const [rx, ry, rw, rh] = rectOf(a, b);
+        ctx.save(); ctx.globalAlpha *= alpha; ctx.strokeStyle = color; ctx.lineWidth = big ? 3 : 2;
+        ctx.shadowColor = color; ctx.shadowBlur = big ? 14 : 8;
+        ctx.strokeRect(rx + 2, ry + 2, rw - 4, rh - 4); ctx.strokeRect(rx + 2, ry + 2, rw - 4, rh - 4);
+        ctx.restore();
+      };
+      // white edge only around the outside of the discovered area: a side shared with another discovered zone gets none
+      const path = new Path2D();
+      for (let a = aTop; a >= aBottom; a--) for (let b = bLeft; b <= bRight; b++) {
+        if (!discovered.has(`${a}:${b}`)) continue;
+        const [rx, ry, rw, rh] = rectOf(a, b), open = (da, db) => !discovered.has(`${a + da}:${b + db}`);
+        if (open(1, 0)) { path.moveTo(rx, ry + 2); path.lineTo(rx + rw, ry + 2); }            // top
+        if (open(-1, 0)) { path.moveTo(rx, ry + rh - 2); path.lineTo(rx + rw, ry + rh - 2); } // bottom
+        if (open(0, -1)) { path.moveTo(rx + 2, ry); path.lineTo(rx + 2, ry + rh); }            // left
+        if (open(0, 1)) { path.moveTo(rx + rw - 2, ry); path.lineTo(rx + rw - 2, ry + rh); }   // right
+      }
+      ctx.save(); ctx.globalAlpha *= 0.05; ctx.strokeStyle = '#ffffff'; ctx.lineWidth = big ? 3 : 2;
+      ctx.shadowColor = '#ffffff'; ctx.shadowBlur = big ? 14 : 8; ctx.stroke(path); ctx.stroke(path); ctx.restore();
+      // passages: cyan dots on the shared edge, once either side has been discovered
+      for (const [A, B, f] of PASSAGES) {
+        if (!discovered.has(A) && !discovered.has(B)) continue;
+        const [a1, b1] = coordOf(A), [a2, b2] = coordOf(B);
+        const inView = (a, b) => a <= aTop && a >= aBottom && b >= bLeft && b <= bRight;
+        if (!inView(a1, b1) && !inView(a2, b2)) continue;
+        let px, py;
+        if (a1 === a2) { px = cellX(Math.max(b1, b2)); py = cellY(a1) + f * ch; }
+        else { py = cellY(Math.max(a1, a2)) + ch; px = cellX(b1) + f * cw; }
+        if (px < x - 1 || px > x + (bRight - bLeft + 1) * cw + 1 || py < y - 1 || py > y + (aTop - aBottom + 1) * ch + 1) continue;
+        ctx.fillStyle = '#00e5ff'; ctx.beginPath(); ctx.arc(px, py, big ? 6 : 3, 0, Math.PI * 2); ctx.fill();
+      }
+      // where the hero is: yellow frame around the zone and a dot at his spot
+      const [ca, cb] = coordOf(areaName);
+      if (ca <= aTop && ca >= aBottom && cb >= bLeft && cb <= bRight) {
+        const cx = cellX(cb), cy = cellY(ca);
+        neon(ca, cb, '#ffdc00', 0.1);
+        const blink = 0.6 + 0.4 * Math.sin(performance.now() / 200);
+        ctx.fillStyle = `rgba(255, 220, 0, ${blink})`;
+        ctx.beginPath(); ctx.arc(cx + (player.x + 0.5) / COLS * cw, cy + (player.y + 0.5) / ROWS * ch, big ? 6 : 3.5, 0, Math.PI * 2); ctx.fill();
+      }
+    }
+    // minimap: always open in the top-right corner, 4 × 4 zones around the hero, 50% opacity
+    const MINI = { cols: 4, rows: 4, cw: 80, ch: 80 * 13 / 21 };
+    function drawMinimap() {
+      const [a, b] = coordOf(areaName);
+      const bLeft = Math.max(MAP_BOUNDS.bMin, Math.min(b - 1, MAP_BOUNDS.bMax - MINI.cols + 1));
+      const aTop = Math.min(MAP_BOUNDS.aMax, Math.max(a + 1, MAP_BOUNDS.aMin + MINI.rows - 1));
+      const w = MINI.cols * MINI.cw, h = MINI.rows * MINI.ch, x = canvas.width - w - 20, y = 20;
+      ctx.save(); ctx.globalAlpha = 0.3;
+      ctx.fillStyle = '#000'; ctx.fillRect(x - 6, y - 6, w + 12, h + 12);
+      ctx.strokeStyle = '#fff'; ctx.lineWidth = 2; ctx.strokeRect(x - 5, y - 5, w + 10, h + 10);
+      drawMapGrid(x, y, MINI.cw, MINI.ch, aTop, aTop - MINI.rows + 1, bLeft, bLeft + MINI.cols - 1, false);
+      ctx.fillStyle = '#fff'; ctx.font = '600 14px ' + MONO; ctx.textAlign = 'right'; ctx.textBaseline = 'top';
+      ctx.fillText('M map', x + w, y + h + 10);
+      ctx.restore();
+    }
+    // big map (M): the whole world in the middle of the screen, fully opaque
+    function drawBigMap() {
+      const cols = MAP_BOUNDS.bMax - MAP_BOUNDS.bMin + 1, rowsN = MAP_BOUNDS.aMax - MAP_BOUNDS.aMin + 1;
+      const cw = Math.min(145, (canvas.width - 200) / cols), ch = cw * 13 / 21;
+      const w = cols * cw, h = rowsN * ch, x = (canvas.width - w) / 2, y = (canvas.height - h) / 2 + 20;
+      ctx.fillStyle = 'rgba(0, 0, 0, 0.6)'; ctx.fillRect(0, 0, canvas.width, canvas.height);
+      ctx.fillStyle = '#000'; ctx.fillRect(x - 30, y - 90, w + 60, h + 150);
+      ctx.strokeStyle = '#fff'; ctx.lineWidth = 2; ctx.strokeRect(x - 29, y - 89, w + 58, h + 148);
+      ctx.fillStyle = '#fff'; ctx.font = '600 40px ' + MONO; ctx.textAlign = 'left'; ctx.textBaseline = 'middle';
+      ctx.fillText('Map', x, y - 50);
+      ctx.fillStyle = '#8a8a8a'; ctx.font = '22px ' + MONO; ctx.textAlign = 'right';
+      ctx.fillText(`${discovered.size}/${Object.keys(ZONE_LIST).length} zones discovered`, x + w, y - 50);
+      drawMapGrid(x, y, cw, ch, MAP_BOUNDS.aMax, MAP_BOUNDS.aMin, MAP_BOUNDS.bMin, MAP_BOUNDS.bMax, true);
+      ctx.strokeStyle = '#fff'; ctx.lineWidth = 2; ctx.strokeRect(Math.round(x) - 1, Math.round(y) - 1, Math.round(w) + 2, Math.round(h) + 2);   // frame around the map, like the window's
+      ctx.fillStyle = '#8a8a8a'; ctx.font = '22px ' + MONO; ctx.textAlign = 'left';
+      ctx.fillText('M or Esc close', x, y + h + 34);
     }
 
     function wrapText(text, maxW) {   // uses the current ctx.font
@@ -1712,6 +1929,12 @@
         const fs = Math.round(size * 0.14);   // text scales with the slot
         ctx.fillStyle = '#000'; ctx.font = `600 ${fs}px ` + MONO; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
         item.name.split(' ').forEach((w, j, arr) => ctx.fillText(w, x + size / 2, y + size / 2 + (j - (arr.length - 1) / 2) * fs * 1.2));
+      }
+      if (item && item.name !== 'money' && rarityOf(item.name) !== 'common') {   // rarity edge inside the slot
+        const i = size * 0.09;
+        ctx.save(); ctx.strokeStyle = rarityColor(item.name); ctx.globalAlpha = 0.85; ctx.lineWidth = Math.max(2, size * 0.035);
+        ctx.shadowColor = rarityColor(item.name); ctx.shadowBlur = 6;
+        ctx.strokeRect(x + i, y + i, size - 2 * i, size - 2 * i); ctx.restore();
       }
       if (item && (item.count || 1) > 1) {   // stack size, bottom-right
         const fs = Math.round(size * 0.2);
@@ -1761,10 +1984,11 @@
       if (pn.msg) { ctx.fillStyle = '#f5c542'; ctx.fillText(pn.msg, x + 24, ly); }
       else if (sel) {   // what the selected item is, and its total price
         const def = itemDef(sel.name) || {}, n = sel.count || 1;
-        ctx.fillStyle = '#fff';
-        ctx.fillText(`${sel.name} · ${sel.class || 'item'}${sel.class === 'resource' ? ` · ${n}/${def.stack}` : ''}`, x + 24, ly);
+        ctx.fillStyle = rarityColor(sel.name);   // name in its rarity colour
+        ctx.fillText(`${sel.name} · ${rarityOf(sel.name)} ${def.class || sel.class || 'item'}${def.stack > 1 ? ` · ${n}/${def.stack}` : ''}`, x + 24, ly);
         ctx.fillStyle = '#cfcfcf';
-        ctx.fillText(sel.class === 'skill' ? 'Space to learn' : sel.class === 'resource' ? 'crafting resource' : `${bonusText(def)} when equipped · Space equip`, x + 24, ly + 26);
+        ctx.fillText(def.class === 'skill' ? 'Space to learn' : def.class === 'resource' ? 'crafting resource' : def.class === 'upgrade' ? 'upgrade material (use comes later)'
+          : `${bonusText(def)} when equipped · Space equip`, x + 24, ly + 26);
         const unit = def.class === 'equipment' ? def.price : def.value;   // equipment: shop price; resources: value per piece
         ctx.fillStyle = '#f5c542';
         ctx.fillText(unit === undefined ? 'total price: —' : `total price: ${unit * n}$${n > 1 ? `  (${n} × ${unit}$)` : ''}`, x + 24, ly + 52);
@@ -1961,7 +2185,7 @@
     // keys are read by their physical position (e.code), so WASD, H, I, P and 1-3 work on any keyboard layout
     // (Cyrillic, AZERTY, Greek…). Arrow keys also move, and the number pad works for numbers.
     const CODE_KEYS = { KeyW: 'w', KeyA: 'a', KeyS: 's', KeyD: 'd', ArrowUp: 'w', ArrowLeft: 'a', ArrowDown: 's', ArrowRight: 'd',
-                        KeyH: 'h', KeyI: 'i', KeyP: 'p' };
+                        KeyH: 'h', KeyI: 'i', KeyP: 'p', KeyM: 'm' };
     const keyOf = e => CODE_KEYS[e.code] || (/^(Digit|Numpad)[0-9]$/.test(e.code) ? e.code.slice(-1) : e.key.toLowerCase());
     addEventListener('keydown', e => {
       if (naming() || e.metaKey || e.ctrlKey || e.altKey) return;
@@ -1969,6 +2193,7 @@
       if (e.code === 'Space') { e.preventDefault(); if (!e.repeat) spacePressed(); return; }
       if (k === 'p') { e.preventDefault(); if (!e.repeat && !locked()) { if (ui && ui.kind === 'cheat') closeWindow(); else openCheats(); } return; }   // CHEAT menu (testing) — remove before release
       if (k === 'i') { e.preventDefault(); if (!e.repeat && !ui) togglePanel('inventory'); return; }
+      if (k === 'm') { e.preventDefault(); if (!e.repeat && !locked()) { if (ui && ui.kind === 'map') closeWindow(); else if (!ui) openWindow('map'); } return; }
       if (k === 'h') { e.preventDefault(); if (!e.repeat && !ui) togglePanel('hero'); return; }
       if (e.key === 'Escape') { e.preventDefault(); if (!e.repeat) escPressed(); return; }
       if (ui && /^[1-9]$/.test(k)) { choose(+k - 1); return; }
@@ -1996,7 +2221,7 @@
       else if (hit) choose(hit.i);
     });
 
-    spawnZoneDrips();   // loaded straight into a zone with Drips
+    spawnAllDrips();   // start of the game: every enemy in the world is spawned
     requestAnimationFrame(frame);
   }
 
