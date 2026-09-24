@@ -6,8 +6,8 @@
 <title>Little Game</title>
 <style>
   :root { color-scheme: dark; --bg: #000; --grid: #fff; --player: #808080; --muted: #8a8a8a;
-          /* on-screen width of the grid; one tile is --w / 17 */
-          --w: min(100vw - 32px, 1360px, calc((100vh - 140px) * 17 / 11)); }
+          /* on-screen width of the grid; one tile is --w / 21 */
+          --w: min(100vw - 32px, 1680px, calc((100vh - 140px) * 21 / 13)); }
   html, body { height: 100%; }
   body {
     background: var(--bg); color: var(--grid); margin: 0;
@@ -18,7 +18,7 @@
   }
   /* stage and HUD share one width so the HUD lines up with the grid's edges */
   #stage, .hud { width: var(--w); }
-  #stage { aspect-ratio: 17 / 11; position: relative; }
+  #stage { aspect-ratio: 21 / 13; position: relative; }
   canvas { display: block; width: 100%; height: 100%; object-fit: contain; touch-action: none; }
   /* HUD: left (portrait + body stats) · middle (ability tiles) · right (charisma, money, deals) */
   .hud { display: grid; grid-template-columns: 1fr auto 1fr; gap: 16px 24px; align-items: center;
@@ -26,14 +26,14 @@
   .hud-left, .hud-right { display: flex; gap: 24px; align-items: center; }
   .hud-right { justify-self: end; }
   .abilities { display: flex; gap: 8px; }
-  .inv-btn { width: calc(var(--w) / 17); aspect-ratio: 1; margin-left: 24px; padding: 0; box-sizing: border-box;
+  .inv-btn { width: calc(var(--w) / 21); aspect-ratio: 1; margin-left: 24px; padding: 0; box-sizing: border-box;
              background: transparent; color: var(--grid); border: 2px solid var(--grid); font: 1.3em/1 ui-monospace, monospace; cursor: pointer; }
   .inv-btn { background: center / 62% no-repeat, center / 100% no-repeat; border: 0; }
   .inv-btn:hover { background-color: rgba(255, 255, 255, 0.08); }
   .inv-btn:focus-visible { outline: 2px solid #ffdc00; outline-offset: 2px; }
   .ability[data-key]:not([data-key=""])::after { content: attr(data-key); position: absolute; right: 8%; bottom: 4%; font-size: 1.4em; color: #fff; text-shadow: 0 0 3px #000, 0 0 3px #000; }
   .ability { position: relative;
-             width: calc(var(--w) / 17); aspect-ratio: 1; box-sizing: border-box; background: center / 100% no-repeat;
+             width: calc(var(--w) / 21); aspect-ratio: 1; box-sizing: border-box; background: center / 100% no-repeat;
              display: grid; place-items: center; padding: 8%; text-align: center; font-size: 0.42em; font-weight: 600; line-height: 1.05; color: #ff2bd6; }   /* learned skill's name until it has art */
   @media (max-width: 760px) {
     .hud { display: flex; flex-wrap: wrap; justify-content: space-between; font-size: 16px; gap: 8px 12px; }
@@ -60,7 +60,7 @@
   .naming-box button { font: 600 20px ui-monospace, "SF Mono", Menlo, Consolas, monospace; color: #000; background: var(--grid); border: 0; padding: 10px 16px; cursor: pointer; justify-self: start; }
   .naming-box button:focus-visible { outline: 2px solid #ffdc00; outline-offset: 2px; }
   .naming-box a { color: #00e5ff; }
-  .portrait { width: calc(var(--w) / 17); aspect-ratio: 1; background: #1B2233 center / cover no-repeat; flex: none; }   /* same size as a grid tile; placeholder for the hero's picture */
+  .portrait { width: calc(var(--w) / 21); aspect-ratio: 1; background: #1B2233 center / cover no-repeat; flex: none; }   /* same size as a grid tile; placeholder for the hero's picture */
   .hero-col { display: grid; gap: 2px; }
   .hero-name { font-size: 0.7em; font-weight: 600; color: var(--grid); line-height: 1.1; }
   .counter { color: var(--muted); white-space: nowrap; }
@@ -81,7 +81,7 @@
 </style>
 </head>
 <body>
-<div id="stage"><canvas id="c" width="1360" height="880" aria-label="Game grid, 17 by 11 tiles"></canvas>
+<div id="stage"><canvas id="c" width="1680" height="1040" aria-label="Game grid, 21 by 13 tiles"></canvas>
   <!-- account screen at the start: create an account (name, email, password) or log in. Accounts live in Supabase;
        a new account must be confirmed through the link Supabase emails before it can log in. -->
   <div class="naming" id="account" hidden>
@@ -143,7 +143,7 @@
 
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.117.1/dist/umd/supabase.js"></script>
 <script>
-  const COLS = 17, ROWS = 11, TILE = 80;
+  const COLS = 21, ROWS = 13, TILE = 80;   // every zone is 21 x 13 tiles
   // cheat menu (P) is locked behind a password; only its SHA-256 is kept here
   const CHEAT_HASH = '97c10efe01d5c9c88704a12d361d8429b3a6aa2412290a0773109d5d2d603d5e';
   // accounts + saves: Supabase (auth + a "saves" table, one row per player, protected by row-level security).
@@ -229,60 +229,109 @@
   // x, y = bottom-right tile of the footprint for even widths, bottom-centre for odd; w × h = footprint in tiles,
   // spreading left of x (and right for odd widths) and up from y. Art is centred on the whole footprint.
   // label: shown above it while the hero faces any of its tiles; opens: which window Space opens; art: picture key.
-  // ---- razor wire -----------------------------------------------------------
-  // Coils run along the city border and block the hero. Corner art has arms to the left and bottom;
-  // rot = clockwise quarter turns: 0 = left+bottom, 1 = top+left, 2 = right+top, 3 = bottom+right.
-  // Straight art runs left-right; rot 1 makes it run top-bottom. Tiles in on-screen coordinates (from 1).
+  // ---- world map ----------------------------------------------------------------
+  // Zones sit on a map grid; id "a:b" = map coordinates (a grows upward, b grows to the right).
+  // City is 0:0, the first slums 0:1 (right of the city). Neighbours: up a+1, down a-1, right b+1, left b-1.
+  const ZONE_TYPES = {
+    city:       { name: 'city' },
+    slums:      { name: 'slums' },
+    lake:       { name: 'toxic lake' },
+    factoryIn:  { name: 'abandoned factory entrance' },
+    factory:    { name: 'abandoned factory' },
+  };
+  const ZONE_LIST = {
+    '0:0': 'city',
+    '0:1': 'slums', '1:0': 'slums', '1:1': 'slums', '1:2': 'slums', '1:3': 'slums',
+    '2:1': 'slums', '2:3': 'slums', '2:4': 'slums', '3:3': 'slums',
+    '1:-1': 'factoryIn', '1:-2': 'factory',
+    '0:-1': 'lake', '0:-2': 'lake', '-1:-1': 'lake', '-1:-2': 'lake',
+  };
+  // passages between neighbouring zones: [zone, zone, where along the shared edge (0 = top/left end, 1 = bottom/right end)]
+  const PASSAGES = [
+    ['0:0', '0:1', 0.59], ['1:1', '0:1', 0.59], ['1:0', '1:1', 0.8], ['1:1', '1:2', 0.2], ['1:2', '1:3', 0.82],
+    ['2:1', '1:1', 0.2], ['2:3', '1:3', 0.84], ['2:3', '2:4', 0.2], ['3:3', '2:3', 0.14],
+    ['1:-1', '1:0', 0.17], ['1:-2', '1:-1', 0.49], ['1:-1', '0:-1', 0.12],
+    ['0:-2', '0:-1', 0.3], ['0:-2', '-1:-2', 0.1], ['0:-1', '-1:-1', 0.8], ['-1:-2', '-1:-1', 0.79],
+  ];
+  const coordOf = id => id.split(':').map(Number);
+  // a passage is 2 tiles wide on the shared edge; each side gets exit tiles (0-based) and a direction
+  function buildExits() {
+    const exits = {};
+    for (const id in ZONE_LIST) exits[id] = [];
+    for (const [A, B, f] of PASSAGES) {
+      const [a1, b1] = coordOf(A), [a2, b2] = coordOf(B);
+      let dirA;
+      if (a1 === a2 && b2 === b1 + 1) dirA = 'right'; else if (a1 === a2 && b2 === b1 - 1) dirA = 'left';
+      else if (b1 === b2 && a2 === a1 + 1) dirA = 'up'; else if (b1 === b2 && a2 === a1 - 1) dirA = 'down';
+      else throw new Error('not neighbours: ' + A + ' ' + B);
+      const OPP = { right: 'left', left: 'right', up: 'down', down: 'up' };
+      const side = (id, to, dir) => {
+        const vertical = dir === 'left' || dir === 'right';
+        const n = vertical ? ROWS : COLS, s = Math.max(1, Math.min(n - 3, Math.round(f * n - 1)));
+        const edge = { right: COLS - 1, left: 0, down: ROWS - 1, up: 0 }[dir];
+        const tiles = [s, s + 1].map(k => vertical ? [edge, k] : [k, edge]);
+        exits[id].push({ tiles, to, dir });
+      };
+      side(A, B, dirA); side(B, A, OPP[dirA]);
+    }
+    return exits;
+  }
+  const ZONE_EXITS = buildExits();
+  // where the hero arrives: one tile inside the new zone, lined up with where he left
+  const ARRIVE = { right: (x, y) => [1, y, 1, 0], left: (x, y) => [COLS - 2, y, -1, 0],
+                   up: (x, y) => [x, ROWS - 2, 0, -1], down: (x, y) => [x, 1, 0, 1] };
+
+  // ---- razor wire (city border) ------------------------------------------------------
+  // Corner art has arms to the left and bottom; rot = clockwise quarter turns: 0 = left+bottom, 1 = top+left,
+  // 2 = right+top, 3 = bottom+right. Straight art runs left-right; rot 1 makes it run top-bottom. Tiles counted from 1.
   function cityCoils() {
     const c = [], add = (x, y, kind, rot) => c.push({ x, y, kind, rot });
-    add(1, 1, 'corner', 3); add(17, 1, 'corner', 0); add(1, 11, 'corner', 2); add(17, 11, 'corner', 1);
-    add(17, 6, 'corner', 2);   // right edge, above the exit: comes from the top, bends out of the map
-    add(17, 9, 'corner', 3);   // right edge, below the exit: comes from the bottom, bends out of the map
-    for (let x = 2; x <= 16; x++) { add(x, 1, 'straight', 0); add(x, 11, 'straight', 0); }
-    for (let y = 2; y <= 10; y++) add(1, y, 'straight', 1);
-    for (const y of [2, 3, 4, 5, 10]) add(17, y, 'straight', 1);   // 17/7 and 17/8 stay open (exit)
+    const exitRows = ZONE_EXITS['0:0'].filter(e => e.dir === 'right').flatMap(e => e.tiles.map(t => t[1] + 1));
+    const lo = Math.min(...exitRows), hi = Math.max(...exitRows);
+    add(1, 1, 'corner', 3); add(COLS, 1, 'corner', 0); add(1, ROWS, 'corner', 2); add(COLS, ROWS, 'corner', 1);
+    add(COLS, lo - 1, 'corner', 2);   // right edge, above the exit: comes from the top, bends out of the map
+    add(COLS, hi + 1, 'corner', 3);   // right edge, below the exit: comes from the bottom, bends out of the map
+    for (let x = 2; x <= COLS - 1; x++) { add(x, 1, 'straight', 0); add(x, ROWS, 'straight', 0); }
+    for (let y = 2; y <= ROWS - 1; y++) add(1, y, 'straight', 1);
+    for (let y = 2; y <= ROWS - 1; y++) if (y < lo - 1 || y > hi + 1) add(COLS, y, 'straight', 1);
     return c;
   }
 
-  // ---- areas ----------------------------------------------------------------
-  // exits: stepping onto any of these tiles (column, row — counted from 1) takes the hero to another area,
-  // arriving on the given column in the same row, facing `face`.
-  const AREAS = {
-    city: {
-      walls: [
-        { x: 2, y: 7, w: 2, h: 2, color: '#2e9e44', label: 'ATB-Market', opens: 'shop', art: 'shop', artW: 2.5 },
-        // CaaCaanTeng noodle bar (closed, decorative): columns 6–8, rows 5–6. Solid, nothing to open.
-        // Overlaps TradeCorp on 8/6; TradeCorp is drawn in front of it.
-        { x: 7, y: 6, w: 3, h: 2, color: '#8a3a7a', label: 'CaaCaanTeng', art: 'noodleBar', artW: 3.2 },
-        // hover-car charging station (decorative): columns 12–13, rows 5–6. Solid, no name, nothing to open.
-        { x: 13, y: 6, w: 2, h: 2, color: '#3a4257', art: 'charging', artW: 2.3 },
-        // front: true draws the picture in front of other buildings (not of the hero)
-        { x: 9, y: 7, w: 2, h: 2, color: '#2f6fdb', label: 'TradeCorp', opens: 'work', art: 'work', artW: 2.5, front: true },
-        // HomeDome apartments: columns 3–4, rows 3–6, front faces down (door toward row 7). Solid, no function yet.
-        { x: 4, y: 6, w: 2, h: 4, color: '#f2f2f2', label: 'HomeDome', opens: 'rest', art: 'homedome', artW: 2.2 },
-      ],
-      decals: true,
-      exits: [{ tiles: [[17, 7], [17, 8]], to: 'slums', arriveX: 2, face: 1 }],
-      coils: cityCoils(),
-      tar: { side: 'right', row: 7.5 },   // tar puddle at the exit: map edge, centred between rows 7 and 8
-    },
-    slums: {
-      walls: [
-        // Scrap Dealer: columns 13–16, rows 5–6 (right side of the slums). Space opens it.
-        { x: 14, y: 6, w: 4, h: 2, color: '#6b4a2e', label: 'Scrap Dealer', opens: 'scrap', art: 'scrapDealer', artW: 4.5 },
-      ],
-      // floor details: more trash, leaves and stains, denser than the city, own layout
-      decals: { chance: 1 / 3.5, seed: 7331, weights: { litter: 5, leaves: 5, 'oil stain': 3, crack: 2, 'crack web': 2,
-                'puddle cyan': 1, 'puddle pink': 1, graffiti: 1, manhole: 0.5 } },
-      exits: [{ tiles: [[1, 7], [1, 8]], to: 'city', arriveX: 16, face: -1 }],
-      tar: { side: 'left', row: 7.5 },
-    },
-  };
-  let areaName = 'city';
-  let WALLS = AREAS.city.walls;
+  // ---- zones ----------------------------------------------------------------------------
+  // walls: solid things, in on-screen coordinates (column, row — counted from 1). x, y = bottom-right tile of the
+  // footprint for even widths, bottom-centre for odd; w × h = footprint in tiles. label: shown while faced;
+  // opens: which window Space opens; art: picture key. drips: how many Drips live there.
+  const SLUMS_DECALS = { chance: 1 / 3.5, weights: { litter: 5, leaves: 5, 'oil stain': 3, crack: 2, 'crack web': 2,
+                         'puddle cyan': 1, 'puddle pink': 1, graffiti: 1, manhole: 0.5 } };
+  const AREAS = {};
+  for (const id in ZONE_LIST) {
+    const type = ZONE_LIST[id], [a, b] = coordOf(id), seed = 7331 + (a + 5) * 97 + (b + 5) * 13;
+    AREAS[id] = { id, type, name: ZONE_TYPES[type].name, walls: [], exits: ZONE_EXITS[id],
+                  decals: type === 'slums' ? { ...SLUMS_DECALS, seed } : { seed },
+                  drips: type === 'slums' ? (Math.max(Math.abs(a), Math.abs(b)) >= 3 ? 2 : 1) : 0 };
+  }
+  AREAS['0:0'].walls = [
+    { x: 2, y: 7, w: 2, h: 2, color: '#2e9e44', label: 'ATB-Market', opens: 'shop', art: 'shop', artW: 2.5 },
+    // CaaCaanTeng noodle bar (closed, decorative). Overlaps TradeCorp on 8/6; TradeCorp is drawn in front of it.
+    { x: 7, y: 6, w: 3, h: 2, color: '#8a3a7a', label: 'CaaCaanTeng', art: 'noodleBar', artW: 3.2 },
+    // hover-car charging station (decorative)
+    { x: 13, y: 6, w: 2, h: 2, color: '#3a4257', art: 'charging', artW: 2.3 },
+    // front: true draws the picture in front of other buildings (not of the hero)
+    { x: 9, y: 7, w: 2, h: 2, color: '#2f6fdb', label: 'TradeCorp', opens: 'work', art: 'work', artW: 2.5, front: true },
+    { x: 4, y: 6, w: 2, h: 4, color: '#f2f2f2', label: 'HomeDome', opens: 'rest', art: 'homedome', artW: 2.2 },
+  ];
+  AREAS['0:0'].decals = true;   // city: the default detail mix
+  AREAS['0:0'].coils = cityCoils();
+  AREAS['0:1'].walls = [
+    { x: 14, y: 6, w: 4, h: 2, color: '#6b4a2e', label: 'Scrap Dealer', opens: 'scrap', art: 'scrapDealer', artW: 4.5 },
+  ];
+  const AREA_ALIAS = { city: '0:0', slums: '0:1' };   // area names used by older saves
+  const areaLabel = id => `${AREAS[id].name} ${id}`;
+  let areaName = '0:0';   // current zone id
+  let WALLS = AREAS['0:0'].walls;
   // coils under a building are skipped (the building covers that tile)
   const coilAt = (x, y) => (AREAS[areaName].coils || []).find(c => c.x - 1 === x && c.y - 1 === y && !wallAt(x, y));
-  const exitAt = (x, y) => AREAS[areaName].exits.find(e => e.tiles.some(([tx, ty]) => tx - 1 === x && ty - 1 === y));
+  const exitAt = (x, y) => AREAS[areaName].exits.find(e => e.tiles.some(([tx, ty]) => tx === x && ty === y));
   // footprint in 0-based tiles
   const foot = w => { const ww = w.w || 1, hh = w.h || 1, x0 = w.x - 1 - Math.floor(ww / 2) + (ww % 2 ? 0 : 1);
     return { x0, x1: x0 + ww - 1, y0: w.y - hh, y1: w.y - 1 }; };
@@ -295,7 +344,7 @@
   const START = { x: 8, y: 7 };   // 0-based: column 9, row 8 (just below TradeCorp)
 
   // ---- enemies ----------------------------------------------------------------
-  // Drip: half human, half oil slime. Lives in the middle of the slums (column 9, row 6).
+  // Drip: half human, half oil slime. Every slums zone has 1 (2 where a map coordinate is 3 or more).
   // When the hero comes within `aggro` tiles (diagonals count as 1) he chases at 1 tile per second
   // and keeps chasing until the hero leaves the slums. Next to the hero (diagonals too) he attacks once per second.
   // Each attack has a 33% chance to also cast Tart (costs 3 mana): the hero can't move for 2 s.
@@ -305,7 +354,7 @@
   const DRIP = { name: 'Drip', hp: 10, atk: [1, 2], mana: 3, manaRegenMs: 5000, aggro: 4, stepMs: 1000, attackMs: 1000,
                  windupMs: 400, tart: { chance: 1 / 3, cost: 3, rootMs: 2000 }, respawnMs: 60000,
                  loot: { money: [4, 8], tar: [0, 1], magicTarChance: 0.01 },   // rolled when he dies, taken with Space
-                 spawn: { x: 9, y: 6 } };   // spawn in on-screen coordinates (from 1)
+                 spawns: [[{ x: 11, y: 7 }], [{ x: 8, y: 5 }, { x: 14, y: 9 }]] };   // spawn tiles (from 1) for 1 and for 2 Drips
   const HERO_ATTACK_MS = 1000;   // hero: Space while facing an enemy hits for `strength`, at most once per second
   // sprite calibration (px in each image): body = hood top to puddle bottom, ax = puddle centre in a cell
   const DRIP_ART = { idle: { frames: 1, body: 288, ax: 164.5 }, attack: { frames: 4, body: 198, ax: 241 }, hurt: { frames: 2, body: 334, ax: 203.5 } };
@@ -372,7 +421,8 @@
   const ICON = { health: '♥', strength: '⚔\uFE0E', mana: '◆', charisma: '✦', money: '$', energy: '⚡\uFE0E' };
 
   function start(saved) {
-    if (saved.areaName && AREAS[saved.areaName]) { areaName = saved.areaName; WALLS = AREAS[areaName].walls; }
+    const savedArea = AREA_ALIAS[saved.areaName] || saved.areaName;
+    if (savedArea && AREAS[savedArea]) { areaName = savedArea; WALLS = AREAS[areaName].walls; }
     const player = { x: saved.x ?? START.x, y: saved.y ?? START.y };
     if (!free(player.x, player.y)) { player.x = START.x; player.y = START.y; }   // e.g. a building moved onto him
     // facing direction: right by default, then whichever movement button was pressed last
@@ -410,7 +460,7 @@
       document.getElementById('portrait').title = heroName || DEFAULT_NAME;
       document.getElementById('hud-name').textContent = heroName || DEFAULT_NAME;
       document.getElementById('stat-deals').textContent = dealsDone;
-      document.getElementById('area-name').textContent = areaName;
+      document.getElementById('area-name').textContent = areaLabel(areaName);
       document.getElementById('stat-health').textContent = stats.health;
       document.getElementById('stat-energy').textContent = stats.energy;
       document.getElementById('stat-strength').textContent = stats.strength;
@@ -542,7 +592,7 @@
     }
     function newGame() {
       Object.assign(stats, START_STATS); dealsDone = 0; Object.assign(prices, startPrices()); deals = newDeals(stats.charisma);
-      enterArea('city', START.x, START.y, 1, true);
+      enterArea('0:0', START.x, START.y, 1, true);
       inventory.length = 0; equipped.length = 0; skills.length = 0; restReadyAt = 0; Object.assign(levels, startLevels());
       rootedUntil = 0; floaters.length = 0; Object.assign(CAPS, BASE_CAPS);
       ui = null; closePanels();
@@ -564,7 +614,7 @@
       equipped.length = 0; equipped.push(...(s.equipped || []));
       skills.length = 0; skills.push(...(s.skills || []));
       restReadyAt = s.restReadyAt || 0; rootedUntil = 0; floaters.length = 0; closePanels();
-      const area = AREAS[s.areaName] ? s.areaName : 'city';
+      const sa = AREA_ALIAS[s.areaName] || s.areaName, area = AREAS[sa] ? sa : '0:0';
       enterArea(area, s.x ?? START.x, s.y ?? START.y, s.fx || 1, true);
       facing.x = s.fx ?? 1; facing.y = s.fy ?? 0;
       if (!free(player.x, player.y)) { player.x = START.x; player.y = START.y; fromX = player.x; fromY = player.y; }
@@ -575,7 +625,7 @@
     // guests can't save; a guest run is parked here when they go to create an account, and picked up after the first login
     const GUEST_RUN = 'littlegame.guestRun';
     const when = t => { const d = new Date(t); return `${d.getDate()} ${d.toLocaleString('en', { month: 'short' })} ${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`; };
-    const summarize = s => `${s.stats?.money ?? 0}$ · ${s.areaName || 'city'}`;
+    const summarize = s => { const id = AREA_ALIAS[s.areaName] || s.areaName; return `${s.stats?.money ?? 0}$ · ${AREAS[id] ? areaLabel(id) : 'city'}`; };
     async function listSlots() {   // -> { slots } or { error }
       const slots = {};
       if (!account || !sb) return { slots };   // guest: nothing saved
@@ -655,15 +705,23 @@
         row('tar', '+10 into inventory', () => give('tar', 10)),
         row('banana sword', 'into inventory', () => { if (inventory.length >= INVENTORY_SLOTS) return 'Inventory full.'; inventory.push({ name: 'banana sword', kind: 'sword', class: 'equipment' }); return 'Added banana sword.'; }),
         row('rest cooldown', 'reset', () => { restReadyAt = 0; return 'HomeDome can be used again.'; }),
-        row('Drip', areaName !== 'slums' ? 'only in the slums' : drip && !drip.dead ? 'defeat (loot drops)' : 'respawn', () => {
-          if (areaName !== 'slums' || !drip) return 'Drip lives in the slums.';
-          if (drip.dead) { spawnDrip(); return 'Drip is back.'; }
-          damageDrip(drip.hp, 'cheat', '#8a8a8a'); return 'Drip defeated. His loot is on the puddle.';
+        row('Drip', !drips.length ? 'none in this zone' : drips.some(d => !d.dead) ? 'defeat nearest (loot drops)' : 'respawn', () => {
+          if (!drips.length) return 'No Drips live in this zone.';
+          const alive = drips.filter(d => !d.dead).sort((a, b) => cheb(a.x, a.y, player.x, player.y) - cheb(b.x, b.y, player.x, player.y));
+          if (!alive.length) { drips = drips.map(d => makeDrip(d.spawn)); return 'The Drips are back.'; }
+          drip = alive[0]; damageDrip(drip.hp, 'cheat', '#8a8a8a'); return 'Drip defeated. His loot is on the puddle.';
         }),
-        row('go to', areaName === 'city' ? 'slums' : 'city', () => {
-          const to = areaName === 'city' ? 'slums' : 'city';
-          ui = null; enterArea(to, to === 'city' ? START.x : 1, to === 'city' ? START.y : 7, 1);
-        }),
+        (() => {   // teleport through the zones in map order
+          const ids = Object.keys(ZONE_LIST), next = ids[(ids.indexOf(areaName) + 1) % ids.length];
+          return row('go to', areaLabel(next), () => {
+            ui = null;
+            let x = Math.floor(COLS / 2), y = Math.floor(ROWS / 2);
+            WALLS = AREAS[next].walls;
+            if (next === '0:0') { x = START.x; y = START.y; }
+            else for (let r = 0; r < 6 && !free(x, y); r++) x++;
+            enterArea(next, x, y, 1);
+          });
+        })(),
       ];
     }
     const TITLES = { shop: 'ATB-Market', work: 'TradeCorp', menu: 'Menu', controls: 'Controls', hero: 'Hero', inventory: 'Inventory', gameover: 'Game over', loot: 'Loot · Drip', rest: 'HomeDome', cheat: 'Cheats (testing)', scrap: 'Scrap Dealer',
@@ -675,7 +733,7 @@
       logout: 'Log out? Sure. Leave your hero alone in a neon city crawling with gangs, killer drones, and things lurking in dark alleys. Without you, they’ll be robbed, hunted, and probably found face-down in a puddle under a flickering noodle sign. But hey, I’m sure you have VERY important things to do.',
     };
     const CONTROLS = [
-      ['W A S D', 'move'],
+      ['W A S D / arrows', 'move (any keyboard layout)'],
       ['two keys, e.g. W+D', 'move diagonally'],
       ['Space', 'open / select'],
       ['Space (facing an enemy)', 'attack'],
@@ -779,7 +837,7 @@
       if (focus === 'hero' && panels.hero) { unequipSelected(panels.hero); return; }
       if (moving) return;
       if (dripAt(player.x + facing.x, player.y + facing.y)) { heroAttack(); return; }
-      if (lootable()) { openWindow('loot'); return; }
+      if (lootable()) { lootTarget = lootable(); openWindow('loot'); return; }
       const w = wallAt(player.x + facing.x, player.y + facing.y);
       if (w && w.opens) openWindow(w.opens);
     }
@@ -793,7 +851,9 @@
 
     // ---- combat -----------------------------------------------------------------
     let gameTime = 0, lastFrame = performance.now();   // game clock: stops while a window is open
-    let drip = null;   // the slums enemy, or null in other areas
+    let drips = [];    // the Drips in this zone (alive or lying as puddles)
+    let drip = null;   // the Drip currently being updated / drawn / hit (the enemy code works on this one)
+    let lootTarget = null;   // the beaten Drip whose loot window is open
     let rootedUntil = 0;   // "root" state: hero can't move until this game time (Drip's Tart applies it)
     // ---- hero states ----------------------------------------------------------------
     // root: can't move, for a set time. injured: health at or below 10% of max health → walks 40% slower.
@@ -832,28 +892,40 @@
     const hasSword = () => equipped.some(it => it.kind === 'sword');
     const floaters = [];   // rising combat text: { text, color, x, y, t } (x, y in tiles)
     const float = (text, color, x, y) => floaters.push({ text, color, x, y, t: gameTime });
-    const dripAt = (x, y) => drip && !drip.dead && drip.x === x && drip.y === y;
+    const dripAt = (x, y) => drips.find(d => !d.dead && d.x === x && d.y === y) || null;
     const heroFree = (x, y) => free(x, y) && !dripAt(x, y);
     const cheb = (ax, ay, bx, by) => Math.max(Math.abs(ax - bx), Math.abs(ay - by));
 
-    function spawnDrip() {
-      let sx = DRIP.spawn.x - 1, sy = DRIP.spawn.y - 1;
-      if (!free(sx, sy) || (sx === player.x && sy === player.y)) {   // nearest free tile that isn't the hero's
+    function spawnZoneDrips() {
+      drips = []; drip = null;
+      const n = AREAS[areaName].drips || 0;
+      for (let i = 0; i < n; i++) drips.push(makeDrip(DRIP.spawns[n - 1][i]));
+    }
+    const takenByDrip = (x, y, self) => drips.some(o => o !== self && !o.dead && o.x === x && o.y === y);
+    function makeDrip(spawn) {
+      let sx = spawn.x - 1, sy = spawn.y - 1;
+      if (!free(sx, sy) || takenByDrip(sx, sy) || (sx === player.x && sy === player.y)) {   // nearest free tile that isn't the hero's
         let best = null;
         for (let y = 0; y < ROWS; y++) for (let x = 0; x < COLS; x++) {
-          if (!free(x, y) || exitAt(x, y) || (x === player.x && y === player.y)) continue;
+          if (!free(x, y) || exitAt(x, y) || takenByDrip(x, y) || (x === player.x && y === player.y)) continue;
           const d = Math.hypot(x - sx, y - sy); if (!best || d < best.d) best = { x, y, d };
         }
         if (best) { sx = best.x; sy = best.y; }
       }
-      drip = { x: sx, y: sy, fromX: sx, fromY: sy, stepStart: -1e9, hp: DRIP.hp, mana: DRIP.mana, manaT: gameTime,
+      return { x: sx, y: sy, fromX: sx, fromY: sy, stepStart: -1e9, hp: DRIP.hp, mana: DRIP.mana, manaT: gameTime, spawn,
                aggro: false, nextAttack: 0, attackStart: -1e9, hitAt: 0, hurtStart: -1e9, dead: false, deadAt: 0, lookX: -1 };
     }
 
+    function updateDrips() {
+      drips.forEach((d, i) => {
+        if (d.dead && gameTime - d.deadAt >= DRIP.respawnMs) { if (lootTarget === d) lootTarget = null; drips[i] = makeDrip(d.spawn); return; }
+        drip = drips[i]; updateDrip();
+      });
+    }
     function updateDrip() {
       if (!drip) return;
       const t = gameTime;
-      if (drip.dead) { if (t - drip.deadAt >= DRIP.respawnMs) spawnDrip(); return; }
+      if (drip.dead) return;
       while (drip.dot && t >= drip.dot.next) {   // magic tar damage over time
         const sp = drip.dot.spell;
         spellHit(rand(sp.dot[0], sp.dot[1]));
@@ -878,7 +950,7 @@
       let best = null;
       for (let dy = -1; dy <= 1; dy++) for (let dx = -1; dx <= 1; dx++) {
         const nx = drip.x + dx, ny = drip.y + dy;
-        if ((!dx && !dy) || !free(nx, ny) || exitAt(nx, ny) || (nx === player.x && ny === player.y)) continue;
+        if ((!dx && !dy) || !free(nx, ny) || exitAt(nx, ny) || takenByDrip(nx, ny, drip) || (nx === player.x && ny === player.y)) continue;
         if (dx && dy && (!free(drip.x + dx, drip.y) || !free(drip.x, drip.y + dy))) continue;
         const score = cheb(nx, ny, player.x, player.y) * 100 + Math.hypot(nx - player.x, ny - player.y);
         if (!best || score < best.score) best = { nx, ny, score };
@@ -909,7 +981,8 @@
       heroAttackStart = gameTime;   // attack animation in the facing direction (diagonals use the side view)
       heroAttackDir = facing.x ? 'side' : facing.y > 0 ? 'down' : 'up';
       if (facing.x) lookX = facing.x;
-      damageDrip(stats.strength, `-${stats.strength}`, '#fff');
+      drip = dripAt(player.x + facing.x, player.y + facing.y);
+      if (drip) damageDrip(stats.strength, `-${stats.strength}`, '#fff');
     }
 
     function damageDrip(dmg, text, color) {
@@ -946,7 +1019,9 @@
       stats.mana -= sp.mana; renderStats();
       // aim at the closest living enemy in this area; with none, shoot where the hero faces
       let dx = facing.x, dy = facing.y;
-      if (drip && !drip.dead) { const d = dripPos(); dx = d.x + 0.5 - hx; dy = d.y + 0.5 - hy; }
+      const near = drips.filter(d => !d.dead).map(d => { drip = d; const q = dripPos(); return { q, dist: Math.hypot(q.x + 0.5 - hx, q.y + 0.5 - hy) }; })
+        .sort((a, b) => a.dist - b.dist)[0];
+      if (near) { dx = near.q.x + 0.5 - hx; dy = near.q.y + 0.5 - hy; }
       if (!dx && !dy) dx = lookX;
       const len = Math.hypot(dx, dy);
       projectiles.push({ x: hx, y: hy, dx: dx / len, dy: dy / len, flown: 0, spell: sp, t: gameTime });
@@ -958,7 +1033,9 @@
         const pr = projectiles[i], step = Math.min(pr.spell.speed * dt / 1000, pr.spell.range - pr.flown);
         pr.x += pr.dx * step; pr.y += pr.dy * step; pr.flown += step;
         let gone = false;
-        if (drip && !drip.dead) {   // hit check first, so a target right at the end of the range still counts
+        for (const e of drips) {   // hit check first, so a target right at the end of the range still counts
+          if (gone || e.dead) continue;
+          drip = e;
           const d = dripPos();
           if (Math.hypot(d.x + 0.5 - pr.x, d.y + 0.5 - pr.y) < 0.55) {   // hit: root + damage over time (refreshes if already on)
             drip.stunUntil = gameTime + pr.spell.rootMs;
@@ -979,8 +1056,8 @@
     }
 
     // beaten Drip with loot on the tile the hero faces (or stands on)
-    const lootable = () => drip && drip.dead && drip.loot &&
-      ((drip.x === player.x + facing.x && drip.y === player.y + facing.y) || (drip.x === player.x && drip.y === player.y));
+    const lootable = () => drips.find(d => d.dead && d.loot &&
+      ((d.x === player.x + facing.x && d.y === player.y + facing.y) || (d.x === player.x && d.y === player.y))) || null;
 
     // put n of an item into the inventory: fills existing stacks first, then empty slots. Returns what didn't fit.
     function addItem(name, n) {
@@ -998,10 +1075,11 @@
 
     // loot window: one row per thing on the puddle; Space takes the highlighted one. Closes when the puddle is empty.
     function lootRows() {
-      if (!drip || !drip.loot) return [];
-      const L = drip.loot, list = [];
+      const src = lootTarget;
+      if (!src || !src.loot) return [];
+      const L = src.loot, list = [];
       const taken = () => {   // after taking something: close when empty, keep the highlight in range
-        if (!L.money && !L.items.length) { drip.loot = null; ui = null; return; }
+        if (!L.money && !L.items.length) { src.loot = null; ui = null; return; }
         ui.cursor = Math.min(ui.cursor, (L.money ? 1 : 0) + L.items.length - 1);
       };
       if (L.money) list.push({ left: 'money', item: { name: 'money' }, pic: 'money', right: `${L.money}$`, act() {
@@ -1020,7 +1098,7 @@
 
     function gameOver() {
       closePanels();
-      ui = { kind: 'gameover', cursor: 0, msg: `${heroName || DEFAULT_NAME} fell in the ${areaName}. Deals made: ${dealsDone}.` };
+      ui = { kind: 'gameover', cursor: 0, msg: `${heroName || DEFAULT_NAME} fell in the ${areaLabel(areaName)}. Deals made: ${dealsDone}.` };
       held.clear(); tapped.clear();
     }
 
@@ -1098,7 +1176,7 @@
       const dt = !anyOpen() && !naming() ? Math.min(100, now - lastFrame) : 0;
       gameTime += dt;   // game clock pauses behind windows
       lastFrame = now;
-      if (dt) { updateDrip(); updateProjectiles(dt); updateHeroMana(); }
+      if (dt) { updateDrips(); updateProjectiles(dt); updateHeroMana(); }
       // keys still held when Tart wears off (or a blocking enemy moves): start walking again
       if (!moving && !comboTimer && held.size && !anyOpen()) tryStep(now);
       let rx = player.x, ry = player.y;
@@ -1107,7 +1185,7 @@
         if (t >= 1) {
           moving = false;
           const ex = exitAt(player.x, player.y);
-          if (ex) enterArea(ex.to, ex.arriveX - 1, player.y, ex.face);
+          if (ex) { const [nx, ny, fx, fy] = ARRIVE[ex.dir](player.x, player.y); enterArea(ex.to, nx, ny, fx, false, fy); }
           // keep going without a pause if keys are still held, so speed stays constant
           const landed = moveStart + stepMs;
           if ((held.size || tapped.size) && tryStep(now - landed < stepMs ? landed : now)) {
@@ -1126,13 +1204,13 @@
     // It has no joints, so the grid is invisible; decals (cracks, manholes…) will snap to tiles on top of it.
     let groundLayer = null;   // rebuilt when the area changes
     let areaFade = 0, areaBanner = 0;   // timestamps for the transition fade and the area name banner
-    function enterArea(name, x, y, face, instant) {
+    function enterArea(name, x, y, face, instant, faceY = 0) {
       areaName = name; WALLS = AREAS[name].walls;
       player.x = x; player.y = y; fromX = x; fromY = y;
-      facing.x = face; facing.y = 0; lookX = face; moving = false;
+      facing.x = face; facing.y = faceY; if (face) lookX = face; moving = false;
       groundLayer = null;
-      drip = null; rootedUntil = 0; projectiles.length = 0;
-      if (name === 'slums') spawnDrip();   // Drip is back at full health every time the slums are entered
+      rootedUntil = 0; projectiles.length = 0;
+      spawnZoneDrips();   // the zone's Drips are back at full health every time it's entered
       if (!instant) { areaFade = performance.now(); areaBanner = areaFade; setTimeout(() => autosave(), 0); }
       renderStats();
     }
@@ -1152,14 +1230,21 @@
 
     // tar puddle: its straight edge sits on the map edge, flowing in from outside; flat, walkable
     const TAR_H = 2.8;   // height in tiles (covers both exit rows with some spill above and below)
+    // one puddle per passage, its straight edge on the map edge (the art's straight edge is on its right side)
     function drawTar(gx) {
-      const t = AREAS[areaName].tar, im = ART.tar;
-      if (!t || !ready(im)) return;
-      const h = TAR_H * TILE, w = h * im.naturalWidth / im.naturalHeight, cy = (t.row - 0.5) * TILE;
-      gx.save();
-      if (t.side === 'right') gx.drawImage(im, canvas.width - w, cy - h / 2, w, h);
-      else { gx.translate(w, 0); gx.scale(-1, 1); gx.drawImage(im, 0, cy - h / 2, w, h); }
-      gx.restore();
+      const im = ART.tar;
+      if (!ready(im)) return;
+      const h = TAR_H * TILE, w = h * im.naturalWidth / im.naturalHeight;
+      for (const e of AREAS[areaName].exits) {
+        const mx = (e.tiles[0][0] + e.tiles[1][0] + 1) / 2 * TILE, my = (e.tiles[0][1] + e.tiles[1][1] + 1) / 2 * TILE;
+        gx.save();
+        if (e.dir === 'right') { gx.translate(canvas.width, my); }
+        else if (e.dir === 'left') { gx.translate(0, my); gx.scale(-1, 1); }
+        else if (e.dir === 'up') { gx.translate(mx, 0); gx.rotate(-Math.PI / 2); }
+        else { gx.translate(mx, canvas.height); gx.rotate(Math.PI / 2); }
+        gx.drawImage(im, -w, -h / 2, w, h);
+        gx.restore();
+      }
     }
 
     // razor wire is flat on the ground layer (drawn once, under the hero)
@@ -1210,7 +1295,7 @@
       const pick = () => { let r = rnd() * total; for (let i = 0; i < DECALS.length; i++) { r -= weight(DECALS[i]); if (r <= 0 && weight(DECALS[i]) > 0) return i; } return 0; };
       const placed = {};   // "x,y" -> decal index
       for (let y = 0; y < ROWS; y++) for (let x = 0; x < COLS; x++) {
-        if (rnd() >= chance || wallAt(x, y) || coilAt(x, y) || exitAt(x, y) || (areaName === 'city' && x === START.x && y === START.y)) continue;
+        if (rnd() >= chance || wallAt(x, y) || coilAt(x, y) || exitAt(x, y) || (areaName === '0:0' && x === START.x && y === START.y)) continue;
         let i = pick(), tries = 0;
         const nearSame = k => { for (let dy = -1; dy <= 1; dy++) for (let dx = -1; dx <= 1; dx++) if (placed[(x + dx) + ',' + (y + dy)] === k) return true; return false; };
         while (nearSame(i) && tries++ < 8) i = pick();
@@ -1234,7 +1319,7 @@
       ctx.fillRect(0, 0, canvas.width, canvas.height);
       const wantDecals = AREAS[areaName].decals && ready(ART.decals);
       const wantWire = !!AREAS[areaName].coils && ready(ART.wireStraight) && ready(ART.wireCorner);
-      const wantTar = !!AREAS[areaName].tar && ready(ART.tar);
+      const wantTar = AREAS[areaName].exits.length > 0 && ready(ART.tar);
       if (!groundLayer || (wantDecals && !groundLayer.hasDecals) || (wantWire && !groundLayer.hasWire) || (wantTar && !groundLayer.hasTar)) {
         groundLayer = buildGround();
         if (groundLayer) { groundLayer.hasDecals = wantDecals; groundLayer.hasWire = wantWire; groundLayer.hasTar = wantTar; }
@@ -1262,13 +1347,14 @@
 
       // exits: soft glow fading toward the map edge, with a chevron pointing out
       for (const e of AREAS[areaName].exits) for (const [tx, ty] of e.tiles) {
-        const x0 = (tx - 1) * TILE, y0 = (ty - 1) * TILE, out = tx === 1 ? -1 : 1;
-        const gr = ctx.createLinearGradient(out > 0 ? x0 : x0 + TILE, 0, out > 0 ? x0 + TILE : x0, 0);
+        const x0 = tx * TILE, y0 = ty * TILE, cx = x0 + TILE / 2, cy = y0 + TILE / 2;
+        const [ox, oy] = { right: [1, 0], left: [-1, 0], up: [0, -1], down: [0, 1] }[e.dir];
+        const gr = ctx.createLinearGradient(cx - ox * TILE / 2, cy - oy * TILE / 2, cx + ox * TILE / 2, cy + oy * TILE / 2);
         gr.addColorStop(0, 'rgba(0, 229, 255, 0)'); gr.addColorStop(1, 'rgba(0, 229, 255, 0.08)');
         ctx.fillStyle = gr; ctx.fillRect(x0, y0, TILE, TILE);
+        ctx.save(); ctx.translate(cx, cy); ctx.rotate(Math.atan2(oy, ox));   // chevron pointing out of the zone
         ctx.strokeStyle = 'rgba(0, 229, 255, 0.55)'; ctx.lineWidth = 4; ctx.beginPath();
-        const cx = x0 + TILE / 2, cy = y0 + TILE / 2;
-        ctx.moveTo(cx - 8 * out, cy - 12); ctx.lineTo(cx + 8 * out, cy); ctx.lineTo(cx - 8 * out, cy + 12); ctx.stroke();
+        ctx.moveTo(-8, -12); ctx.lineTo(8, 0); ctx.lineTo(-8, 12); ctx.stroke(); ctx.restore();
       }
 
       // depth sort: things higher on screen first, so whatever is lower is drawn in front
@@ -1278,12 +1364,15 @@
       if (gameTime < rootedUntil) drawTart(rx, ry);
       // hero and enemies: lower on screen is drawn in front; a beaten enemy lies flat under everyone
       const actors = [{ y: ry, draw: () => drawHeroSprite(rx, ry) }];
-      if (drip) { const d = dripPos(); actors.push({ y: drip.dead ? -1e9 : d.y, draw: () => drawDrip(d) }); }
+      for (const e of drips) { drip = e; const d = dripPos(); actors.push({ y: e.dead ? -1e9 : d.y, draw: () => { drip = e; drawDrip(d); } }); }
       actors.sort((a, b) => a.y - b.y).forEach(a => a.draw());
       WALLS.filter(w => w.y - 1 > ry).sort(order).forEach(drawWall);
       drawProjectiles();
       drawFloaters();
-      if (drip && drip.aggro && !drip.dead) drawFoePanel();
+      // enemy panel: the Drip the hero faces, else the nearest one chasing him
+      const foe = dripAt(player.x + facing.x, player.y + facing.y) ||
+        drips.filter(d => d.aggro && !d.dead).sort((a, b) => cheb(a.x, a.y, player.x, player.y) - cheb(b.x, b.y, player.x, player.y))[0];
+      if (foe) { drip = foe; drawFoePanel(); }
 
       // name of the tile the yellow highlight is on
       const looked = wallAt(Math.round(rx) + facing.x, Math.round(ry) + facing.y);
@@ -1301,7 +1390,7 @@
       if (areaBanner && bs < 1600) {
         ctx.globalAlpha = bs < 1200 ? 1 : 1 - (bs - 1200) / 400;
         ctx.fillStyle = '#fff'; ctx.font = '600 44px ' + MONO; ctx.textAlign = 'center'; ctx.textBaseline = 'top';
-        ctx.fillText(areaName, canvas.width / 2, 40);
+        ctx.fillText(AREAS[areaName].name, canvas.width / 2, 110);   // below the enemy panel
         ctx.globalAlpha = 1;
       }
 
@@ -1350,7 +1439,7 @@
       g.beginPath(); g.moveTo(S / 2 - h - off, S / 2); g.lineTo(S / 2 + h - off, S / 2 - h * 0.95); g.lineTo(S / 2 + h - off, S / 2 + h * 0.95); g.closePath(); g.fill();
       return (facingMarkerCanvas = c);
     }
-    const facingEnemy = () => !anyOpen() && dripAt(player.x + facing.x, player.y + facing.y);
+    const facingEnemy = () => !anyOpen() && dripAt(player.x + facing.x, player.y + facing.y) === drip;   // is the Drip being drawn the faced one?
     // the building the hero faces and can use (it has something to open)
     const facedBuilding = () => { if (anyOpen()) return null; const w = wallAt(player.x + facing.x, player.y + facing.y); return w && w.opens ? w : null; };
 
@@ -1393,14 +1482,14 @@
     function drawDrip(d) {
       const t = gameTime, cx = (d.x + 0.5) * TILE, feet = (d.y + 1) * TILE - 2;
       if (drip.dead) {
-        if (ready(ART.dripHurt)) drawDripCell(ART.dripHurt, DRIP_ART.hurt, 1, cx, feet, 1, drip.loot && lootable() && !anyOpen() ? NEON.building : null);
+        if (ready(ART.dripHurt)) drawDripCell(ART.dripHurt, DRIP_ART.hurt, 1, cx, feet, 1, drip.loot && lootable() === drip && !anyOpen() ? NEON.building : null);
         if (drip.loot) {   // loot waiting: a pulsing gold glint over the puddle, "loot" when faced
           const k = 0.5 + 0.5 * Math.sin(performance.now() / 250), gy = feet - 52;
           ctx.save(); ctx.globalAlpha = 0.5 + 0.5 * k; ctx.fillStyle = '#f5c542';
           ctx.translate(cx + 18, gy); ctx.scale(0.8 + 0.3 * k, 0.8 + 0.3 * k);
           ctx.beginPath(); ctx.moveTo(0, -12); ctx.lineTo(3, -3); ctx.lineTo(12, 0); ctx.lineTo(3, 3); ctx.lineTo(0, 12); ctx.lineTo(-3, 3); ctx.lineTo(-12, 0); ctx.lineTo(-3, -3); ctx.closePath(); ctx.fill();
           ctx.restore();
-          if (lootable() && !anyOpen()) {
+          if (lootable() === drip && !anyOpen()) {
             ctx.fillStyle = '#fff'; ctx.font = '600 24px ' + MONO; ctx.textAlign = 'center'; ctx.textBaseline = 'bottom';
             ctx.fillText('loot (Space)', cx, feet - 70);
           }
@@ -1869,23 +1958,28 @@
     $('cheat-pass').addEventListener('keydown', e => { if (e.key === 'Escape') { e.preventDefault(); lockEl.hidden = true; document.activeElement?.blur(); } });
 
     // ---- input --------------------------------------------------------------
+    // keys are read by their physical position (e.code), so WASD, H, I, P and 1-3 work on any keyboard layout
+    // (Cyrillic, AZERTY, Greek…). Arrow keys also move, and the number pad works for numbers.
+    const CODE_KEYS = { KeyW: 'w', KeyA: 'a', KeyS: 's', KeyD: 'd', ArrowUp: 'w', ArrowLeft: 'a', ArrowDown: 's', ArrowRight: 'd',
+                        KeyH: 'h', KeyI: 'i', KeyP: 'p' };
+    const keyOf = e => CODE_KEYS[e.code] || (/^(Digit|Numpad)[0-9]$/.test(e.code) ? e.code.slice(-1) : e.key.toLowerCase());
     addEventListener('keydown', e => {
       if (naming() || e.metaKey || e.ctrlKey || e.altKey) return;
-      const k = e.key.toLowerCase();
+      const k = keyOf(e);
       if (e.code === 'Space') { e.preventDefault(); if (!e.repeat) spacePressed(); return; }
       if (k === 'p') { e.preventDefault(); if (!e.repeat && !locked()) { if (ui && ui.kind === 'cheat') closeWindow(); else openCheats(); } return; }   // CHEAT menu (testing) — remove before release
       if (k === 'i') { e.preventDefault(); if (!e.repeat && !ui) togglePanel('inventory'); return; }
       if (k === 'h') { e.preventDefault(); if (!e.repeat && !ui) togglePanel('hero'); return; }
       if (e.key === 'Escape') { e.preventDefault(); if (!e.repeat) escPressed(); return; }
-      if (ui && /^[1-9]$/.test(e.key)) { choose(+e.key - 1); return; }
-      if (!anyOpen() && /^[1-3]$/.test(e.key)) { e.preventDefault(); if (!e.repeat) castSpell(+e.key - 1); return; }
+      if (ui && /^[1-9]$/.test(k)) { choose(+k - 1); return; }
+      if (!anyOpen() && /^[1-3]$/.test(k)) { e.preventDefault(); if (!e.repeat) castSpell(+k - 1); return; }
       if (!KEYS.includes(k)) return;
       e.preventDefault();
       if (anyOpen()) { press([k]); return; }        // cursor moves, repeat allowed
       if (!e.repeat) press([k]);
     });
     addEventListener('keyup', e => {
-      const k = e.key.toLowerCase();
+      const k = keyOf(e);
       if (KEYS.includes(k)) release([k]);
     });
     addEventListener('blur', () => held.clear());
@@ -1902,7 +1996,7 @@
       else if (hit) choose(hit.i);
     });
 
-    if (areaName === 'slums') spawnDrip();   // loaded straight into the slums
+    spawnZoneDrips();   // loaded straight into a zone with Drips
     requestAnimationFrame(frame);
   }
 
