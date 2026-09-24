@@ -1485,7 +1485,7 @@
 
       rowRects = [];
       drawStates();
-      if (!(ui && ui.kind === 'map')) drawMinimap();
+      if (!(ui && ui.kind === 'map')) drawMinimap(rx, ry);
       drawPanels();
       if (ui) drawWindow();
     }
@@ -1664,7 +1664,8 @@
       const h = HERO_H * TILE, k = h / 280;   // k: sheet px -> canvas px (walk frames are 280 px tall)
       const cx = (rx + 0.5) * TILE, feet = (ry + 1) * TILE - 4;
       ctx.save();
-      if (gameTime - heroHurtStart < 300 && Math.floor((gameTime - heroHurtStart) / 60) % 2 === 0) ctx.globalAlpha = 0.35;   // hit blink
+      const dying = ui && ui.kind === 'gameover';   // game time is frozen at death, so a blink would stay stuck half-transparent
+      if (!dying && gameTime - heroHurtStart < 300 && Math.floor((gameTime - heroHurtStart) / 60) % 2 === 0) ctx.globalAlpha = 0.35;   // hit blink
       ctx.imageSmoothingQuality = 'high';
       ctx.translate(cx, feet);
       if (ui && ui.kind === 'gameover' && ready(ART.heroFall)) {   // dying: fall frames over 2 s, then he stays down
@@ -1905,12 +1906,17 @@
     }
     // minimap: always open in the top-right corner, 4 × 4 zones around the hero, 50% opacity
     const MINI = { cols: 4, rows: 4, cw: 80, ch: 80 * 13 / 21 };
-    function drawMinimap() {
+    let miniAlpha = 0.3;
+    function drawMinimap(rx, ry) {
       const [a, b] = coordOf(areaName);
       const bLeft = Math.max(MAP_BOUNDS.bMin, Math.min(b - 1, MAP_BOUNDS.bMax - MINI.cols + 1));
       const aTop = Math.min(MAP_BOUNDS.aMax, Math.max(a + 1, MAP_BOUNDS.aMin + MINI.rows - 1));
       const w = MINI.cols * MINI.cw, h = MINI.rows * MINI.ch, x = canvas.width - w - 20, y = 20;
-      ctx.save(); ctx.globalAlpha = 0.3;
+      // the hero (his whole sprite, head included) near the minimap: fade it down to 5% so the map under it stays visible
+      const hx = (rx + 0.5) * TILE, hTop = (ry + 1 - HERO_H) * TILE, hBot = (ry + 1) * TILE, m = TILE * 0.75;
+      const near = hx > x - m && hx < x + w + m && hTop < y + h + 30 + m && hBot > y - m;
+      miniAlpha += ((near ? 0.05 : 0.3) - miniAlpha) * 0.15;   // smooth fade
+      ctx.save(); ctx.globalAlpha = miniAlpha;
       ctx.fillStyle = '#000'; ctx.fillRect(x - 6, y - 6, w + 12, h + 12);
       ctx.strokeStyle = '#fff'; ctx.lineWidth = 2; ctx.strokeRect(x - 5, y - 5, w + 10, h + 10);
       drawMapGrid(x, y, MINI.cw, MINI.ch, aTop, aTop - MINI.rows + 1, bLeft, bLeft + MINI.cols - 1, false);
