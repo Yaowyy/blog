@@ -423,6 +423,7 @@
     AREAS[id] = { id, type, name: ZONE_TYPES[type].name, walls: [], exits: ZONE_EXITS[id],
                   decals: type === 'slums' ? { ...SLUMS_DECALS, seed } : false,   // lake / factory: clean floor for now (their own decor comes later)
                   drips: type === 'slums' ? (Math.max(Math.abs(a), Math.abs(b)) >= 3 ? 2 : 1) : 0 };
+    AREAS[id].foes = [];   // other enemies living here besides the Drips: { kind, spawn } (spawn tile counted from 1)
   }
   AREAS['0:0'].walls = [
     { x: 2, y: 7, w: 2, h: 2, color: '#2e9e44', label: 'ATB-Market', opens: 'shop', art: 'shop', artW: 2.5 },
@@ -506,6 +507,9 @@
     ] },
   };
   for (const id in LAKE) AREAS[id].lake = LAKE[id];
+  // one Toxic Scav per toxic lake zone, on the shore away from the water and the passages
+  const SCAV_SPAWNS = { '0:-2': { x: 6, y: 4 }, '0:-1': { x: 15, y: 4 }, '-1:-2': { x: 6, y: 10 }, '-1:-1': { x: 16, y: 10 } };
+  for (const id in SCAV_SPAWNS) AREAS[id].foes.push({ kind: 'scav', spawn: SCAV_SPAWNS[id] });
   AREAS['0:1'].walls = [
     { x: 17, y: 5, w: 4, h: 2, color: '#6b4a2e', label: 'Scrap Dealer', opens: 'scrap', art: 'scrapDealer', artW: 4.5 },
     { x: 20, y: 6, w: 2, h: 2, color: '#3a4257', art: 'ruinMarket', artW: 2.9 },   // looted market (decorative ruin), right of the Scrap Dealer
@@ -548,6 +552,20 @@
   // sprite calibration (px in each image): body = hood top to puddle bottom, ax = puddle centre in a cell
   const DRIP_ART = { idle: { frames: 1, body: 288, ax: 164.5 }, attack: { frames: 4, body: 198, ax: 241 }, hurt: { frames: 2, body: 334, ax: 203.5 } };
   const DRIP_BODY = 1.5;   // tiles from hood top to puddle bottom (hero is 1.75 tiles tall)
+  // Toxic Scav: a scavenger in a hazmat suit, 1 in each toxic lake zone. Locks on within `aggro` tiles, then tries to stay
+  // `keep` tiles from the hero (backs off when he comes closer). Every `sprayEveryMs` he aims (aimMs) and sprays a cone of
+  // toxic mist at where the hero stood: up to `sprayRange` tiles, `sprayHalfAngle` radians each side; the hero takes
+  // `sprayDmg` every second he stays in it (step out of the cone to dodge). Doesn't melee. Same loot/fade/respawn timing as Drip.
+  const SCAV = { name: 'Toxic Scav', hp: 16, aggro: 5, keep: 3, stepMs: 1000, sprayRange: 3.5, sprayHalfAngle: 0.5,
+                 sprayEveryMs: 4000, aimMs: 500, sprayMs: 2000, sprayTickMs: 1000, sprayDmg: 1,
+                 respawnMs: [60000, 90000], lootMs: 30000, fadeMs: 2000,
+                 loot: { money: [8, 16], mutagenChance: 0.1 } };
+  const ENEMY = { drip: DRIP, scav: SCAV };
+  const ET = d => ENEMY[d.kind || 'drip'];   // an enemy's type (rules)
+  // Scav sheets are cut to the hero's scale (277 px tall ≈ HERO_H tiles): ax = feet centre, foot = px from the cell bottom to the soles
+  const SCAV_ART = { idle: { frames: 1, cellW: 215, cellH: 288, ax: 119.6, foot: 10.4 },
+                     attack: { frames: 4, cellW: 296, cellH: 288, ax: 182.5, foot: 9.3, nozzle: [-87.5, -157] },   // 0 aim, 1 spray, 2 big spray, 3 recoil
+                     hurt: { frames: 2, cellW: 297, cellH: 322, ax: 126.4, foot: 58.6 } };   // 0 hurt, 1 defeated
 
   // ---- art (drawn over the tile grid; the grid still does all collision) ----
   // hero: smooth chibi art from ChatGPT, facing right; flipped for left. Feet sit on the bottom-centre of his tile.
@@ -592,6 +610,8 @@
     magicTart: 'art/magicTart.png',   // magic tart item + spell icon
     scrapDealer: 'art/scrapDealer.png',   // slums scrap dealer building, front turned slightly left
     scrap: 'art/scrap.png',
+    scavIdle: 'art/scavIdle.png', scavAttack: 'art/scavAttack.png', scavHurt: 'art/scavHurt.png',   // Toxic Scav sheets (face left)
+    scavPortrait: 'art/scavPortrait.png', scavSpray: 'art/scavSpray.png',   // portrait, toxic spray cone (points left, nozzle at the right end)
     mutagen: 'art/mutagen.png', tarOrb: 'art/tarOrb.png', aiChip: 'art/aiChip.png',   // item icons
     spellTech: 'art/spellTech.png',   // SpellTech crafting station (3 x 2), turned slightly like the shop
     ruinApartment: 'art/ruinApartment.png', ruinMarket: 'art/ruinMarket.png', ruinNoodleBar: 'art/ruinNoodleBar.png',   // destroyed buildings (decorative)   // scrap resource icon
@@ -920,7 +940,7 @@
         row('Drip', !drips.length ? 'none in this zone' : drips.some(d => !d.dead) ? 'defeat nearest (loot drops)' : 'respawn', () => {
           if (!drips.length) return 'No Drips live in this zone.';
           const alive = drips.filter(d => !d.dead).sort((a, b) => cheb(a.x, a.y, player.x, player.y) - cheb(b.x, b.y, player.x, player.y));
-          if (!alive.length) { drips.forEach((d, i) => { drips[i] = makeDrip(d.spawn); }); return 'The Drips are back.'; }
+          if (!alive.length) { drips.forEach((d, i) => { drips[i] = makeDrip(d.spawn, areaName, d.kind); }); return 'The enemies are back.'; }
           drip = alive[0]; damageDrip(drip.hp, 'cheat', '#8a8a8a'); return 'Drip defeated. His loot is on the puddle.';
         }),
         (() => {   // teleport through the zones in map order
@@ -1150,9 +1170,10 @@
     function spawnAllDrips() {   // start of a game (new game, load, page open): every enemy is spawned
       zoneDrips = {};
       for (const id in AREAS) {
-        const n = AREAS[id].drips || 0;
         zoneDrips[id] = [];
-        for (let i = 0; i < n; i++) zoneDrips[id].push(makeDrip(DRIP.spawns[n - 1][i], id));
+        const nd = AREAS[id].drips || 0;
+        for (let i = 0; i < nd; i++) zoneDrips[id].push(makeDrip(DRIP.spawns[nd - 1][i], id, 'drip'));
+        for (const f of AREAS[id].foes) zoneDrips[id].push(makeDrip(f.spawn, id, f.kind));
       }
       drips = zoneDrips[areaName] || []; drip = null;
     }
@@ -1170,7 +1191,7 @@
       for (const id in saved) (saved[id] || []).forEach((e, i) => {
         const d = zoneDrips[id] && zoneDrips[id][i];
         if (!d) return;
-        if (!e.dead) { d.hp = Math.max(1, Math.min(DRIP.hp, e.hp ?? DRIP.hp)); return; }
+        if (!e.dead) { d.hp = Math.max(1, Math.min(ET(d).hp, e.hp ?? ET(d).hp)); return; }
         Object.assign(d, { dead: true, hp: 0, x: e.x, y: e.y, fromX: e.x, fromY: e.y, aggro: false,
                            deadAt: gameTime - e.since, respawnAt: gameTime + e.respawnIn, loot: e.loot });
       });
@@ -1178,11 +1199,11 @@
     // hero enters a zone: its living Drips are back at their spawn spot, not locked on, with no mana (they keep their health)
     function settleZoneDrips(id) {
       const list = zoneDrips[id] || [];
-      list.forEach((d, i) => { if (!d.dead) { const n = makeDrip(d.spawn, id); n.hp = d.hp; list[i] = n; } });
+      list.forEach((d, i) => { if (!d.dead) { const n = makeDrip(d.spawn, id, d.kind); n.hp = d.hp; list[i] = n; } });
       drips = list; drip = null;
     }
     const takenByDrip = (x, y, self, list = drips) => list.some(o => o !== self && !o.dead && o.x === x && o.y === y);
-    function makeDrip(spawn, zoneId = areaName) {
+    function makeDrip(spawn, zoneId = areaName, kind = 'drip') {
       const saveWalls = WALLS; WALLS = AREAS[zoneId].walls;   // free() checks the walls of the zone being filled
       const list = zoneDrips[zoneId] || [], here = zoneId === areaName;
       const blocked = (x, y) => !free(x, y) || takenByDrip(x, y, null, list) || (here && x === player.x && y === player.y);
@@ -1196,7 +1217,7 @@
         if (best) { sx = best.x; sy = best.y; }
       }
       WALLS = saveWalls;
-      return { x: sx, y: sy, fromX: sx, fromY: sy, stepStart: -1e9, hp: DRIP.hp, mana: 0, manaT: 0, spawn,
+      return { kind, x: sx, y: sy, fromX: sx, fromY: sy, stepStart: -1e9, hp: ENEMY[kind].hp, mana: 0, manaT: 0, spawn, nextSpray: 0, spray: null,
                aggro: false, nextAttack: 0, attackStart: -1e9, hitAt: 0, hurtStart: -1e9, dead: false, deadAt: 0, lookX: -1 };
     }
 
@@ -1204,8 +1225,8 @@
       // world-wide timers: loot expiry, fade-out and respawn run in every zone (cheap: a few timestamps)
       for (const id in zoneDrips) zoneDrips[id].forEach((d, i, list) => {
         if (!d.dead) return;
-        if (d.loot && gameTime >= d.deadAt + DRIP.lootMs) { d.loot = null; if (lootTarget === d) lootTarget = null; }
-        if (gameTime >= d.respawnAt) list[i] = makeDrip(d.spawn, id);
+        if (d.loot && gameTime >= d.deadAt + ET(d).lootMs) { d.loot = null; if (lootTarget === d) lootTarget = null; }
+        if (gameTime >= d.respawnAt) list[i] = makeDrip(d.spawn, id, d.kind);
       });
       drips.forEach(d => { drip = d; updateDrip(); });   // only the hero's zone is simulated
     }
@@ -1219,6 +1240,7 @@
         if (drip.dead) return;
         if (--drip.dot.left <= 0) drip.dot = null; else drip.dot.next += sp.tickMs;
       }
+      if (drip.kind === 'scav') { updateScav(); return; }
       const dist = cheb(player.x, player.y, drip.x, drip.y);
       if (!drip.aggro && dist <= DRIP.aggro) { drip.aggro = true; drip.manaT = t; }
       if (!drip.aggro) return;
@@ -1255,6 +1277,55 @@
       drip.fromX = drip.x; drip.fromY = drip.y; drip.x = best.nx; drip.y = best.ny; drip.stepStart = t;
     }
 
+    // Toxic Scav: keeps his distance and sprays a cone of toxic mist (see SCAV)
+    const inSpray = (d, s) => {   // is the hero inside this spray's cone?
+      const dx = player.x - d.x, dy = player.y - d.y, len = Math.hypot(dx, dy);
+      if (len > SCAV.sprayRange) return false;
+      if (len < 0.9) return true;   // point blank
+      let da = Math.atan2(dy, dx) - s.angle; da = Math.atan2(Math.sin(da), Math.cos(da));
+      return Math.abs(da) <= SCAV.sprayHalfAngle;
+    };
+    function updateScav() {
+      const S = SCAV, t = gameTime, d = drip, reach = Math.hypot(player.x - d.x, player.y - d.y);
+      if (!d.aggro && cheb(player.x, player.y, d.x, d.y) <= S.aggro) { d.aggro = true; d.nextSpray = t + 800; }
+      if (!d.aggro) return;
+      if (d.spray) {   // aiming / spraying: stands still, damage ticks while the hero is in the cone
+        const s = d.spray;
+        if (t >= s.end) d.spray = null;
+        else {
+          while (t >= s.nextTick && s.nextTick < s.end) {
+            s.nextTick += S.sprayTickMs;
+            if (inSpray(d, s) && stats.health > 0) {
+              stats.health = Math.max(0, stats.health - S.sprayDmg); heroHurtStart = t;
+              float(`-${S.sprayDmg}`, '#7fff3a', player.x + 0.5, player.y - 0.6); renderStats();
+              if (stats.health <= 0) { gameOver(); return; }
+            }
+          }
+          return;
+        }
+      }
+      if (player.x !== d.x) d.lookX = player.x > d.x ? 1 : -1;
+      if (t >= d.nextSpray && reach <= S.sprayRange + 0.4 && stats.health > 0 && t - d.stepStart >= S.stepMs) {   // start a spray at where the hero stands now
+        const angle = Math.atan2(player.y - d.y, player.x - d.x);
+        d.spray = { angle, start: t, sprayAt: t + S.aimMs, end: t + S.aimMs + S.sprayMs, nextTick: t + S.aimMs + 500 };
+        d.attackStart = t; d.nextSpray = t + S.sprayEveryMs;
+        return;
+      }
+      if (t - d.stepStart < S.stepMs || t < (d.stunUntil || 0)) return;   // gliding, or stuck in magic tar
+      // step to keep about `keep` tiles from the hero (closer when too far, back off when too close)
+      const off = (x, y) => Math.abs(Math.hypot(player.x - x, player.y - y) - S.keep);
+      let best = { nx: d.x, ny: d.y, score: off(d.x, d.y) - 0.3 };   // only move when it clearly helps
+      for (let dy = -1; dy <= 1; dy++) for (let dx = -1; dx <= 1; dx++) {
+        const nx = d.x + dx, ny = d.y + dy;
+        if ((!dx && !dy) || !free(nx, ny) || exitAt(nx, ny) || takenByDrip(nx, ny, d) || (nx === player.x && ny === player.y)) continue;
+        if (dx && dy && (!free(d.x + dx, d.y) || !free(d.x, d.y + dy))) continue;
+        const score = off(nx, ny);
+        if (score < best.score) best = { nx, ny, score };
+      }
+      if (best.nx === d.x && best.ny === d.y) return;
+      d.fromX = d.x; d.fromY = d.y; d.x = best.nx; d.y = best.ny; d.stepStart = t;
+    }
+
     // Drip's swing lands (after the wind-up) if the hero is still next to him
     function dripStrikes() {
       if (cheb(player.x, player.y, drip.x, drip.y) !== 1 || stats.health <= 0) return;
@@ -1282,11 +1353,13 @@
       float(text, color, drip.x + 0.5, drip.y - 0.9);
       if (drip.hp <= 0) {   // nothing is given yet: the loot waits on his puddle
         drip.dead = true; drip.deadAt = gameTime; drip.hitAt = 0; drip.dot = null; drip.stunUntil = 0;
-        drip.respawnAt = gameTime + rand(DRIP.respawnMs[0], DRIP.respawnMs[1]);   // respawn timer starts now
-        const L = DRIP.loot, items = [];
-        const tars = rand(L.tar[0], L.tar[1]);
+        const T = ET(drip); drip.spray = null;
+        drip.respawnAt = gameTime + rand(T.respawnMs[0], T.respawnMs[1]);   // respawn timer starts now
+        const L = T.loot, items = [];
+        const tars = L.tar ? rand(L.tar[0], L.tar[1]) : 0;
         if (tars) items.push({ name: 'tar', count: tars });
-        if (Math.random() < L.magicTarChance) items.push({ name: 'magic tar', count: 1 });
+        if (L.magicTarChance && Math.random() < L.magicTarChance) items.push({ name: 'magic tar', count: 1 });
+        if (L.mutagenChance && Math.random() < L.mutagenChance) items.push({ name: 'MutaGen', count: 1 });
         drip.loot = { money: rand(L.money[0], L.money[1]), items };
         if (target === drip) retarget();   // next closest enemy, or no target
       }
@@ -1799,7 +1872,7 @@
 
     // ---- combat drawing ---------------------------------------------------------
     function dripPos() {
-      const p = Math.min(1, (gameTime - drip.stepStart) / DRIP.stepMs);
+      const p = Math.min(1, (gameTime - drip.stepStart) / ET(drip).stepMs);
       return { x: drip.fromX + (drip.x - drip.fromX) * p, y: drip.fromY + (drip.y - drip.fromY) * p };
     }
     // one cell of a Drip sheet, puddle centre on the tile's bottom-centre, scaled so his body is DRIP_BODY tiles
@@ -1817,13 +1890,47 @@
       ctx.restore();
     }
     const dripNeon = () => [drip === target ? NEON.target : null, facingEnemy() ? NEON.enemy : null].filter(Boolean);
+    // one cell of a Toxic Scav sheet: feet on the tile's bottom-centre, same scale as the hero; art faces left
+    function drawScavCell(im, spec, frame, cx, feet, neon) {
+      const k = HERO_H * TILE / 280, fw = spec.cellW, fh = spec.cellH;
+      ctx.save(); ctx.translate(cx, feet); if (drip.lookX > 0) ctx.scale(-1, 1);
+      ctx.imageSmoothingQuality = 'high';
+      const dx = -spec.ax * k, dy = -(fh - spec.foot) * k;
+      for (const n of [].concat(neon || [])) {
+        ctx.save(); ctx.globalAlpha = n.alpha;
+        ctx.drawImage(outlineOf(im, frame * fw, 0, fw, fh, fw * k, fh * k, n.color), dx - OUTLINE_PAD, dy - OUTLINE_PAD);
+        ctx.restore();
+      }
+      ctx.drawImage(im, frame * fw, 0, fw, fh, dx, dy, fw * k, fh * k);
+      ctx.restore();
+    }
+    function drawScavBody(cx, feet, t) {
+      const s = drip.spray, A = SCAV_ART, neon = dripNeon();
+      if (s && ready(ART.scavAttack)) {
+        const f = t < s.sprayAt ? 0 : t > s.end - 250 ? 3 : 1;
+        drawScavCell(ART.scavAttack, A.attack, f, cx, feet, neon);
+        if (t >= s.sprayAt && t < s.end && ready(ART.scavSpray)) {   // the mist cone, from the nozzle toward where he aimed
+          const k = HERO_H * TILE / 280, im = ART.scavSpray, L = SCAV.sprayRange * TILE, H = L * im.naturalHeight / im.naturalWidth;
+          const nx = cx + A.attack.nozzle[0] * k * (drip.lookX > 0 ? -1 : 1), ny = feet + A.attack.nozzle[1] * k;
+          const grow = Math.min(1, (t - s.sprayAt) / 250), fade = Math.min(1, (s.end - t) / 250);
+          ctx.save(); ctx.globalAlpha = 0.85 * fade; ctx.translate(nx, ny); ctx.rotate(s.angle + Math.PI);
+          ctx.scale(grow, 0.6 + 0.4 * grow + 0.04 * Math.sin(t / 60));
+          ctx.drawImage(im, -L, -H * 0.555, L, H);
+          ctx.restore();
+        }
+      } else if (t - drip.hurtStart < 300 && ready(ART.scavHurt)) drawScavCell(ART.scavHurt, A.hurt, 0, cx, feet, neon);
+      else if (ready(ART.scavIdle)) drawScavCell(ART.scavIdle, A.idle, 0, cx, feet, neon);
+      else { ctx.fillStyle = '#E3B521'; ctx.fillRect(cx - 30, feet - 110, 60, 110); }
+    }
     function drawDrip(d) {
-      const t = gameTime, cx = (d.x + 0.5) * TILE, feet = (d.y + 1) * TILE - 2;
+      const t = gameTime, cx = (d.x + 0.5) * TILE, feet = (d.y + 1) * TILE - 2, T = ET(drip), scav = drip.kind === 'scav';
       if (drip.dead) {
         const since = t - drip.deadAt;
-        if (since >= DRIP.lootMs + DRIP.fadeMs) return;   // puddle gone
-        ctx.save(); if (since > DRIP.lootMs) ctx.globalAlpha = 1 - (since - DRIP.lootMs) / DRIP.fadeMs;   // 2 s fade-out
-        if (ready(ART.dripHurt)) drawDripCell(ART.dripHurt, DRIP_ART.hurt, 1, cx, feet, 1, drip.loot && lootable() === drip && !anyOpen() ? NEON.building : null);
+        if (since >= T.lootMs + T.fadeMs) return;   // body gone
+        ctx.save(); if (since > T.lootMs) ctx.globalAlpha = 1 - (since - T.lootMs) / T.fadeMs;   // 2 s fade-out
+        const lootNeon = drip.loot && lootable() === drip && !anyOpen() ? NEON.building : null;
+        if (scav) { if (ready(ART.scavHurt)) drawScavCell(ART.scavHurt, SCAV_ART.hurt, 1, cx, feet, lootNeon); }
+        else if (ready(ART.dripHurt)) drawDripCell(ART.dripHurt, DRIP_ART.hurt, 1, cx, feet, 1, lootNeon);
         if (drip.loot) {   // loot waiting: a pulsing gold glint over the puddle, "loot" when faced
           const k = 0.5 + 0.5 * Math.sin(performance.now() / 250), gy = feet - 52;
           ctx.save(); ctx.globalAlpha = 0.5 + 0.5 * k; ctx.fillStyle = '#f5c542';
@@ -1839,7 +1946,8 @@
         return;
       }
       const sinceAtk = t - drip.attackStart, sinceHurt = t - drip.hurtStart;
-      if (sinceAtk < 700 && ready(ART.dripAttack)) drawDripCell(ART.dripAttack, DRIP_ART.attack, Math.min(3, Math.floor(sinceAtk / 175)), cx, feet, 1, dripNeon());
+      if (scav) drawScavBody(cx, feet, t);
+      else if (sinceAtk < 700 && ready(ART.dripAttack)) drawDripCell(ART.dripAttack, DRIP_ART.attack, Math.min(3, Math.floor(sinceAtk / 175)), cx, feet, 1, dripNeon());
       else if (sinceHurt < 300 && ready(ART.dripHurt)) drawDripCell(ART.dripHurt, DRIP_ART.hurt, 0, cx, feet, 1, dripNeon());
       else if (ready(ART.dripIdle)) drawDripCell(ART.dripIdle, DRIP_ART.idle, 0, cx, feet, 1 + 0.025 * Math.sin(t / 260), dripNeon());   // oily wobble
       else { ctx.fillStyle = '#10131C'; ctx.fillRect(d.x * TILE + 10, d.y * TILE + 10, TILE - 20, TILE - 20); }
@@ -1849,9 +1957,9 @@
         ctx.beginPath(); ctx.ellipse(cx, feet - 8, 46, 16, 0, 0, Math.PI * 2); ctx.stroke(); ctx.restore();
       }
       // health bar over his head
-      const bw = 64, bx = cx - bw / 2, by = feet - DRIP_BODY * TILE - 18;
+      const bw = 64, bx = cx - bw / 2, by = feet - (scav ? HERO_H : DRIP_BODY) * TILE - 18;
       ctx.fillStyle = 'rgba(0, 0, 0, 0.7)'; ctx.fillRect(bx - 2, by - 2, bw + 4, 12);
-      ctx.fillStyle = '#e5484d'; ctx.fillRect(bx, by, bw * drip.hp / DRIP.hp, 8);
+      ctx.fillStyle = '#e5484d'; ctx.fillRect(bx, by, bw * drip.hp / T.hp, 8);
     }
     // Tart: the hero stands stuck in a glossy oil puddle
     function drawTart(rx, ry) {
@@ -1888,16 +1996,18 @@
       const w = 300, h = 80, x = (canvas.width - w) / 2, y = 12;
       ctx.fillStyle = 'rgba(0, 0, 0, 0.75)'; ctx.fillRect(x, y, w, h);
       ctx.strokeStyle = 'rgba(255, 43, 214, 0.6)'; ctx.lineWidth = 2; ctx.strokeRect(x + 1, y + 1, w - 2, h - 2);
-      if (ready(ART.dripPortrait)) { ctx.imageSmoothingQuality = 'high'; ctx.drawImage(ART.dripPortrait, x + 8, y + 8, 64, 64); }
+      const T = ET(drip), pic = ART[drip.kind === 'scav' ? 'scavPortrait' : 'dripPortrait'];
+      if (ready(pic)) { ctx.imageSmoothingQuality = 'high'; ctx.drawImage(pic, x + 8, y + 8, 64, 64); }
       const tx = x + 84, bw = w - 84 - 14;
       ctx.textAlign = 'left'; ctx.textBaseline = 'middle'; ctx.fillStyle = '#fff'; ctx.font = '600 22px ' + MONO;
-      ctx.fillText(DRIP.name, tx, y + 20);
+      ctx.fillText(T.name, tx, y + 20);
       ctx.fillStyle = '#3a1418'; ctx.fillRect(tx, y + 36, bw, 12);
-      ctx.fillStyle = '#e5484d'; ctx.fillRect(tx, y + 36, bw * drip.hp / DRIP.hp, 12);
+      ctx.fillStyle = '#e5484d'; ctx.fillRect(tx, y + 36, bw * drip.hp / T.hp, 12);
       ctx.fillStyle = '#fff'; ctx.font = '600 14px ' + MONO; ctx.textAlign = 'right';
-      ctx.fillText(`${drip.hp}/${DRIP.hp}`, tx + bw, y + 20);
+      ctx.fillText(`${drip.hp}/${T.hp}`, tx + bw, y + 20);
       ctx.fillStyle = '#4ea1ff'; ctx.font = '18px ' + MONO; ctx.textAlign = 'left';
-      ctx.fillText(ICON.mana.repeat(drip.mana) + '◇'.repeat(DRIP.mana - drip.mana), tx, y + 62);
+      if (T.mana) ctx.fillText(ICON.mana.repeat(drip.mana) + '◇'.repeat(T.mana - drip.mana), tx, y + 62);
+      else { ctx.fillStyle = '#7fff3a'; ctx.font = '16px ' + MONO; ctx.fillText(drip.spray ? 'spraying!' : 'toxic spray', tx, y + 62); }
     }
 
     // hero sprite: feet on the bottom-centre of his tile, small bob while walking, mirrored when facing left
@@ -2017,7 +2127,7 @@
       ctx.fillStyle = '#fff';
       ctx.textAlign = 'left';
       ctx.font = '600 40px ' + MONO;
-      ctx.fillText(hero ? (heroName || DEFAULT_NAME) : TITLES[ui.kind], px + 40, py + 56);
+      ctx.fillText(hero ? (heroName || DEFAULT_NAME) : ui.kind === 'loot' && lootTarget ? `Loot · ${ET(lootTarget).name}` : TITLES[ui.kind], px + 40, py + 56);
       if (ui.kind === 'shop' || ui.kind === 'work' || ui.kind === 'scrap') {   // wallet in the corner
         ctx.textAlign = 'right';
         ctx.font = '26px ' + MONO;
