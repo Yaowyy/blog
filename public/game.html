@@ -284,11 +284,16 @@
     { name: 'scrap',      class: 'resource', stack: 64, gain: {}, value: 1, art: 'scrap', rarity: 'common' },   // from selling equipment; also sold by the Scrap Dealer
     // not obtainable yet (code only; the cheat menu can give them)
     { name: 'MutaGen',    class: 'resource', stack: 32, gain: {}, value: 26, rarity: 'rare' },
-    { name: 'Tar Orb',    class: 'upgrade',  stack: 16, gain: {}, value: 60, rarity: 'rare' },   // class 'upgrade': used to upgrade things later
+    { name: 'Tar Orb',    class: 'upgrade',  stack: 16, gain: {}, value: 60, rarity: 'rare',   // crafted at SpellTech; Space in the inventory consumes one: +1 mana cap
+      desc: 'A magic orb that fuses magic power and body', consume: { manaCap: 1 } },
     { name: 'AI chip',    class: 'resource', stack: 32, gain: {}, value: 24, rarity: 'rare' },
   ];
   // Scrap Dealer (slums): buys equipment for 40% of its shop price plus 1% of that price in scrap (rounded down),
   // resources for 100% of their value (whole stack at once), and sells scrap for 2$ each. Skills and equipped items can't be sold.
+  // SpellTech (city): crafting station for magic items. Each recipe: what it makes, what it costs (items + energy).
+  const RECIPES = [
+    { make: 'Tar Orb', count: 1, cost: [['tar', 10], ['MutaGen', 1]], energy: 20 },
+  ];
   const SCRAP_DEALER = { equipShare: 0.4, scrapPerCost: 0.01, scrapPrice: 2 };
   const INVENTORY_SLOTS = 4;
   const ABILITY_SLOTS = 3;   // spell slots in the bar; keys 1 2 3 cast them
@@ -424,12 +429,14 @@
     // CaaCaanTeng noodle bar (closed, decorative). Overlaps TradeCorp on 8/6; TradeCorp is drawn in front of it.
     { x: 7, y: 6, w: 3, h: 2, color: '#8a3a7a', label: 'CaaCaanTeng', art: 'noodleBar', artW: 3.2 },
     // hover-car charging station (decorative)
-    { x: 15, y: 7, w: 2, h: 2, color: '#3a4257', art: 'charging', artW: 2.3, front: true },   // drawn in front of the ruin next to it
+    { x: 16, y: 7, w: 2, h: 2, color: '#3a4257', art: 'charging', artW: 2.3, front: true },   // drawn in front of the ruin next to it
     // front: true draws the picture in front of other buildings (not of the hero)
     { x: 9, y: 7, w: 2, h: 2, color: '#2f6fdb', label: 'TradeCorp', opens: 'work', art: 'work', artW: 2.5, front: true },
     { x: 4, y: 6, w: 2, h: 4, color: '#f2f2f2', label: 'HomeDome', opens: 'rest', art: 'homedome', artW: 2.2 },
     // collapsed apartment block (decorative ruin), right of the charging station
-    { x: 17, y: 7, w: 2, h: 2, color: '#3a4257', art: 'ruinApartment', artW: 3.2 },
+    { x: 18, y: 7, w: 2, h: 2, color: '#3a4257', art: 'ruinApartment', artW: 3.2 },
+    // SpellTech: spell crafting station, 3 x 2, bottom-left tile at column 13, row 5
+    { x: 14, y: 5, w: 3, h: 2, color: '#5a3a8a', label: 'SpellTech', opens: 'spelltech', art: 'spellTech', artW: 4.0 },
   ];
   AREAS['0:0'].decals = true;   // city: the default detail mix
   AREAS['0:0'].coils = borderWalls('0:0', ['top', 'bottom', 'left', 'right']);
@@ -585,6 +592,7 @@
     magicTart: 'art/magicTart.png',   // magic tart item + spell icon
     scrapDealer: 'art/scrapDealer.png',   // slums scrap dealer building, front turned slightly left
     scrap: 'art/scrap.png',
+    spellTech: 'art/spellTech.png',   // SpellTech crafting station (3 x 2), turned slightly like the shop
     ruinApartment: 'art/ruinApartment.png', ruinMarket: 'art/ruinMarket.png', ruinNoodleBar: 'art/ruinNoodleBar.png',   // destroyed buildings (decorative)   // scrap resource icon
     heroPortrait: 'art/heroPortrait.png',
   };
@@ -763,6 +771,7 @@
       }
       if (ui.kind === 'loot') return lootRows();
       if (ui.kind === 'cheat') return cheatRows();
+      if (ui.kind === 'spelltech') return RECIPES.map(r => ({ craft: r, left: r.make, right: '', act() { return craft(r); } }));
       if (ui.kind === 'scrap') return scrapRows();
       if (ui.kind === 'rest') {
         const wait = restReadyAt - Date.now();
@@ -926,7 +935,26 @@
         })(),
       ];
     }
-    const TITLES = { shop: 'ATB-Market', work: 'TradeCorp', menu: 'Menu', controls: 'Controls', hero: 'Hero', inventory: 'Inventory', gameover: 'Game over', loot: 'Loot · Drip', rest: 'HomeDome', cheat: 'Cheats (testing)', scrap: 'Scrap Dealer',
+    // SpellTech crafting: needs every item and the energy; the made item must fit in the inventory (after the costs are taken)
+    const countOf = name => inventory.filter(it => it.name === name).reduce((t, it) => t + (it.count || 1), 0);
+    function takeItems(name, n) {   // remove n of an item, from the last stacks first
+      for (let i = inventory.length - 1; i >= 0 && n > 0; i--) {
+        const it = inventory[i]; if (it.name !== name) continue;
+        const k = Math.min(n, it.count || 1); it.count = (it.count || 1) - k; n -= k;
+        if (it.count <= 0) inventory.splice(i, 1);
+      }
+    }
+    function craft(r) {
+      const missing = r.cost.filter(([name, n]) => countOf(name) < n).map(([name, n]) => `${n - countOf(name)} ${name}`);
+      if (missing.length) return `Missing ${missing.join(' and ')}.`;
+      if (stats.energy < r.energy) return `Not enough energy (${r.energy} ${ICON.energy} needed).`;
+      const backup = inventory.map(it => ({ ...it }));
+      for (const [name, n] of r.cost) takeItems(name, n);
+      if (addItem(r.make, r.count)) { inventory.length = 0; inventory.push(...backup); return 'Your inventory is full.'; }
+      stats.energy -= r.energy; renderStats();
+      return `Crafted ${r.count} ${r.make}.`;
+    }
+    const TITLES = { spelltech: 'SpellTech', shop: 'ATB-Market', work: 'TradeCorp', menu: 'Menu', controls: 'Controls', hero: 'Hero', inventory: 'Inventory', gameover: 'Game over', loot: 'Loot · Drip', rest: 'HomeDome', cheat: 'Cheats (testing)', scrap: 'Scrap Dealer',
                      map: 'Map', settings: 'Settings', sound: 'Sound', restart: 'Restart', save: 'Save', load: 'Load game', logout: 'Log out', guest: 'Playing as guest' };
     // windows with a paragraph above their options
     const WINDOW_TEXT = {
@@ -1009,6 +1037,12 @@
         renderStats(); return;
       }
       if (def.class === 'resource') { pn.msg = `${item.name} is a resource, used for crafting later.`; return; }
+      if (def.consume) {   // consumable: use one (Tar Orb: +1 mana cap)
+        if (def.consume.manaCap) CAPS.mana += def.consume.manaCap;
+        if ((item.count || 1) > 1) item.count--; else inventory.splice(pn.cursor, 1);
+        pn.msg = `Consumed ${item.name}: mana cap +${def.consume.manaCap} (now ${CAPS.mana}).`;
+        renderStats(); return;
+      }
       if (def.class === 'upgrade') { pn.msg = `${item.name} is an upgrade material, used later.`; return; }
       equipSelected(item, def, pn);
     }
@@ -1927,15 +1961,43 @@
       ctx.restore();
     }
 
+    // one recipe: costs (item icons, energy) and the item's description on the left; a big slot with the item and its name on the right
+    function drawCraftRow(r, x, y, w, h, sel) {
+      const big = h - 40, sx = x + w - 20 - 230 - big, sy = y + 20;
+      const def = itemDef(r.make) || {};
+      drawSlot(sx, sy, big, { name: r.make, count: r.count });
+      ctx.textAlign = 'left'; ctx.textBaseline = 'middle';
+      ctx.fillStyle = rarityColor(r.make); ctx.font = (sel ? '700 ' : '600 ') + '30px ' + MONO;
+      wrapText(r.make, 220).forEach((l, i, a) => ctx.fillText(l, sx + big + 20, sy + big / 2 + (i - (a.length - 1) / 2) * 36));
+      ctx.font = '18px ' + MONO; ctx.fillStyle = '#8a8a8a';
+      ctx.fillText(`${def.rarity || 'common'} ${def.class || 'item'}`, sx + big + 20, sy + big - 10);
+      // costs: icon slot + "have/need" (green when there is enough, red when not), then energy
+      let cx = x + 20; const cy = y + 20, cs = 64;
+      ctx.font = '600 24px ' + MONO;
+      for (const [name, n] of r.cost) {
+        drawSlot(cx, cy, cs, { name });
+        const have = countOf(name); ctx.textAlign = 'left'; ctx.textBaseline = 'middle';
+        ctx.fillStyle = have >= n ? '#3ddc84' : '#e5484d'; ctx.font = '600 24px ' + MONO;
+        ctx.fillText(`${n}`, cx + cs + 8, cy + cs / 2 - 12);
+        ctx.fillStyle = '#8a8a8a'; ctx.font = '16px ' + MONO; ctx.fillText(`${name} (${have})`, cx + cs + 8, cy + cs / 2 + 14);
+        cx += cs + 8 + Math.max(ctx.measureText(`${name} (${have})`).width, 30) + 22;
+      }
+      ctx.font = '600 26px ' + MONO; ctx.fillStyle = stats.energy >= r.energy ? '#9dff5c' : '#e5484d';
+      ctx.fillText(`${r.energy} ${ICON.energy}`, cx, cy + cs / 2);
+      ctx.font = '22px ' + MONO; ctx.fillStyle = '#cfcfcf';
+      wrapText(def.desc || '', sx - x - 40).forEach((l, i) => ctx.fillText(l, x + 20, cy + cs + 34 + i * 30));
+      if (def.consume && def.consume.manaCap) { ctx.fillStyle = '#4ea1ff'; ctx.font = '20px ' + MONO;
+        ctx.fillText(`Consume: +${def.consume.manaCap} ${ICON.mana} mana cap`, x + 20, y + h - 22); }
+    }
     function drawWindow() {
       if (ui.kind === 'map') { drawBigMap(); return; }
       if (ui.kind === 'gameover') { drawGameOver(); return; }
       const list = rows();
       const info = ui.kind === 'controls';          // read-only list, nothing to select
-      const rowH = info ? 38 : ui.kind === 'shop' || ui.kind === 'loot' || ui.kind === 'scrap' ? 88 : ui.kind === 'cheat' ? 50 : 64;   // shop and loot rows are taller for the item pictures
+      const rowH = info ? 38 : ui.kind === 'shop' || ui.kind === 'loot' || ui.kind === 'scrap' ? 88 : ui.kind === 'cheat' ? 50 : ui.kind === 'spelltech' ? 230 : 64;   // shop and loot rows are taller for the item pictures
       const hero = ui.kind === 'hero', inv = ui.kind === 'inventory';
-      const wide = hero || inv || ['shop', 'scrap', 'save', 'load', 'logout', 'guest', 'sound'].includes(ui.kind);
-      const pw = (wide ? 11 : 9) * TILE;
+      const wide = hero || inv || ['shop', 'scrap', 'save', 'load', 'logout', 'guest', 'sound', 'spelltech'].includes(ui.kind);
+      const pw = (ui.kind === 'spelltech' ? 15 : wide ? 11 : 9) * TILE;
       ctx.font = '26px ' + MONO;
       const textLines = WINDOW_TEXT[ui.kind] ? wrapText(WINDOW_TEXT[ui.kind], pw - 80) : [];
       const msgLines = ui.msg ? wrapText(ui.msg, pw - 80) : [];
@@ -1971,6 +2033,7 @@
         const y = top + i * rowH + gapY, sel = !info && i === ui.cursor;
         rowRects.push({ x: px + 24, y, w: pw - 48, h: rowH - 8, i });
         if (sel) { ctx.fillStyle = 'rgba(255, 220, 0, 0.12)'; ctx.fillRect(px + 24, y, pw - 48, rowH - 8); }
+        if (r.craft) { drawCraftRow(r.craft, px + 24, y, pw - 48, rowH - 8, sel); return; }
         ctx.fillStyle = r.dim ? '#6a6a6a' : r.item && rarityOf(r.item.name) !== 'common' ? rarityColor(r.item.name) : sel || info ? '#fff' : '#cfcfcf';
         ctx.font = (sel ? '600 ' : '') + (info ? '22px ' : ui.kind === 'cheat' ? '26px ' : '30px ') + MONO;
         ctx.textAlign = 'left';
@@ -1997,7 +2060,7 @@
       }
       ctx.fillStyle = '#8a8a8a';
       ctx.font = '22px ' + MONO;
-      ctx.fillText(hero ? 'H or Esc close' : ui.kind === 'gameover' ? 'Space start a new game' : inv ? 'A/D/W/S choose · Space equip/learn/unequip · I or Esc close' : ui.kind === 'loot' ? 'W/S choose · Space take · Esc close' : ui.kind === 'cheat' ? 'W/S choose · Space apply · P or Esc close' : ui.kind === 'scrap' ? 'W/S choose · Space buy / sell · Esc close' : ui.kind === 'rest' ? (restReadyAt > Date.now() ? (ui.back ? 'Esc back' : 'Esc close') : 'Space confirm · Esc close') : info ? (ui.back ? 'Esc back' : 'Esc close') : (ui.back ? 'W/S choose · Space select · Esc back' : 'W/S choose · Space select · Esc close'), px + 40, py + ph - 40);
+      ctx.fillText(hero ? 'H or Esc close' : ui.kind === 'gameover' ? 'Space start a new game' : inv ? 'A/D/W/S choose · Space equip/learn/unequip · I or Esc close' : ui.kind === 'loot' ? 'W/S choose · Space take · Esc close' : ui.kind === 'cheat' ? 'W/S choose · Space apply · P or Esc close' : ui.kind === 'scrap' ? 'W/S choose · Space buy / sell · Esc close' : ui.kind === 'spelltech' ? 'W/S choose · Space craft · Esc close' : ui.kind === 'rest' ? (restReadyAt > Date.now() ? (ui.back ? 'Esc back' : 'Esc close') : 'Space confirm · Esc close') : info ? (ui.back ? 'Esc back' : 'Esc close') : (ui.back ? 'W/S choose · Space select · Esc back' : 'W/S choose · Space select · Esc close'), px + 40, py + ph - 40);
     }
 
     // ---- game over ------------------------------------------------------------------------
@@ -2264,7 +2327,7 @@
         ctx.fillStyle = rarityColor(sel.name);   // name in its rarity colour
         ctx.fillText(`${sel.name} · ${rarityOf(sel.name)} ${def.class || sel.class || 'item'}${def.stack > 1 ? ` · ${n}/${def.stack}` : ''}`, x + 24, ly);
         ctx.fillStyle = '#cfcfcf';
-        ctx.fillText(def.class === 'skill' ? 'Space to learn' : def.class === 'resource' ? 'crafting resource' : def.class === 'upgrade' ? 'upgrade material (use comes later)'
+        ctx.fillText(def.class === 'skill' ? 'Space to learn' : def.class === 'resource' ? 'crafting resource' : def.consume ? 'Space to consume: +1 mana cap' : def.class === 'upgrade' ? 'upgrade material (use comes later)'
           : `${bonusText(def)} when equipped · Space equip`, x + 24, ly + 26);
         const unit = def.class === 'equipment' ? def.price : def.value;   // equipment: shop price; resources: value per piece
         ctx.fillStyle = '#f5c542';
