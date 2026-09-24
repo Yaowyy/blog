@@ -1214,9 +1214,14 @@
       ctx.stroke();
       }
 
-      // tile the hero is facing: yellow at 5% opacity, follows the hero as he glides
-      ctx.fillStyle = 'rgba(255, 220, 0, 0.05)';
-      ctx.fillRect(Math.round((rx + facing.x) * TILE), Math.round((ry + facing.y) * TILE), TILE, TILE);
+      // tile the hero is facing: a soft, blurred yellow triangle (3%) with its tip toward the hero, widening away from him
+      ctx.save();
+      ctx.translate((rx + facing.x + 0.5) * TILE, (ry + facing.y + 0.5) * TILE);
+      ctx.rotate(Math.atan2(facing.y, facing.x));
+      ctx.globalAlpha = 0.03;
+      const fm = facingMarker(), fs = fm.width;
+      ctx.drawImage(fm, -fs / 2, -fs / 2, fs, fs);
+      ctx.restore();
 
       // exits: soft glow fading toward the map edge, with a chevron pointing out
       for (const e of AREAS[areaName].exits) for (const [tx, ty] of e.tiles) {
@@ -1275,11 +1280,53 @@
       const dw = (w.artW || w.w || 1) * TILE; return { im, dw, dh: dw * im.naturalHeight / im.naturalWidth };
     }
     function wallTop(w) { const a = artSize(w), f = foot(w); return a ? (f.y1 + 1) * TILE - a.dh : f.y0 * TILE; }
+    // neon outline around a picture's silhouette: a ring just outside it plus a soft glow. Built once per picture/size/colour.
+    const outlineCache = new Map();
+    const OUTLINE_PAD = 14;
+    function outlineOf(im, sx, sy, sw, sh, dw, dh, color) {
+      const key = `${im.src}|${sx}|${sy}|${Math.round(dw)}|${Math.round(dh)}|${color}`;
+      let c = outlineCache.get(key);
+      if (c) return c;
+      const P = OUTLINE_PAD, W = Math.ceil(dw) + 2 * P, H = Math.ceil(dh) + 2 * P;
+      const ring = document.createElement('canvas'); ring.width = W; ring.height = H;
+      const r = ring.getContext('2d');
+      for (let a = 0; a < 16; a++) r.drawImage(im, sx, sy, sw, sh, P + Math.cos(a / 8 * Math.PI) * 3, P + Math.sin(a / 8 * Math.PI) * 3, dw, dh);   // grow the silhouette by 3 px
+      r.globalCompositeOperation = 'source-in'; r.fillStyle = color; r.fillRect(0, 0, W, H);
+      r.globalCompositeOperation = 'destination-out'; r.drawImage(im, sx, sy, sw, sh, P, P, dw, dh);   // keep only the ring outside the picture
+      c = document.createElement('canvas'); c.width = W; c.height = H;
+      const g = c.getContext('2d');
+      g.shadowColor = color; g.shadowBlur = 10; g.drawImage(ring, 0, 0); g.drawImage(ring, 0, 0);   // neon glow
+      outlineCache.set(key, c);
+      return c;
+    }
+    const NEON = { building: { color: '#ffdc00', alpha: 0.1 }, enemy: { color: '#ff3b3b', alpha: 0.05 } };
+    // blurred triangle for the facing marker, built once: tip at the left (toward the hero), wide side at the right.
+    // The blur is a shadow cast by a triangle drawn off to the side, so it works in every browser.
+    let facingMarkerCanvas = null;
+    function facingMarker() {
+      if (facingMarkerCanvas) return facingMarkerCanvas;
+      const S = Math.round(TILE * 1.4), c = document.createElement('canvas'); c.width = c.height = S;
+      const g = c.getContext('2d'), off = S * 4, h = TILE * 0.42;
+      g.shadowColor = '#ffdc00'; g.shadowBlur = 16; g.shadowOffsetX = off;
+      g.fillStyle = '#ffdc00';
+      g.beginPath(); g.moveTo(S / 2 - h - off, S / 2); g.lineTo(S / 2 + h - off, S / 2 - h * 0.95); g.lineTo(S / 2 + h - off, S / 2 + h * 0.95); g.closePath(); g.fill();
+      return (facingMarkerCanvas = c);
+    }
+    const facingEnemy = () => !anyOpen() && dripAt(player.x + facing.x, player.y + facing.y);
+    // the building the hero faces and can use (it has something to open)
+    const facedBuilding = () => { if (anyOpen()) return null; const w = wallAt(player.x + facing.x, player.y + facing.y); return w && w.opens ? w : null; };
+
     function drawWall(w) {
       const f = foot(w), a = artSize(w);
       if (a) {
         ctx.imageSmoothingQuality = 'high';
-        ctx.drawImage(a.im, footCX(w) * TILE - a.dw / 2, (f.y1 + 1) * TILE - a.dh, a.dw, a.dh);
+        const x = footCX(w) * TILE - a.dw / 2, y = (f.y1 + 1) * TILE - a.dh;
+        ctx.drawImage(a.im, x, y, a.dw, a.dh);
+        if (w === facedBuilding()) {   // interactable: yellow neon outline
+          ctx.save(); ctx.globalAlpha = NEON.building.alpha;
+          ctx.drawImage(outlineOf(a.im, 0, 0, a.im.naturalWidth, a.im.naturalHeight, a.dw, a.dh, NEON.building.color), x - OUTLINE_PAD, y - OUTLINE_PAD);
+          ctx.restore();
+        }
       } else {
         ctx.fillStyle = w.color;
         ctx.fillRect(f.x0 * TILE, f.y0 * TILE, (f.x1 - f.x0 + 1) * TILE, (f.y1 - f.y0 + 1) * TILE);
@@ -1292,18 +1339,23 @@
       return { x: drip.fromX + (drip.x - drip.fromX) * p, y: drip.fromY + (drip.y - drip.fromY) * p };
     }
     // one cell of a Drip sheet, puddle centre on the tile's bottom-centre, scaled so his body is DRIP_BODY tiles
-    function drawDripCell(im, spec, frame, cx, feet, squash) {
+    function drawDripCell(im, spec, frame, cx, feet, squash, neon) {
       const fw = im.naturalWidth / spec.frames, fh = im.naturalHeight, s = DRIP_BODY * TILE / spec.body;
       ctx.save(); ctx.translate(cx, feet); if (drip.lookX > 0) ctx.scale(-1, 1);   // art faces left
       ctx.scale(1, squash || 1);
       ctx.imageSmoothingQuality = 'high';
+      if (neon) {   // neon outline behind him while the hero faces him (red while alive, yellow when his loot can be taken)
+        ctx.save(); ctx.globalAlpha = neon.alpha;
+        ctx.drawImage(outlineOf(im, frame * fw, 0, fw, fh, fw * s, fh * s, neon.color), -spec.ax * s - OUTLINE_PAD, -fh * s - OUTLINE_PAD);
+        ctx.restore();
+      }
       ctx.drawImage(im, frame * fw, 0, fw, fh, -spec.ax * s, -fh * s, fw * s, fh * s);
       ctx.restore();
     }
     function drawDrip(d) {
       const t = gameTime, cx = (d.x + 0.5) * TILE, feet = (d.y + 1) * TILE - 2;
       if (drip.dead) {
-        if (ready(ART.dripHurt)) drawDripCell(ART.dripHurt, DRIP_ART.hurt, 1, cx, feet);
+        if (ready(ART.dripHurt)) drawDripCell(ART.dripHurt, DRIP_ART.hurt, 1, cx, feet, 1, drip.loot && lootable() && !anyOpen() ? NEON.building : null);
         if (drip.loot) {   // loot waiting: a pulsing gold glint over the puddle, "loot" when faced
           const k = 0.5 + 0.5 * Math.sin(performance.now() / 250), gy = feet - 52;
           ctx.save(); ctx.globalAlpha = 0.5 + 0.5 * k; ctx.fillStyle = '#f5c542';
@@ -1318,9 +1370,9 @@
         return;
       }
       const sinceAtk = t - drip.attackStart, sinceHurt = t - drip.hurtStart;
-      if (sinceAtk < 700 && ready(ART.dripAttack)) drawDripCell(ART.dripAttack, DRIP_ART.attack, Math.min(3, Math.floor(sinceAtk / 175)), cx, feet);
-      else if (sinceHurt < 300 && ready(ART.dripHurt)) drawDripCell(ART.dripHurt, DRIP_ART.hurt, 0, cx, feet);
-      else if (ready(ART.dripIdle)) drawDripCell(ART.dripIdle, DRIP_ART.idle, 0, cx, feet, 1 + 0.025 * Math.sin(t / 260));   // oily wobble
+      if (sinceAtk < 700 && ready(ART.dripAttack)) drawDripCell(ART.dripAttack, DRIP_ART.attack, Math.min(3, Math.floor(sinceAtk / 175)), cx, feet, 1, facingEnemy() ? NEON.enemy : null);
+      else if (sinceHurt < 300 && ready(ART.dripHurt)) drawDripCell(ART.dripHurt, DRIP_ART.hurt, 0, cx, feet, 1, facingEnemy() ? NEON.enemy : null);
+      else if (ready(ART.dripIdle)) drawDripCell(ART.dripIdle, DRIP_ART.idle, 0, cx, feet, 1 + 0.025 * Math.sin(t / 260), facingEnemy() ? NEON.enemy : null);   // oily wobble
       else { ctx.fillStyle = '#10131C'; ctx.fillRect(d.x * TILE + 10, d.y * TILE + 10, TILE - 20, TILE - 20); }
       if (t < (drip.stunUntil || 0)) {   // magic tar: glowing magenta ring pinning him down
         const k = 0.6 + 0.4 * Math.sin(t / 120);
