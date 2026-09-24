@@ -157,6 +157,92 @@
     get(k) { try { return JSON.parse(localStorage.getItem(k)); } catch { return null; } },
     set(k, v) { try { localStorage.setItem(k, JSON.stringify(v)); return true; } catch { return false; } },
   };
+  // ---- sound --------------------------------------------------------------------
+  // Web Audio: the whole track is decoded once and looped sample-exact (no click at the loop point).
+  // Music starts only when the player enters the game; browsers also need a key press or tap before any sound.
+  const MUSIC_SRC = 'audio/background_music.m4a';
+  const SETTINGS_KEY = 'littlegame.settings';
+  const settings = Object.assign({ music: 3, sfx: 3 }, store.get(SETTINGS_KEY) || {});   // 0-5 steps of 20%, per device
+  const volumeBar = n => '[' + '='.repeat(n) + '\u00b7'.repeat(5 - n) + '] ' + String(n * 20).padStart(3) + '%';
+  const audio = { ctx: null, music: null, sfx: null, buffer: null, loading: null, source: null, wanted: false, el: null };
+  function audioCtx() {
+    if (audio.ctx) return audio.ctx;
+    const AC = window.AudioContext || window.webkitAudioContext;
+    if (!AC) return null;
+    audio.ctx = new AC();
+    audio.music = audio.ctx.createGain(); audio.music.connect(audio.ctx.destination);
+    audio.sfx = audio.ctx.createGain(); audio.sfx.connect(audio.ctx.destination);   // sound effects will play through this one
+    applyVolumes();
+    return audio.ctx;
+  }
+  const curve = n => Math.pow(n / 5, 2);   // ears hear volume logarithmically: squared steps feel even
+  function applyVolumes() {
+    if (audio.ctx) {
+      const t = audio.ctx.currentTime;
+      audio.music.gain.setTargetAtTime(audio.wanted ? curve(settings.music) : 0, t, 0.15);
+      audio.sfx.gain.setTargetAtTime(curve(settings.sfx), t, 0.05);
+    }
+    if (audio.el) audio.el.volume = audio.wanted ? curve(settings.music) : 0;
+  }
+  function stepVolume(which, d, wrap = true) {
+    let n = settings[which] + d;
+    n = wrap ? (n + 6) % 6 : Math.max(0, Math.min(5, n));   // Space / tap: 0-20-…-100-0; A/D stop at the ends
+    settings[which] = n; store.set(SETTINGS_KEY, { music: settings.music, sfx: settings.sfx });
+    applyVolumes();
+    if (which === 'music' && n > 0) startMusic();
+  }
+  async function loadMusic() {
+    const res = await fetch(MUSIC_SRC);
+    if (!res.ok) throw new Error('music ' + res.status);
+    const data = await res.arrayBuffer();
+    const buf = await new Promise((ok, fail) => { const p = audio.ctx.decodeAudioData(data, ok, fail); if (p && p.catch) p.catch(fail); });
+    // AAC files carry a few ms of digital silence at the start/end (encoder padding): loop only the real music
+    const ch = [...Array(buf.numberOfChannels)].map((_, c) => buf.getChannelData(c)), lim = Math.floor(buf.sampleRate * 0.2);
+    const loud = i => ch.some(d => Math.abs(d[i]) > 1e-5);
+    let a = 0, b = buf.length;
+    while (a < lim && !loud(a)) a++;
+    while (buf.length - b < lim && b > a + 1 && !loud(b - 1)) b--;
+    audio.loop = [a / buf.sampleRate, b / buf.sampleRate];
+    return buf;
+  }
+  function startMusic() {
+    audio.wanted = true;
+    if (!settings.music) { applyVolumes(); return; }
+    const ac = audioCtx();
+    if (!ac) return fallbackMusic();
+    if (ac.state === 'suspended') ac.resume().catch(() => {});
+    applyVolumes();
+    if (audio.source || audio.el) { if (audio.el) audio.el.play().catch(() => {}); return; }
+    if (!audio.loading) audio.loading = loadMusic().then(buf => {
+      audio.buffer = buf;
+      if (audio.wanted && !audio.source) {
+        const src = ac.createBufferSource();
+        src.buffer = buf; src.loop = true; src.loopStart = audio.loop[0]; src.loopEnd = audio.loop[1];
+        src.connect(audio.music); src.start(0, audio.loop[0]);
+        audio.source = src;
+      }
+    }).catch(() => fallbackMusic());   // an old browser that can't decode it: a plain looping <audio>
+  }
+  function fallbackMusic() {
+    if (audio.el) return;
+    audio.el = new Audio(MUSIC_SRC); audio.el.loop = true;
+    applyVolumes(); audio.el.play().catch(() => {});
+  }
+  function stopMusic() {   // log out: fade out, stay silent until the next game starts
+    audio.wanted = false; applyVolumes();
+    if (audio.el) setTimeout(() => { if (!audio.wanted) audio.el.pause(); }, 400);
+  }
+  // autoplay rules: the first key press / tap after entering unlocks the sound
+  const unlockAudio = () => {
+    if (audio.ctx && audio.ctx.state === 'suspended' && audio.wanted && !document.hidden) audio.ctx.resume().catch(() => {});
+    if (audio.el && audio.wanted && audio.el.paused) audio.el.play().catch(() => {});
+  };
+  addEventListener('keydown', unlockAudio, true); addEventListener('pointerdown', unlockAudio, true);
+  document.addEventListener('visibilitychange', () => {   // tab in the background: pause the sound (saves battery)
+    if (document.hidden) { audio.ctx && audio.ctx.suspend().catch(() => {}); audio.el && audio.el.pause(); }
+    else unlockAudio();
+  });
+
   async function sha256(text) {
     if (crypto.subtle) {
       const buf = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(text));
@@ -539,8 +625,16 @@
         { left: 'save', right: account ? '' : 'account needed', gapBefore: true, act() { account ? openSlots('save') : openWindow('guest', 0, fromHere()); } },
         { left: 'load game', right: account ? '' : 'account needed', act() { account ? openSlots('load') : openWindow('guest', 0, fromHere()); } },
         { left: 'controls', right: '', gapBefore: true, act() { openWindow('controls', 0, fromHere()); } },
+        { left: 'settings', right: '', act() { openWindow('settings', 0, fromHere()); } },
         account ? { left: 'log out', right: heroName || '', gapBefore: true, act() { openWindow('logout', 1, fromHere()); } }
                 : { left: 'create account / log in', right: '', gapBefore: true, act() { openWindow('guest', 0, fromHere()); } },
+      ];
+      if (ui.kind === 'settings') return [
+        { left: 'sound', right: '', act() { openWindow('sound', 0, fromHere()); } },
+      ];
+      if (ui.kind === 'sound') return [
+        { left: 'background music', right: volumeBar(settings.music), vol: 'music', act() { stepVolume('music', 1); } },
+        { left: 'sound effects', right: volumeBar(settings.sfx), vol: 'sfx', act() { stepVolume('sfx', 1); } },
       ];
       if (ui.kind === 'guest') return [
         { left: 'create account', right: '', act() { toAccount('create'); } },
@@ -741,10 +835,11 @@
       ];
     }
     const TITLES = { shop: 'ATB-Market', work: 'TradeCorp', menu: 'Menu', controls: 'Controls', hero: 'Hero', inventory: 'Inventory', gameover: 'Game over', loot: 'Loot · Drip', rest: 'HomeDome', cheat: 'Cheats (testing)', scrap: 'Scrap Dealer',
-                     map: 'Map', restart: 'Restart', save: 'Save', load: 'Load game', logout: 'Log out', guest: 'Playing as guest' };
+                     map: 'Map', settings: 'Settings', sound: 'Sound', restart: 'Restart', save: 'Save', load: 'Load game', logout: 'Log out', guest: 'Playing as guest' };
     // windows with a paragraph above their options
     const WINDOW_TEXT = {
       restart: 'Are you sure?',
+      sound: 'A / D (or ← →) to change, Space to step up. Each step is 20%.',
       guest: 'Guests can’t save. Create a free account to keep this run, or log in to continue a saved one.',
       logout: 'Log out? Sure. Leave your hero alone in a neon city crawling with gangs, killer drones, and things lurking in dark alleys. Without you, they’ll be robbed, hunted, and probably found face-down in a puddle under a flickering noodle sign. But hey, I’m sure you have VERY important things to do.',
     };
@@ -764,6 +859,7 @@
       ['Space (hero)', 'unequip'],
       ['A / D (inventory)', 'choose a slot'],
       ['Space (inventory)', 'equip / learn'],
+      ['A / D (sound settings)', 'volume down / up'],
       ['W / S', 'choose in a window'],
       ['1 2 3', 'pick a row (window) / cast spell'],
     ];
@@ -1242,6 +1338,8 @@
         return;
       }
       if (ui) {                              // inside a window W/S move the highlight
+        const vr = ui.kind === 'sound' && rows()[ui.cursor];   // sound window: A/D turn the highlighted volume down/up
+        if (vr && vr.vol && (keys.includes('a') || keys.includes('d'))) { stepVolume(vr.vol, keys.includes('d') ? 1 : -1, false); ui.msg = ''; return; }
         if (keys.includes('w')) moveCursor(-1);
         if (keys.includes('s')) moveCursor(1);
         return;
@@ -1721,7 +1819,7 @@
       const info = ui.kind === 'controls';          // read-only list, nothing to select
       const rowH = info ? 38 : ui.kind === 'shop' || ui.kind === 'loot' || ui.kind === 'scrap' ? 88 : ui.kind === 'cheat' ? 50 : 64;   // shop and loot rows are taller for the item pictures
       const hero = ui.kind === 'hero', inv = ui.kind === 'inventory';
-      const wide = hero || inv || ['shop', 'scrap', 'save', 'load', 'logout', 'guest'].includes(ui.kind);
+      const wide = hero || inv || ['shop', 'scrap', 'save', 'load', 'logout', 'guest', 'sound'].includes(ui.kind);
       const pw = (wide ? 11 : 9) * TILE;
       ctx.font = '26px ' + MONO;
       const textLines = WINDOW_TEXT[ui.kind] ? wrapText(WINDOW_TEXT[ui.kind], pw - 80) : [];
@@ -2175,6 +2273,7 @@
       account = user ? { id: user.id, email: user.email } : null;
       heroName = user ? (user.user_metadata?.hero_name || user.email.split('@')[0]).slice(0, 10) : 'guest';
       accEl.hidden = true; document.activeElement?.blur();
+      startMusic();
       newGame(); renderStats();
       lastAutosave = Date.now();   // don't autosave the fresh run over an existing save
       const { slots } = await listSlots();   // continue from the newest slot (autosave or manual)
@@ -2193,6 +2292,7 @@
       if (account) await writeSlot(1);   // autosave before leaving
       if (sb && account) await sb.auth.signOut();
       account = null; heroName = null; slotInfo = { state: 'loading', slots: {} };
+      stopMusic();
       newGame(); renderStats(); showAccount('login');
     }
     // on page load: already logged in (Supabase keeps the session), or just back from the confirmation link?
