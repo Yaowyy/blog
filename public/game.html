@@ -1961,19 +1961,19 @@
       ctx.restore();
     }
 
-    // one recipe: costs (item icons, energy) and the item's description on the left; a big slot with the item and its name on the right
+    // one recipe: a big slot with the made item and its name on the left; costs (item icons, energy) and the description on the right
     function drawCraftRow(r, x, y, w, h, sel) {
-      const big = h - 40, sx = x + w - 20 - 230 - big, sy = y + 20;
+      const big = h - 40, sx = x + 20, sy = y + 20, nameW = 220;
       const def = itemDef(r.make) || {};
       drawSlot(sx, sy, big, { name: r.make, count: r.count });
       ctx.textAlign = 'left'; ctx.textBaseline = 'middle';
       ctx.fillStyle = rarityColor(r.make); ctx.font = (sel ? '700 ' : '600 ') + '30px ' + MONO;
-      wrapText(r.make, 220).forEach((l, i, a) => ctx.fillText(l, sx + big + 20, sy + big / 2 + (i - (a.length - 1) / 2) * 36));
+      wrapText(r.make, nameW).forEach((l, i, a) => ctx.fillText(l, sx + big + 20, sy + big / 2 + (i - (a.length - 1) / 2) * 36));
       ctx.font = '18px ' + MONO; ctx.fillStyle = '#8a8a8a';
       ctx.fillText(`${def.rarity || 'common'} ${def.class || 'item'}`, sx + big + 20, sy + big - 10);
-      // costs: icon slot + "have/need" (green when there is enough, red when not), then energy
-      let cx = x + 20; const cy = y + 20, cs = 64;
-      ctx.font = '600 24px ' + MONO;
+      // right part: costs = icon slot + amount (green when there is enough, red when not) + "name (have)", then energy
+      const rx = sx + big + 20 + nameW + 30, cy = y + 20, cs = 64;
+      let cx = rx;
       for (const [name, n] of r.cost) {
         drawSlot(cx, cy, cs, { name });
         const have = countOf(name); ctx.textAlign = 'left'; ctx.textBaseline = 'middle';
@@ -1985,9 +1985,9 @@
       ctx.font = '600 26px ' + MONO; ctx.fillStyle = stats.energy >= r.energy ? '#9dff5c' : '#e5484d';
       ctx.fillText(`${r.energy} ${ICON.energy}`, cx, cy + cs / 2);
       ctx.font = '22px ' + MONO; ctx.fillStyle = '#cfcfcf';
-      wrapText(def.desc || '', sx - x - 40).forEach((l, i) => ctx.fillText(l, x + 20, cy + cs + 34 + i * 30));
+      wrapText(def.desc || '', x + w - 20 - rx).forEach((l, i) => ctx.fillText(l, rx, cy + cs + 34 + i * 30));
       if (def.consume && def.consume.manaCap) { ctx.fillStyle = '#4ea1ff'; ctx.font = '20px ' + MONO;
-        ctx.fillText(`Consume: +${def.consume.manaCap} ${ICON.mana} mana cap`, x + 20, y + h - 22); }
+        ctx.fillText(`Consume: +${def.consume.manaCap} ${ICON.mana} mana cap`, rx, y + h - 22); }
     }
     function drawWindow() {
       if (ui.kind === 'map') { drawBigMap(); return; }
