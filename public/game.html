@@ -94,6 +94,7 @@
       <button type="submit" id="acc-submit">Create account</button>
       <p id="acc-resend-row" hidden><a href="#" id="acc-resend">Resend the confirmation email</a></p>
       <p><a href="#" id="acc-switch">Already have an account? Log in</a></p>
+      <p><a href="#" id="acc-guest">Play as guest (no saving)</a></p>
       <p id="acc-hint">Name: letters only, up to 10 · password: 6+ characters. You'll get an email to confirm it's yours.</p>
     </form>
   </div>
@@ -106,7 +107,6 @@
       <p>Enter to unlock · Esc to cancel</p>
     </form>
   </div>
-  <input type="file" id="save-upload" accept=".json,application/json" hidden>
 </div>
 
 <div class="hud">
@@ -382,7 +382,8 @@
     let dealsDone = saved.dealsDone ?? 0;   // how many work deals the hero has taken this run
     let heroName = saved.heroName ?? null;  // the account's name
     let account = null;                     // logged-in Supabase user { id, email }, or null (account screen shows)
-    let cloud = { state: 'none' };          // online save info: { state: 'checking' | 'none' | 'saved', at }
+    // save slots: 1 = autosave (only the game writes it), 2 and 3 = manual. Online per account, or in this browser when offline.
+    let slotInfo = { state: 'loading', slots: {} };   // slots[n] = { state, at, summary }
     let cheatsUnlocked = false;             // after the right password, for this page visit
     const inventory = saved.inventory ? saved.inventory.map(it => ({ ...it, name: { 'tart': 'tar', 'magic tart': 'magic tar' }[it.name] || it.name })) : [];   // [{ name, kind, class }] — no bonuses while here
     const equipped = saved.equipped ? [...saved.equipped] : [];      // equipped items — their bonuses apply
@@ -470,19 +471,47 @@
           return `Worked: -${cost} ${ICON.energy}, +${d.money}$. New deals.`;
         },
       }));
-      if (ui.kind === 'menu') {
-        const online = !!(account && sb);
-        const when = cloud.state === 'saved' ? new Date(cloud.at).toLocaleString() : cloud.state === 'checking' ? 'checking…' : 'no save yet';
-        return [
-          { left: 'resume', right: '', act() { ui = null; } },
-          { left: 'save game', right: online ? 'online' : 'offline', act() { if (!online) return 'Playing offline: use "download save file".'; saveOnline(); return 'Saving…'; } },
-          { left: 'load game', right: online ? when : 'offline', act() { if (!online) return 'Playing offline: use "upload save file".'; loadOnline(); return 'Loading…'; } },
-          { left: 'download save file', right: '.json', act() { downloadSave(); return 'Save file downloaded.'; } },
-          { left: 'upload save file', right: '.json', act() { document.getElementById('save-upload').click(); return 'Choose a save file…'; } },
-          { left: 'controls', right: '', act() { openWindow('controls'); } },
-          { left: 'new game', right: '', act() { newGame(); } },
-          { left: online ? 'log out' : 'log in', right: heroName || '', act() { logOut(); } },
-        ];
+      if (ui.kind === 'menu') return [
+        { left: 'continue', right: '', act() { ui = null; } },
+        { left: 'restart', right: '', act() { openWindow('restart', 1, fromHere()); } },
+        { left: 'save', right: account ? '' : 'account needed', gapBefore: true, act() { account ? openSlots('save') : openWindow('guest', 0, fromHere()); } },
+        { left: 'load game', right: account ? '' : 'account needed', act() { account ? openSlots('load') : openWindow('guest', 0, fromHere()); } },
+        { left: 'controls', right: '', gapBefore: true, act() { openWindow('controls', 0, fromHere()); } },
+        account ? { left: 'log out', right: heroName || '', gapBefore: true, act() { openWindow('logout', 1, fromHere()); } }
+                : { left: 'create account / log in', right: '', gapBefore: true, act() { openWindow('guest', 0, fromHere()); } },
+      ];
+      if (ui.kind === 'guest') return [
+        { left: 'create account', right: '', act() { toAccount('create'); } },
+        { left: 'log in', right: '', act() { toAccount('login'); } },
+        { left: 'keep playing', right: '', act() { ui = null; } },
+      ];
+      if (ui.kind === 'restart') return [
+        { left: 'yes', right: '', act() { newGame(); autosave(true); } },
+        { left: 'no', right: '', act() { goBack(); } },
+      ];
+      if (ui.kind === 'logout') return [
+        { left: 'log out', right: '', act() { logOut(); } },
+        { left: 'stay', right: '', act() { ui = null; } },
+      ];
+      if (ui.kind === 'save' || ui.kind === 'load') {
+        const saving = ui.kind === 'save';
+        if (slotInfo.state === 'loading') return [{ left: 'loading saves…', right: '', act() {} }];
+        if (slotInfo.state === 'error') return [{ left: "couldn't reach your saves", right: 'retry', act() { refreshSlots(); return 'Retrying…'; } }];
+        return [1, 2, 3].map(n => {
+          const s = slotInfo.slots[n], label = n === 1 ? 'autosave' : `slot ${n}`;
+          return {
+            left: label, right: s ? `${s.summary} · ${when(s.at)}` : 'empty', dim: saving && n === 1,
+            act() {
+              if (saving) {
+                if (n === 1) return 'The autosave slot is written by the game only.';
+                writeSlot(n).then(err => { if (ui && ui.kind === 'save') ui.msg = err ? `Save failed: ${err}` : `Saved to slot ${n}.`; });
+                return 'Saving…';
+              }
+              if (!s) return 'This slot is empty.';
+              applySave(s.state); ui = null; float('game loaded', '#3ddc84', player.x + 0.5, player.y - 0.8);
+            },
+          };
+        });
       }
       if (ui.kind === 'loot') return lootRows();
       if (ui.kind === 'cheat') return cheatRows();
@@ -540,45 +569,44 @@
       if (!free(player.x, player.y)) { player.x = START.x; player.y = START.y; fromX = player.x; fromY = player.y; }
       renderStats();
     }
-    // online save: one row per player in the "saves" table (upsert replaces the previous save)
-    const menuMsg = m => { if (ui && ui.kind === 'menu') ui.msg = m; };
-    async function saveOnline() {
-      const now = new Date().toISOString();
-      const { error } = await sb.from('saves').upsert({ user_id: account.id, hero_name: heroName, state: { version: SAVE_VERSION, ...snapshot() }, updated_at: now });
-      if (error) { console.warn(error); return menuMsg(`Save failed: ${error.message}`); }
-      cloud = { state: 'saved', at: now }; menuMsg('Game saved online.');
+    // ---- save slots -----------------------------------------------------------------
+    // online: one row per (player, slot) in the "saves" table. Offline: localStorage.
+    // guests can't save; a guest run is parked here when they go to create an account, and picked up after the first login
+    const GUEST_RUN = 'littlegame.guestRun';
+    const when = t => { const d = new Date(t); return `${d.getDate()} ${d.toLocaleString('en', { month: 'short' })} ${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`; };
+    const summarize = s => `${s.stats?.money ?? 0}$ · ${s.areaName || 'city'}`;
+    async function listSlots() {   // -> { slots } or { error }
+      const slots = {};
+      if (!account || !sb) return { slots };   // guest: nothing saved
+      const { data, error } = await sb.from('saves').select('slot, state, updated_at').eq('user_id', account.id);
+      if (error) { console.warn(error); return { error: error.message }; }
+      for (const r of data) if (r.slot >= 1 && r.slot <= 3) slots[r.slot] = { state: r.state, at: r.updated_at, summary: summarize(r.state) };
+      return { slots };
     }
-    async function fetchSave() {
-      const { data, error } = await sb.from('saves').select('state, updated_at').eq('user_id', account.id).maybeSingle();
-      if (error) { console.warn(error); cloud = { state: 'none' }; return { error }; }
-      cloud = data ? { state: 'saved', at: data.updated_at } : { state: 'none' };
-      return { data };
+    async function refreshSlots() {
+      slotInfo = { state: 'loading', slots: slotInfo.slots };
+      const { slots, error } = await listSlots();
+      slotInfo = error ? { state: 'error', slots: {}, error } : { state: 'ready', slots };
     }
-    async function loadOnline() {
-      const { data, error } = await fetchSave();
-      if (error) return menuMsg(`Load failed: ${error.message}`);
-      if (!data) return menuMsg('No online save yet. Use "save game" first.');
-      applySave(data.state); ui = null; float('game loaded', '#3ddc84', player.x + 0.5, player.y - 0.8);
+    function openSlots(kind) { openWindow(kind, kind === 'save' ? 1 : 0, fromHere()); refreshSlots(); }
+    const fromHere = () => ui && { kind: ui.kind, cursor: ui.cursor, back: ui.back };   // the window to come back to
+    async function writeSlot(n) {   // -> error text, or null when saved
+      const state = { version: SAVE_VERSION, ...snapshot() }, at = new Date().toISOString();
+      if (!account || !sb) return 'guests can’t save';
+      const { error } = await sb.from('saves').upsert({ user_id: account.id, slot: n, hero_name: heroName, state, updated_at: at }, { onConflict: 'user_id,slot' });
+      if (error) { console.warn(error); return error.message; }
+      slotInfo.slots[n] = { state, at, summary: summarize(state) };
+      return null;
     }
-    function downloadSave() {
-      const data = { game: 'little-game', version: SAVE_VERSION, savedAt: Date.now(), name: heroName, state: snapshot() };
-      const a = document.createElement('a');
-      a.href = URL.createObjectURL(new Blob([JSON.stringify(data, null, 1)], { type: 'application/json' }));
-      a.download = `little-game-${(heroName || 'hero').toLowerCase()}-${new Date().toISOString().slice(0, 10)}.json`;
-      document.body.appendChild(a); a.click(); a.remove();
-      setTimeout(() => URL.revokeObjectURL(a.href), 1000);
+    // autosave into slot 1: every 2 minutes of play, and when changing area (at most once per 5 s)
+    const AUTOSAVE_MS = 2 * 60 * 1000;
+    let lastAutosave = 0, lastWrite = 0;
+    function autosave(force) {
+      if (!account || !heroName || naming() || locked() || stats.health <= 0) return;
+      if (!force && Date.now() - lastWrite < 5000) return;
+      lastAutosave = lastWrite = Date.now(); writeSlot(1);
     }
-    document.getElementById('save-upload').addEventListener('change', async e => {
-      const file = e.target.files[0]; e.target.value = '';
-      if (!file) return;
-      try {
-        const data = JSON.parse(await file.text());
-        if (data.game !== 'little-game' || !data.state) throw new Error('not a save');
-        applySave(data.state); ui = null;
-        float('save file loaded', '#3ddc84', player.x + 0.5, player.y - 0.8);
-      } catch { if (ui) ui.msg = "That file isn't a Little Game save."; }
-    });
-
+    setInterval(() => { if (Date.now() - lastAutosave >= AUTOSAVE_MS) autosave(); }, 10000);
     // Scrap Dealer window: first row buys 1 scrap, then one row per inventory slot to sell it
     function scrapRows() {
       const S = SCRAP_DEALER, done = msg => { ui.cursor = Math.min(ui.cursor, inventory.length); return msg; };
@@ -636,14 +664,21 @@
         }),
       ];
     }
-    const TITLES = { shop: 'ATB-Market', work: 'TradeCorp', menu: 'Menu', controls: 'Controls', hero: 'Hero', inventory: 'Inventory', gameover: 'Game over', loot: 'Loot · Drip', rest: 'HomeDome', cheat: 'Cheats (testing)', scrap: 'Scrap Dealer' };
+    const TITLES = { shop: 'ATB-Market', work: 'TradeCorp', menu: 'Menu', controls: 'Controls', hero: 'Hero', inventory: 'Inventory', gameover: 'Game over', loot: 'Loot · Drip', rest: 'HomeDome', cheat: 'Cheats (testing)', scrap: 'Scrap Dealer',
+                     restart: 'Restart', save: 'Save', load: 'Load game', logout: 'Log out', guest: 'Playing as guest' };
+    // windows with a paragraph above their options
+    const WINDOW_TEXT = {
+      restart: 'Are you sure?',
+      guest: 'Guests can’t save. Create a free account to keep this run, or log in to continue a saved one.',
+      logout: 'Log out? Sure. Leave your hero alone in a neon city crawling with gangs, killer drones, and things lurking in dark alleys. Without you, they’ll be robbed, hunted, and probably found face-down in a puddle under a flickering noodle sign. But hey, I’m sure you have VERY important things to do.',
+    };
     const CONTROLS = [
       ['W A S D', 'move'],
       ['two keys, e.g. W+D', 'move diagonally'],
       ['Space', 'open / select'],
       ['Space (facing an enemy)', 'attack'],
       ['Space (facing a beaten enemy)', 'loot'],
-      ['Esc', 'close all windows'],
+      ['Esc', 'back to the previous window / close'],
       ['Esc (nothing open)', 'menu'],
       ['H', 'hero (left)'],
       ['I', 'inventory (bottom right)'],
@@ -656,8 +691,9 @@
       ['1 2 3', 'pick a row (window) / cast spell'],
     ];
 
-    function openWindow(kind) {
-      ui = { kind, cursor: 0, msg: '' };
+    // windows opened from another window remember it: Esc (or "no") goes back there instead of closing everything
+    function openWindow(kind, cursor = 0, back = null) {
+      ui = { kind, cursor, msg: '', back };
       held.clear(); tapped.clear();
     }
     const locked = () => !!ui && ui.kind === 'gameover';   // only "new game" gets you out
@@ -745,7 +781,13 @@
       const w = wallAt(player.x + facing.x, player.y + facing.y);
       if (w && w.opens) openWindow(w.opens);
     }
-    function escPressed() { if (locked()) return; if (anyOpen()) closeAll(); else openWindow('menu'); }   // Esc: close everything, or open the menu
+    function goBack() { const b = ui.back; openWindow(b.kind, b.cursor, b.back); }
+    function escPressed() {   // Esc: back to the previous window, or close everything, or open the menu
+      if (locked()) return;
+      if (ui && ui.back) goBack();
+      else if (anyOpen()) closeAll();
+      else openWindow('menu');
+    }   // Esc: close everything, or open the menu
 
     // ---- combat -----------------------------------------------------------------
     let gameTime = 0, lastFrame = performance.now();   // game clock: stops while a window is open
@@ -1054,7 +1096,7 @@
       groundLayer = null;
       drip = null; rootedUntil = 0; projectiles.length = 0;
       if (name === 'slums') spawnDrip();   // Drip is back at full health every time the slums are entered
-      if (!instant) { areaFade = performance.now(); areaBanner = areaFade; }
+      if (!instant) { areaFade = performance.now(); areaBanner = areaFade; setTimeout(() => autosave(), 0); }
       renderStats();
     }
     const GROUND_REPEAT = 6;   // tiles per texture repeat
@@ -1397,7 +1439,14 @@
       const info = ui.kind === 'controls';          // read-only list, nothing to select
       const rowH = info ? 38 : ui.kind === 'shop' || ui.kind === 'loot' || ui.kind === 'scrap' ? 88 : ui.kind === 'cheat' ? 50 : 64;   // shop and loot rows are taller for the item pictures
       const hero = ui.kind === 'hero', inv = ui.kind === 'inventory';
-      const pw = (hero || inv || ui.kind === 'shop' || ui.kind === 'scrap' ? 11 : 9) * TILE, ph = hero || inv ? 7 * TILE : ui.kind === 'rest' ? 5 * TILE : Math.max(6 * TILE, 110 + list.length * rowH + 130);
+      const wide = hero || inv || ['shop', 'scrap', 'save', 'load', 'logout', 'guest'].includes(ui.kind);
+      const pw = (wide ? 11 : 9) * TILE;
+      ctx.font = '26px ' + MONO;
+      const textLines = WINDOW_TEXT[ui.kind] ? wrapText(WINDOW_TEXT[ui.kind], pw - 80) : [];
+      const msgLines = ui.msg ? wrapText(ui.msg, pw - 80) : [];
+      const textH = textLines.length ? textLines.length * 34 + 24 : 0, gaps = list.filter(r => r.gapBefore).length * 24;
+      const ph = hero || inv ? 7 * TILE : ui.kind === 'rest' ? 5 * TILE
+        : Math.min(canvas.height - 20, Math.max(6 * TILE, 110 + textH + list.length * rowH + gaps + Math.max(1, msgLines.length) * 32 + 100));
       const px = (canvas.width - pw) / 2, py = (canvas.height - ph) / 2;
       ctx.fillStyle = 'rgba(0, 0, 0, 0.6)';
       ctx.fillRect(0, 0, canvas.width, canvas.height);
@@ -1418,12 +1467,16 @@
         ctx.fillText(`${ICON.energy} ${stats.energy}   ${stats.money}$`, px + pw - 40, py + 56);
       }
 
-      const top = py + 110;
+      ctx.font = '26px ' + MONO; ctx.fillStyle = '#cfcfcf'; ctx.textAlign = 'left';
+      textLines.forEach((l, i) => ctx.fillText(l, px + 40, py + 110 + i * 34));
+      const top = py + 110 + textH;
+      let gapY = 0;
       list.forEach((r, i) => {
-        const y = top + i * rowH, sel = !info && i === ui.cursor;
+        if (r.gapBefore) gapY += 24;
+        const y = top + i * rowH + gapY, sel = !info && i === ui.cursor;
         rowRects.push({ x: px + 24, y, w: pw - 48, h: rowH - 8, i });
         if (sel) { ctx.fillStyle = 'rgba(255, 220, 0, 0.12)'; ctx.fillRect(px + 24, y, pw - 48, rowH - 8); }
-        ctx.fillStyle = sel || info ? '#fff' : '#cfcfcf';
+        ctx.fillStyle = r.dim ? '#6a6a6a' : sel || info ? '#fff' : '#cfcfcf';
         ctx.font = (sel ? '600 ' : '') + (info ? '22px ' : ui.kind === 'cheat' ? '26px ' : '30px ') + MONO;
         ctx.textAlign = 'left';
         let tx = px + 40;
@@ -1442,14 +1495,24 @@
       });
 
       ctx.textAlign = 'left';
-      if (ui.msg) {
+      if (msgLines.length) {   // long messages wrap onto more lines
         ctx.fillStyle = '#f5c542';
         ctx.font = '26px ' + MONO;
-        ctx.fillText(ui.msg, px + 40, py + ph - 88);
+        msgLines.forEach((l, i) => ctx.fillText(l, px + 40, py + ph - 88 - (msgLines.length - 1 - i) * 32));
       }
       ctx.fillStyle = '#8a8a8a';
       ctx.font = '22px ' + MONO;
-      ctx.fillText(hero ? 'H or Esc close' : ui.kind === 'gameover' ? 'Space start a new game' : inv ? 'A/D/W/S choose · Space equip/learn/unequip · I or Esc close' : ui.kind === 'loot' ? 'W/S choose · Space take · Esc close' : ui.kind === 'cheat' ? 'W/S choose · Space apply · P or Esc close' : ui.kind === 'scrap' ? 'W/S choose · Space buy / sell · Esc close' : ui.kind === 'rest' ? (restReadyAt > Date.now() ? 'Esc close' : 'Space confirm · Esc close') : info ? 'Esc close' : 'W/S choose · Space select · Esc close', px + 40, py + ph - 40);
+      ctx.fillText(hero ? 'H or Esc close' : ui.kind === 'gameover' ? 'Space start a new game' : inv ? 'A/D/W/S choose · Space equip/learn/unequip · I or Esc close' : ui.kind === 'loot' ? 'W/S choose · Space take · Esc close' : ui.kind === 'cheat' ? 'W/S choose · Space apply · P or Esc close' : ui.kind === 'scrap' ? 'W/S choose · Space buy / sell · Esc close' : ui.kind === 'rest' ? (restReadyAt > Date.now() ? (ui.back ? 'Esc back' : 'Esc close') : 'Space confirm · Esc close') : info ? (ui.back ? 'Esc back' : 'Esc close') : (ui.back ? 'W/S choose · Space select · Esc back' : 'W/S choose · Space select · Esc close'), px + 40, py + ph - 40);
+    }
+
+    function wrapText(text, maxW) {   // uses the current ctx.font
+      const out = []; let line = '';
+      for (const w of text.split(' ')) {
+        const t = line ? line + ' ' + w : w;
+        if (ctx.measureText(t).width > maxW && line) { out.push(line); line = w; } else line = t;
+      }
+      if (line) out.push(line);
+      return out;
     }
 
     // one square slot; item = { name } or null
@@ -1602,14 +1665,27 @@
       setAccMode(mode || (last ? 'login' : 'create'));
       $('acc-email').value = last || ''; $('acc-pass').value = '';
       if (msg) accMsg(msg, ok);
-      if (!sb) { accMsg("Can't reach the account server. Check your connection and reload, or play offline."); $('acc-switch').textContent = 'Play offline (save with files only)'; }
+      $('acc-guest').textContent = heroName && !account ? 'Back to the game (guest)' : 'Play as guest (no saving)';
+      if (!sb) accMsg("Can't reach the account server. Check your connection and reload, or play as a guest.");
       setTimeout(() => (accMode === 'login' && last ? $('acc-pass') : accMode === 'create' ? $('acc-name') : $('acc-email')).focus(), 0);
     }
     $('acc-switch').addEventListener('click', e => {
       e.preventDefault();
-      if (!sb) { enterGame(null, 'hero'); return; }   // offline fallback
       setAccMode(accMode === 'create' ? 'login' : 'create');
     });
+    // guest: play without an account (no saving). If a guest run is already going, just go back to it.
+    $('acc-guest').addEventListener('click', e => {
+      e.preventDefault();
+      if (heroName && !account) { accEl.hidden = true; document.activeElement?.blur(); return; }
+      enterGame(null);
+    });
+    // from the guest prompt: park the current run so it survives the email-confirmation reload, then show the form
+    function toAccount(mode) {
+      ui = null; closePanels();
+      store.set(GUEST_RUN, { at: Date.now(), state: snapshot() });
+      showAccount(mode);
+      if (mode === 'create') $('acc-name').value = '';
+    }
     $('acc-name').addEventListener('input', () => { const v = cleanName($('acc-name').value); if (v !== $('acc-name').value) $('acc-name').value = v; });
     let pendingEmail = '';   // email waiting for confirmation (for "resend")
     $('acc-resend').addEventListener('click', async e => {
@@ -1651,20 +1727,28 @@
       } finally { $('acc-submit').disabled = false; }
     });
     // logged in (or offline with user = null): start a new run, then continue from the online save if there is one
-    async function enterGame(user, offlineName) {
+    async function enterGame(user) {
       account = user ? { id: user.id, email: user.email } : null;
-      heroName = user ? (user.user_metadata?.hero_name || user.email.split('@')[0]).slice(0, 10) : offlineName;
+      heroName = user ? (user.user_metadata?.hero_name || user.email.split('@')[0]).slice(0, 10) : 'guest';
       accEl.hidden = true; document.activeElement?.blur();
       newGame(); renderStats();
-      if (!account) return;
-      cloud = { state: 'checking' };
-      const { data } = await fetchSave();
-      if (data && account && account.id === user.id) { applySave(data.state); float('welcome back', '#3ddc84', player.x + 0.5, player.y - 0.8); }
+      lastAutosave = Date.now();   // don't autosave the fresh run over an existing save
+      const { slots } = await listSlots();   // continue from the newest slot (autosave or manual)
+      const latest = Object.values(slots || {}).sort((a, b) => new Date(b.at) - new Date(a.at))[0];
+      const guestRun = account && store.get(GUEST_RUN);
+      if (guestRun) store.set(GUEST_RUN, null);
+      if (!account || account.id !== user.id) return;
+      if (guestRun && guestRun.state && !latest && Date.now() - guestRun.at < 7 * 24 * 3600 * 1000) {   // a brand-new account takes over the guest run
+        applySave(guestRun.state); await writeSlot(1);
+        float('guest run saved', '#3ddc84', player.x + 0.5, player.y - 0.8);
+      } else if (latest) { applySave(latest.state); float('welcome back', '#3ddc84', player.x + 0.5, player.y - 0.8); }
+      lastAutosave = Date.now();
     }
     async function logOut() {
       ui = null; closePanels(); cheatsUnlocked = false;
+      if (account) await writeSlot(1);   // autosave before leaving
       if (sb && account) await sb.auth.signOut();
-      account = null; heroName = null; cloud = { state: 'none' };
+      account = null; heroName = null; slotInfo = { state: 'loading', slots: {} };
       newGame(); renderStats(); showAccount('login');
     }
     // on page load: already logged in (Supabase keeps the session), or just back from the confirmation link?
