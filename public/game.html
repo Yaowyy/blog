@@ -317,6 +317,7 @@
   const ART_SRC = {
     heroSprite:   'art/heroSprite.png',
     heroFull:     'art/heroFull.png',
+    statusRooted: 'art/statusRooted.png', statusInjured: 'art/statusInjured.png',   // status effect icons (badge with a coloured border)
     heroPunchSide: 'art/heroPunchSide.png', heroPunchDown: 'art/heroPunchDown.png', heroPunchUp: 'art/heroPunchUp.png',   // attack sheets, 4 frames each
     heroSwordSide: 'art/heroSwordSide.png', heroSwordDown: 'art/heroSwordDown.png', heroSwordUp: 'art/heroSwordUp.png',
     heroWalk:     'art/heroWalk.png',   // 4 walk frames side by side, facing right
@@ -587,6 +588,7 @@
       slotInfo = { state: 'loading', slots: slotInfo.slots };
       const { slots, error } = await listSlots();
       slotInfo = error ? { state: 'error', slots: {}, error } : { state: 'ready', slots };
+      if (error && ui && (ui.kind === 'save' || ui.kind === 'load')) ui.msg = `Server said: ${error}`;   // show why
     }
     function openSlots(kind) { openWindow(kind, kind === 'save' ? 1 : 0, fromHere()); refreshSlots(); }
     const fromHere = () => ui && { kind: ui.kind, cursor: ui.cursor, back: ui.back };   // the window to come back to
@@ -792,7 +794,40 @@
     // ---- combat -----------------------------------------------------------------
     let gameTime = 0, lastFrame = performance.now();   // game clock: stops while a window is open
     let drip = null;   // the slums enemy, or null in other areas
-    let rootedUntil = 0;   // Tart: hero can't move until this game time
+    let rootedUntil = 0;   // "root" state: hero can't move until this game time (Drip's Tart applies it)
+    // ---- hero states ----------------------------------------------------------------
+    // root: can't move, for a set time. injured: health at or below 10% of max health → walks 40% slower.
+    // icon: ART key (a drawn placeholder is used until the art exists); color: placeholder border / symbol
+    const STATES = { root: { label: 'rooted', icon: 'statusRooted', color: '#ff2bd6', symbol: '⛓' },
+                     injured: { label: 'injured', icon: 'statusInjured', color: '#e5484d', symbol: '♥', healthShare: 0.1, speed: 0.6 } };
+    const heroStates = () => {
+      const s = [];
+      if (gameTime < rootedUntil) s.push({ key: 'root', left: (rootedUntil - gameTime) / 1000 });
+      if (stats.health > 0 && stats.health <= CAPS.health * STATES.injured.healthShare) s.push({ key: 'injured' });
+      return s;
+    };
+    const hasState = key => heroStates().some(s => s.key === key);
+    // status icons: a row in the bottom-left corner of the map, just above the hero panel; timed ones show seconds left
+    function drawStates() {
+      const list = heroStates(), size = 56, gap = 8;
+      list.forEach((s, i) => {
+        const def = STATES[s.key], x = 16 + i * (size + gap), y = canvas.height - 16 - size, im = ART[def.icon];
+        ctx.save();
+        if (ready(im)) { ctx.imageSmoothingQuality = 'high'; ctx.drawImage(im, x, y, size, size); }
+        else {   // placeholder badge until the icon art exists
+          ctx.fillStyle = '#3A4257'; ctx.fillRect(x + 3, y + 3, size - 6, size - 6);
+          ctx.strokeStyle = def.color; ctx.lineWidth = 4; ctx.strokeRect(x + 3, y + 3, size - 6, size - 6);
+          ctx.fillStyle = def.color; ctx.font = '700 28px ' + MONO; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+          ctx.fillText(def.symbol, x + size / 2, y + size / 2 + 1);
+        }
+        if (s.left !== undefined) {   // time left, bottom-right corner
+          ctx.font = '700 18px ' + MONO; ctx.textAlign = 'right'; ctx.textBaseline = 'alphabetic';
+          ctx.lineWidth = 4; ctx.strokeStyle = '#000'; ctx.strokeText(s.left.toFixed(1), x + size - 2, y + size - 4);
+          ctx.fillStyle = '#fff'; ctx.fillText(s.left.toFixed(1), x + size - 2, y + size - 4);
+        }
+        ctx.restore();
+      });
+    }
     let heroNextAttack = 0, heroHurtStart = -1e9, heroAttackStart = -1e9, heroAttackDir = 'side';
     const hasSword = () => equipped.some(it => it.kind === 'sword');
     const floaters = [];   // rising combat text: { text, color, x, y, t } (x, y in tiles)
@@ -995,6 +1030,8 @@
     const tapped = new Set();    // keys pressed since the last step, even if already released
     const COMBO_MS = 60;         // short wait so W+D pressed together counts as one diagonal step
     const MOVE_MS = 180;         // time to glide from one tile to the next (steady speed)
+    let stepMs = MOVE_MS;        // this step's duration: longer while injured
+    const currentStepMs = () => hasState('injured') ? MOVE_MS / STATES.injured.speed : MOVE_MS;
     let comboTimer = null;
     // glide state: player.x/y is the tile we are on or heading to; from* is where the glide started
     let moving = false, fromX = player.x, fromY = player.y, moveStart = 0;
@@ -1009,7 +1046,7 @@
     }
 
     function tryStep(startTime) {
-      if (anyOpen() || gameTime < rootedUntil) return false;   // Tart holds the hero in place
+      if (anyOpen() || hasState('root')) return false;   // root state holds the hero in place
       const [dx, dy] = direction();
       if (!dx && !dy) return false;
       if (dx && dy && dripAt(player.x + dx, player.y + dy)) return false;   // pushing into an enemy on a diagonal just faces him
@@ -1022,7 +1059,7 @@
       if (!ok) return false;
       fromX = player.x; fromY = player.y;
       player.x += ok[0]; player.y += ok[1];
-      moveStart = startTime; moving = true; stepsTaken++;
+      moveStart = startTime; moving = true; stepsTaken++; stepMs = currentStepMs();
       moveDir = { x: ok[0], y: ok[1] };
       facing.x = dx; facing.y = dy; if (dx) lookX = dx;   // face where the keys point (e.g. back to right after letting go of W)
       return true;
@@ -1066,15 +1103,15 @@
       if (!moving && !comboTimer && held.size && !anyOpen()) tryStep(now);
       let rx = player.x, ry = player.y;
       if (moving) {
-        const t = (now - moveStart) / MOVE_MS;
+        const t = (now - moveStart) / stepMs;
         if (t >= 1) {
           moving = false;
           const ex = exitAt(player.x, player.y);
           if (ex) enterArea(ex.to, ex.arriveX - 1, player.y, ex.face);
           // keep going without a pause if keys are still held, so speed stays constant
-          const landed = moveStart + MOVE_MS;
-          if ((held.size || tapped.size) && tryStep(now - landed < MOVE_MS ? landed : now)) {
-            const t2 = Math.min(1, (now - moveStart) / MOVE_MS);
+          const landed = moveStart + stepMs;
+          if ((held.size || tapped.size) && tryStep(now - landed < stepMs ? landed : now)) {
+            const t2 = Math.min(1, (now - moveStart) / stepMs);
             rx = fromX + (player.x - fromX) * t2; ry = fromY + (player.y - fromY) * t2;
           }
         } else {
@@ -1269,6 +1306,7 @@
       }
 
       rowRects = [];
+      drawStates();
       drawPanels();
       if (ui) drawWindow();
     }
@@ -1299,7 +1337,7 @@
       outlineCache.set(key, c);
       return c;
     }
-    const NEON = { building: { color: '#ffdc00', alpha: 0.1 }, enemy: { color: '#ff3b3b', alpha: 0.05 } };
+    const NEON = { building: { color: '#ffdc00', alpha: 0.1 }, enemy: { color: '#ff3b3b', alpha: 0.1 } };
     // blurred triangle for the facing marker, built once: tip at the left (toward the hero), wide side at the right.
     // The blur is a shadow cast by a triangle drawn off to the side, so it works in every browser.
     let facingMarkerCanvas = null;
@@ -1462,7 +1500,7 @@
       const sword = hasSword() && ready(ART.bananaSword);
       if (sword && view !== 'up') drawBackSword(view, h);   // behind the body
       if (moving && ready(sheet)) {   // walk cycle frame, picked by distance walked
-        const t = Math.min(0.999, (performance.now() - moveStart) / MOVE_MS);
+        const t = Math.min(0.999, (performance.now() - moveStart) / stepMs);
         const f = ((stepsTaken - 1) * FRAMES_PER_TILE + Math.floor(t * FRAMES_PER_TILE)) % WALK_FRAMES;
         const fw = sheet.naturalWidth / WALK_FRAMES, fh = sheet.naturalHeight, w = h * fw / fh;
         ctx.drawImage(sheet, f * fw, 0, fw, fh, -w / 2, -h, w, h);
@@ -1479,7 +1517,7 @@
                          down: { x: 0.12, y: -0.62, rot: 150, size: 0.52 },
                          up:   { x: 0.00, y: -0.60, rot: 180, size: 0.52 } };
     function drawBackSword(view, h) {
-      const b = BACK_SWORD[view], s = b.size * h, bob = moving ? Math.sin((performance.now() - moveStart) / MOVE_MS * Math.PI * 2) * 1.5 : 0;
+      const b = BACK_SWORD[view], s = b.size * h, bob = moving ? Math.sin((performance.now() - moveStart) / stepMs * Math.PI * 2) * 1.5 : 0;
       ctx.save();
       ctx.translate(b.x * h, b.y * h + bob); ctx.rotate(b.rot * Math.PI / 180);
       ctx.drawImage(ART.bananaSword, -s / 2, -s / 2, s, s);
