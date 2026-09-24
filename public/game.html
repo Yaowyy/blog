@@ -162,7 +162,7 @@
   // Music starts only when the player enters the game; browsers also need a key press or tap before any sound.
   const MUSIC_SRC = 'audio/background_music.m4a';
   const SETTINGS_KEY = 'littlegame.settings';
-  const settings = Object.assign({ music: 3, sfx: 3 }, store.get(SETTINGS_KEY) || {});   // 0-5 steps of 20%, per device
+  const settings = Object.assign({ music: 2, sfx: 2 }, store.get(SETTINGS_KEY) || {});   // 0-5 steps of 20%, per device
   const volumeBar = n => '[' + '='.repeat(n) + '\u00b7'.repeat(5 - n) + '] ' + String(n * 20).padStart(3) + '%';
   const audio = { ctx: null, music: null, sfx: null, buffer: null, loading: null, source: null, wanted: false, el: null };
   function audioCtx() {
@@ -330,7 +330,7 @@
     city:       { name: 'city', floor: 'ground' },   // floor: seamless ground texture (ART key)
     slums:      { name: 'slums', floor: 'groundSlums' },
     lake:       { name: 'toxic lake', floor: 'groundLake' },
-    factoryIn:  { name: 'abandoned factory entrance', floor: 'groundFactory' },
+    factoryIn:  { name: 'factory entrance', floor: 'groundFactory' },
     factory:    { name: 'abandoned factory', floor: 'groundFactory' },
   };
   const ZONE_LIST = {
@@ -409,7 +409,7 @@
     // CaaCaanTeng noodle bar (closed, decorative). Overlaps TradeCorp on 8/6; TradeCorp is drawn in front of it.
     { x: 7, y: 6, w: 3, h: 2, color: '#8a3a7a', label: 'CaaCaanTeng', art: 'noodleBar', artW: 3.2 },
     // hover-car charging station (decorative)
-    { x: 13, y: 6, w: 2, h: 2, color: '#3a4257', art: 'charging', artW: 2.3 },
+    { x: 15, y: 7, w: 2, h: 2, color: '#3a4257', art: 'charging', artW: 2.3 },
     // front: true draws the picture in front of other buildings (not of the hero)
     { x: 9, y: 7, w: 2, h: 2, color: '#2f6fdb', label: 'TradeCorp', opens: 'work', art: 'work', artW: 2.5, front: true },
     { x: 4, y: 6, w: 2, h: 4, color: '#f2f2f2', label: 'HomeDome', opens: 'rest', art: 'homedome', artW: 2.2 },
@@ -417,7 +417,7 @@
   AREAS['0:0'].decals = true;   // city: the default detail mix
   AREAS['0:0'].coils = cityCoils();
   AREAS['0:1'].walls = [
-    { x: 14, y: 6, w: 4, h: 2, color: '#6b4a2e', label: 'Scrap Dealer', opens: 'scrap', art: 'scrapDealer', artW: 4.5 },
+    { x: 17, y: 5, w: 4, h: 2, color: '#6b4a2e', label: 'Scrap Dealer', opens: 'scrap', art: 'scrapDealer', artW: 4.5 },
   ];
   const AREA_ALIAS = { city: '0:0', slums: '0:1' };   // area names used by older saves
   const areaLabel = id => `${AREAS[id].name} ${id}`;
@@ -624,13 +624,13 @@
         { left: 'restart', right: '', act() { openWindow('restart', 1, fromHere()); } },
         { left: 'save', right: account ? '' : 'account needed', gapBefore: true, act() { account ? openSlots('save') : openWindow('guest', 0, fromHere()); } },
         { left: 'load game', right: account ? '' : 'account needed', act() { account ? openSlots('load') : openWindow('guest', 0, fromHere()); } },
-        { left: 'controls', right: '', gapBefore: true, act() { openWindow('controls', 0, fromHere()); } },
-        { left: 'settings', right: '', act() { openWindow('settings', 0, fromHere()); } },
+        { left: 'settings', right: '', gapBefore: true, act() { openWindow('settings', 0, fromHere()); } },
         account ? { left: 'log out', right: heroName || '', gapBefore: true, act() { openWindow('logout', 1, fromHere()); } }
                 : { left: 'create account / log in', right: '', gapBefore: true, act() { openWindow('guest', 0, fromHere()); } },
       ];
       if (ui.kind === 'settings') return [
         { left: 'sound', right: '', act() { openWindow('sound', 0, fromHere()); } },
+        { left: 'controls', right: '', act() { openWindow('controls', 0, fromHere()); } },
       ];
       if (ui.kind === 'sound') return [
         { left: 'background music', right: volumeBar(settings.music), vol: 'music', act() { stepVolume('music', 1); } },
@@ -862,6 +862,8 @@
       ['A / D (sound settings)', 'volume down / up'],
       ['W / S', 'choose in a window'],
       ['1 2 3', 'pick a row (window) / cast spell'],
+      ['Tab', 'next target (closest first)'],
+      ['Esc (target selected)', 'deselect target'],
     ];
 
     // windows opened from another window remember it: Esc (or "no") goes back there instead of closing everything
@@ -957,10 +959,11 @@
       if (w && w.opens) openWindow(w.opens);
     }
     function goBack() { const b = ui.back; openWindow(b.kind, b.cursor, b.back); }
-    function escPressed() {   // Esc: back to the previous window, or close everything, or open the menu
+    function escPressed() {   // Esc: back to the previous window, or close everything, or drop the target, or open the menu
       if (locked()) return;
       if (ui && ui.back) goBack();
       else if (anyOpen()) closeAll();
+      else if (target) target = null;
       else openWindow('menu');
     }   // Esc: close everything, or open the menu
 
@@ -1158,6 +1161,7 @@
         if (tars) items.push({ name: 'tar', count: tars });
         if (Math.random() < L.magicTarChance) items.push({ name: 'magic tar', count: 1 });
         drip.loot = { money: rand(L.money[0], L.money[1]), items };
+        if (target === drip) retarget();   // next closest enemy, or no target
       }
     }
 
@@ -1173,15 +1177,30 @@
       damageDrip(dmg, crit ? `-${dmg} crit!` : `-${dmg}`, crit ? '#ffe600' : '#ff2bd6');
     }
 
+    // ---- target (Tab) ----------------------------------------------------------------
+    // Tab picks a living enemy in this zone: the closest first, then the next closest on each press (wrapping).
+    // Esc drops it. Spells fly at the target. When the target dies, the closest other enemy is picked (or none).
+    let target = null;
+    const livingByDistance = () => drips.filter(d => !d.dead)
+      .sort((a, b) => Math.hypot(a.x - player.x, a.y - player.y) - Math.hypot(b.x - player.x, b.y - player.y));
+    const hasTarget = () => !!target && !target.dead && drips.includes(target);
+    function cycleTarget() {
+      const list = livingByDistance();
+      if (!list.length) { target = null; float('no targets', '#8a8a8a', player.x + 0.5, player.y - 0.7); return; }
+      const i = hasTarget() ? list.indexOf(target) : -1;
+      target = list[(i + 1) % list.length];
+    }
+    function retarget() { target = livingByDistance()[0] || null; }
+
     function castSpell(slot) {
       const name = skills[slot], sp = name && SPELLS[name];
       if (!sp) return;
       const hx = player.x + 0.5, hy = player.y + 0.5;
       if (stats.mana < sp.mana) { float(`no mana (${sp.mana} ${ICON.mana})`, '#4ea1ff', hx, player.y - 0.7); return; }
       stats.mana -= sp.mana; renderStats();
-      // aim at the closest living enemy in this area; with none, shoot where the hero faces
+      // aim at the selected target; without one, at the closest living enemy in this area; with none, where the hero faces
       let dx = facing.x, dy = facing.y;
-      const near = drips.filter(d => !d.dead).map(d => { drip = d; const q = dripPos(); return { q, dist: Math.hypot(q.x + 0.5 - hx, q.y + 0.5 - hy) }; })
+      const near = hasTarget() ? (() => { drip = target; return { q: dripPos() }; })() : drips.filter(d => !d.dead).map(d => { drip = d; const q = dripPos(); return { q, dist: Math.hypot(q.x + 0.5 - hx, q.y + 0.5 - hy) }; })
         .sort((a, b) => a.dist - b.dist)[0];
       if (near) { dx = near.q.x + 0.5 - hx; dy = near.q.y + 0.5 - hy; }
       if (!dx && !dy) dx = lookX;
@@ -1396,7 +1415,7 @@
       player.x = x; player.y = y; fromX = x; fromY = y;
       facing.x = face; facing.y = faceY; if (face) lookX = face; moving = false;
       groundLayer = null;
-      rootedUntil = 0; heroDot = null; projectiles.length = 0;
+      rootedUntil = 0; heroDot = null; projectiles.length = 0; target = null;
       settleZoneDrips(name);
       if (!instant) { areaFade = performance.now(); areaBanner = areaFade; setTimeout(() => autosave(), 0); }
       renderStats();
@@ -1557,7 +1576,7 @@
       drawProjectiles();
       drawFloaters();
       // enemy panel: the Drip the hero faces, else the nearest one chasing him
-      const foe = dripAt(player.x + facing.x, player.y + facing.y) ||
+      const foe = dripAt(player.x + facing.x, player.y + facing.y) || (hasTarget() ? target : null) ||
         drips.filter(d => d.aggro && !d.dead).sort((a, b) => cheb(a.x, a.y, player.x, player.y) - cheb(b.x, b.y, player.x, player.y))[0];
       if (foe) { drip = foe; drawFoePanel(); }
 
@@ -1614,7 +1633,7 @@
       outlineCache.set(key, c);
       return c;
     }
-    const NEON = { building: { color: '#ffdc00', alpha: 0.1 }, enemy: { color: '#ff3b3b', alpha: 0.1 } };
+    const NEON = { building: { color: '#ffdc00', alpha: 0.1 }, enemy: { color: '#ff3b3b', alpha: 0.1 }, target: { color: '#ffffff', alpha: 0.1 } };
     // blurred triangle for the facing marker, built once: tip at the left (toward the hero), wide side at the right.
     // The blur is a shadow cast by a triangle drawn off to the side, so it works in every browser.
     let facingMarkerCanvas = null;
@@ -1659,14 +1678,15 @@
       ctx.save(); ctx.translate(cx, feet); if (drip.lookX > 0) ctx.scale(-1, 1);   // art faces left
       ctx.scale(1, squash || 1);
       ctx.imageSmoothingQuality = 'high';
-      if (neon) {   // neon outline behind him while the hero faces him (red while alive, yellow when his loot can be taken)
-        ctx.save(); ctx.globalAlpha = neon.alpha;
-        ctx.drawImage(outlineOf(im, frame * fw, 0, fw, fh, fw * s, fh * s, neon.color), -spec.ax * s - OUTLINE_PAD, -fh * s - OUTLINE_PAD);
+      for (const n of [].concat(neon || [])) {   // neon outlines behind him: white = selected target, red = faced, yellow = loot can be taken
+        ctx.save(); ctx.globalAlpha = n.alpha;
+        ctx.drawImage(outlineOf(im, frame * fw, 0, fw, fh, fw * s, fh * s, n.color), -spec.ax * s - OUTLINE_PAD, -fh * s - OUTLINE_PAD);
         ctx.restore();
       }
       ctx.drawImage(im, frame * fw, 0, fw, fh, -spec.ax * s, -fh * s, fw * s, fh * s);
       ctx.restore();
     }
+    const dripNeon = () => [drip === target ? NEON.target : null, facingEnemy() ? NEON.enemy : null].filter(Boolean);
     function drawDrip(d) {
       const t = gameTime, cx = (d.x + 0.5) * TILE, feet = (d.y + 1) * TILE - 2;
       if (drip.dead) {
@@ -1689,9 +1709,9 @@
         return;
       }
       const sinceAtk = t - drip.attackStart, sinceHurt = t - drip.hurtStart;
-      if (sinceAtk < 700 && ready(ART.dripAttack)) drawDripCell(ART.dripAttack, DRIP_ART.attack, Math.min(3, Math.floor(sinceAtk / 175)), cx, feet, 1, facingEnemy() ? NEON.enemy : null);
-      else if (sinceHurt < 300 && ready(ART.dripHurt)) drawDripCell(ART.dripHurt, DRIP_ART.hurt, 0, cx, feet, 1, facingEnemy() ? NEON.enemy : null);
-      else if (ready(ART.dripIdle)) drawDripCell(ART.dripIdle, DRIP_ART.idle, 0, cx, feet, 1 + 0.025 * Math.sin(t / 260), facingEnemy() ? NEON.enemy : null);   // oily wobble
+      if (sinceAtk < 700 && ready(ART.dripAttack)) drawDripCell(ART.dripAttack, DRIP_ART.attack, Math.min(3, Math.floor(sinceAtk / 175)), cx, feet, 1, dripNeon());
+      else if (sinceHurt < 300 && ready(ART.dripHurt)) drawDripCell(ART.dripHurt, DRIP_ART.hurt, 0, cx, feet, 1, dripNeon());
+      else if (ready(ART.dripIdle)) drawDripCell(ART.dripIdle, DRIP_ART.idle, 0, cx, feet, 1 + 0.025 * Math.sin(t / 260), dripNeon());   // oily wobble
       else { ctx.fillStyle = '#10131C'; ctx.fillRect(d.x * TILE + 10, d.y * TILE + 10, TILE - 20, TILE - 20); }
       if (t < (drip.stunUntil || 0)) {   // magic tar: glowing magenta ring pinning him down
         const k = 0.6 + 0.4 * Math.sin(t / 120);
@@ -1951,13 +1971,36 @@
         if (discovered.has(id)) {
           const [rx, ry, rw, rh] = rectOf(a, b);
           ctx.fillStyle = ZONE_COLORS[type]; ctx.fillRect(rx, ry, rw, rh);
-          if (big) {   // name + coordinates
-            ctx.fillStyle = '#e6e6e6'; ctx.font = `600 ${Math.round(ch * 0.17)}px ` + MONO; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
-            const words = AREAS[id].name.split(' '), lines = words.length > 2 ? [words.slice(0, 2).join(' '), words.slice(2).join(' ')] : [words.join(' ')];
-            lines.forEach((l, i) => ctx.fillText(l, cx + cw / 2, cy + ch / 2 + (i - (lines.length - 1) / 2) * ch * 0.2 - ch * 0.08));
-            ctx.fillStyle = '#d0d0d0'; ctx.font = `${Math.round(ch * 0.14)}px ` + MONO;
-            ctx.fillText(id, cx + cw / 2, cy + ch * 0.8);
+        }
+      }
+      // big map: one name per group of touching discovered zones with the same name (no coordinates),
+      // at the group's centre (or its cell nearest the centre when the group bends)
+      if (big) {
+        const seen = new Set();
+        for (let a = aTop; a >= aBottom; a--) for (let b = bLeft; b <= bRight; b++) {
+          const id = `${a}:${b}`;
+          if (!ZONE_LIST[id] || !discovered.has(id) || seen.has(id)) continue;
+          const name = AREAS[id].name, group = [], todo = [[a, b]]; seen.add(id);
+          while (todo.length) {
+            const [ga, gb] = todo.pop(); group.push([ga, gb]);
+            for (const [da, db] of [[1, 0], [-1, 0], [0, 1], [0, -1]]) {
+              const n = `${ga + da}:${gb + db}`;
+              if (ZONE_LIST[n] && discovered.has(n) && !seen.has(n) && AREAS[n].name === name) { seen.add(n); todo.push([ga + da, gb + db]); }
+            }
           }
+          const mx = group.reduce((t, g) => t + cellX(g[1]) + cw / 2, 0) / group.length, my = group.reduce((t, g) => t + cellY(g[0]) + ch / 2, 0) / group.length;
+          const inside = group.some(([ga, gb]) => mx >= cellX(gb) && mx <= cellX(gb) + cw && my >= cellY(ga) && my <= cellY(ga) + ch);
+          let lx = mx, ly = my;
+          if (!inside) {
+            const best = group.map(([ga, gb]) => [cellX(gb) + cw / 2, cellY(ga) + ch / 2]).sort((p, q) => Math.hypot(p[0] - mx, p[1] - my) - Math.hypot(q[0] - mx, q[1] - my))[0];
+            [lx, ly] = best;
+          }
+          ctx.fillStyle = '#f2f2f2'; ctx.font = `600 ${Math.round(ch * 0.19)}px ` + MONO; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+          ctx.save(); ctx.shadowColor = 'rgba(0, 0, 0, 0.6)'; ctx.shadowBlur = 4;
+          const gw = (Math.max(...group.map(g => g[1])) - Math.min(...group.map(g => g[1])) + 1) * cw;   // group width
+          const lines = wrapText(name, gw - 12);   // too wide for the group: one word per line
+          lines.forEach((l, i) => ctx.fillText(l, lx, ly + (i - (lines.length - 1) / 2) * ch * 0.22));
+          ctx.restore();
         }
       }
       // discovered zones: faint white neon edge (5%); the current zone gets a yellow one (10%)
@@ -2337,6 +2380,7 @@
       if (k === 'm') { e.preventDefault(); if (!e.repeat && !locked()) { if (ui && ui.kind === 'map') closeWindow(); else if (!ui) openWindow('map'); } return; }
       if (k === 'h') { e.preventDefault(); if (!e.repeat && !ui) togglePanel('hero'); return; }
       if (e.key === 'Escape') { e.preventDefault(); if (!e.repeat) escPressed(); return; }
+      if (e.code === 'Tab') { e.preventDefault(); if (!e.repeat && !anyOpen()) cycleTarget(); return; }
       if (ui && /^[1-9]$/.test(k)) { choose(+k - 1); return; }
       if (!anyOpen() && /^[1-3]$/.test(k)) { e.preventDefault(); if (!e.repeat) castSpell(+k - 1); return; }
       if (!KEYS.includes(k)) return;
