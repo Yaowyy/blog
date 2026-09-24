@@ -52,8 +52,11 @@
   .naming-box input:focus-visible { border-bottom-color: #ffdc00; }
   .naming-box p { margin: 0; color: var(--muted); font-size: 16px; }
   .naming-box label { display: grid; gap: 4px; color: var(--muted); font-size: 16px; }
+  .naming-box [hidden] { display: none; }
   .naming-box.form input { font-size: 22px; width: 22ch; }
-  .naming-box .err { color: #e5484d; min-height: 1.4em; }
+  .naming-box .err { color: #e5484d; min-height: 1.4em; max-width: 30ch; }
+  .naming-box .err.ok { color: #3ddc84; }
+  .naming-box button:disabled { opacity: 0.5; cursor: default; }
   .naming-box button { font: 600 20px ui-monospace, "SF Mono", Menlo, Consolas, monospace; color: #000; background: var(--grid); border: 0; padding: 10px 16px; cursor: pointer; justify-self: start; }
   .naming-box button:focus-visible { outline: 2px solid #ffdc00; outline-offset: 2px; }
   .naming-box a { color: #00e5ff; }
@@ -79,7 +82,8 @@
 </head>
 <body>
 <div id="stage"><canvas id="c" width="1360" height="880" aria-label="Game grid, 17 by 11 tiles"></canvas>
-  <!-- account screen at the start: create an account (name, email, password) or log in. Stored in this browser only. -->
+  <!-- account screen at the start: create an account (name, email, password) or log in. Accounts live in Supabase;
+       a new account must be confirmed through the link Supabase emails before it can log in. -->
   <div class="naming" id="account" hidden>
     <form class="naming-box form" id="acc-form" role="dialog" aria-labelledby="acc-title" novalidate>
       <h2 id="acc-title">Create account</h2>
@@ -88,8 +92,9 @@
       <label>Password <input id="acc-pass" type="password" autocomplete="new-password"></label>
       <p class="err" id="acc-err" role="alert"></p>
       <button type="submit" id="acc-submit">Create account</button>
+      <p id="acc-resend-row" hidden><a href="#" id="acc-resend">Resend the confirmation email</a></p>
       <p><a href="#" id="acc-switch">Already have an account? Log in</a></p>
-      <p id="acc-hint">Name: letters only, up to 10 · password: 4+ characters. Accounts are saved in this browser only.</p>
+      <p id="acc-hint">Name: letters only, up to 10 · password: 6+ characters. You'll get an email to confirm it's yours.</p>
     </form>
   </div>
   <!-- cheat password prompt (P) -->
@@ -136,12 +141,18 @@
   </div>
 </div>
 
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.117.1/dist/umd/supabase.js"></script>
 <script>
   const COLS = 17, ROWS = 11, TILE = 80;
   // cheat menu (P) is locked behind a password; only its SHA-256 is kept here
   const CHEAT_HASH = '97c10efe01d5c9c88704a12d361d8429b3a6aa2412290a0773109d5d2d603d5e';
-  // accounts + saves live in this browser's localStorage (no server): one account per email in this browser
-  const STORE = { accounts: 'littlegame.accounts', save: email => 'littlegame.save.' + email, last: 'littlegame.lastEmail' };
+  // accounts + saves: Supabase (auth + a "saves" table, one row per player, protected by row-level security).
+  // The publishable key is meant to be public; what each player can touch is decided by the table's rules.
+  const SUPABASE_URL = 'https://kyrgawnhrqqkclyxldmx.supabase.co';
+  const SUPABASE_KEY = 'sb_publishable_ji4v4gBwHUkccCxS--2Yrg_VHulKUTM';
+  const sb = window.supabase ? window.supabase.createClient(SUPABASE_URL, SUPABASE_KEY) : null;   // null if the library couldn't load
+  const RETURN_URL = location.origin + location.pathname;   // the confirmation email links back to this page
+  const STORE = { last: 'littlegame.lastEmail' };   // only used to pre-fill the email field
   const store = {
     get(k) { try { return JSON.parse(localStorage.getItem(k)); } catch { return null; } },
     set(k, v) { try { localStorage.setItem(k, JSON.stringify(v)); return true; } catch { return false; } },
@@ -153,7 +164,6 @@
     }
     let h = 5381; for (const ch of text) h = (h * 33 + ch.charCodeAt(0)) >>> 0; return 'x' + h.toString(16);   // fallback (non-https)
   }
-  const randomSalt = () => [...crypto.getRandomValues(new Uint8Array(16))].map(b => b.toString(16).padStart(2, '0')).join('');
   const SAVE_VERSION = 1;
   const canvas = document.getElementById('c');
   const ctx = canvas.getContext('2d');
@@ -371,7 +381,8 @@
     let deals = saved.deals || newDeals(stats.charisma);
     let dealsDone = saved.dealsDone ?? 0;   // how many work deals the hero has taken this run
     let heroName = saved.heroName ?? null;  // the account's name
-    let account = saved.account ?? null;    // logged-in email, or null (account screen shows)
+    let account = null;                     // logged-in Supabase user { id, email }, or null (account screen shows)
+    let cloud = { state: 'none' };          // online save info: { state: 'checking' | 'none' | 'saved', at }
     let cheatsUnlocked = false;             // after the right password, for this page visit
     const inventory = saved.inventory ? saved.inventory.map(it => ({ ...it, name: { 'tart': 'tar', 'magic tart': 'magic tar' }[it.name] || it.name })) : [];   // [{ name, kind, class }] — no bonuses while here
     const equipped = saved.equipped ? [...saved.equipped] : [];      // equipped items — their bonuses apply
@@ -384,7 +395,7 @@
     const levels = { ...startLevels(), ...(saved.levels || {}) };   // installed level of each patch
     // open window: null, or { kind: 'shop' | 'work' | 'menu', cursor, msg }
     let ui = null;
-    window.claude?.hot?.snapshot?.(() => ({ x: player.x, y: player.y, fx: facing.x, fy: facing.y, stats, deals, prices, dealsDone, heroName, inventory, equipped, skills, areaName, restReadyAt, levels, account }));
+    window.claude?.hot?.snapshot?.(() => ({ x: player.x, y: player.y, fx: facing.x, fy: facing.y, stats, deals, prices, dealsDone, heroName, inventory, equipped, skills, areaName, restReadyAt, levels }));
 
     document.getElementById('portrait').style.backgroundImage = `url(${ART_SRC.heroPortrait})`;
     document.getElementById('inv-btn').style.backgroundImage = `url(${ART_SRC.invIcon}), url(${ART_SRC.slot})`;
@@ -460,16 +471,17 @@
         },
       }));
       if (ui.kind === 'menu') {
-        const has = !!store.get(STORE.save(account)), when = has ? new Date(store.get(STORE.save(account)).savedAt).toLocaleString() : '';
+        const online = !!(account && sb);
+        const when = cloud.state === 'saved' ? new Date(cloud.at).toLocaleString() : cloud.state === 'checking' ? 'checking…' : 'no save yet';
         return [
           { left: 'resume', right: '', act() { ui = null; } },
-          { left: 'save game', right: 'in this browser', act() { return saveToBrowser() ? 'Game saved in this browser.' : 'Could not save (browser storage is blocked).'; } },
-          { left: 'load game', right: has ? when : 'no save yet', act() { if (!has) return 'No saved game in this browser yet.'; applySave(store.get(STORE.save(account)).state); ui = null; float('game loaded', '#3ddc84', player.x + 0.5, player.y - 0.8); } },
+          { left: 'save game', right: online ? 'online' : 'offline', act() { if (!online) return 'Playing offline: use "download save file".'; saveOnline(); return 'Saving…'; } },
+          { left: 'load game', right: online ? when : 'offline', act() { if (!online) return 'Playing offline: use "upload save file".'; loadOnline(); return 'Loading…'; } },
           { left: 'download save file', right: '.json', act() { downloadSave(); return 'Save file downloaded.'; } },
           { left: 'upload save file', right: '.json', act() { document.getElementById('save-upload').click(); return 'Choose a save file…'; } },
           { left: 'controls', right: '', act() { openWindow('controls'); } },
           { left: 'new game', right: '', act() { newGame(); } },
-          { left: 'log out', right: heroName || '', act() { logOut(); } },
+          { left: online ? 'log out' : 'log in', right: heroName || '', act() { logOut(); } },
         ];
       }
       if (ui.kind === 'loot') return lootRows();
@@ -528,8 +540,25 @@
       if (!free(player.x, player.y)) { player.x = START.x; player.y = START.y; fromX = player.x; fromY = player.y; }
       renderStats();
     }
-    function saveToBrowser() {
-      return store.set(STORE.save(account), { game: 'little-game', version: SAVE_VERSION, savedAt: Date.now(), name: heroName, state: snapshot() });
+    // online save: one row per player in the "saves" table (upsert replaces the previous save)
+    const menuMsg = m => { if (ui && ui.kind === 'menu') ui.msg = m; };
+    async function saveOnline() {
+      const now = new Date().toISOString();
+      const { error } = await sb.from('saves').upsert({ user_id: account.id, hero_name: heroName, state: { version: SAVE_VERSION, ...snapshot() }, updated_at: now });
+      if (error) { console.warn(error); return menuMsg(`Save failed: ${error.message}`); }
+      cloud = { state: 'saved', at: now }; menuMsg('Game saved online.');
+    }
+    async function fetchSave() {
+      const { data, error } = await sb.from('saves').select('state, updated_at').eq('user_id', account.id).maybeSingle();
+      if (error) { console.warn(error); cloud = { state: 'none' }; return { error }; }
+      cloud = data ? { state: 'saved', at: data.updated_at } : { state: 'none' };
+      return { data };
+    }
+    async function loadOnline() {
+      const { data, error } = await fetchSave();
+      if (error) return menuMsg(`Load failed: ${error.message}`);
+      if (!data) return menuMsg('No online save yet. Use "save game" first.');
+      applySave(data.state); ui = null; float('game loaded', '#3ddc84', player.x + 0.5, player.y - 0.8);
     }
     function downloadSave() {
       const data = { game: 'little-game', version: SAVE_VERSION, savedAt: Date.now(), name: heroName, state: snapshot() };
@@ -1558,54 +1587,100 @@
     const naming = () => !accEl.hidden || !lockEl.hidden;   // an overlay with text fields is open: the game ignores keys
     const $ = id => document.getElementById(id);
     let accMode = 'create';
+    const accMsg = (m, ok) => { $('acc-err').textContent = m; $('acc-err').classList.toggle('ok', !!ok); };
     function setAccMode(mode) {
-      accMode = mode; $('acc-err').textContent = '';
+      accMode = mode; accMsg(''); $('acc-resend-row').hidden = true;
       $('acc-title').textContent = mode === 'create' ? 'Create account' : 'Log in';
       $('acc-submit').textContent = mode === 'create' ? 'Create account' : 'Log in';
       $('acc-name-row').hidden = mode !== 'create';
       $('acc-pass').autocomplete = mode === 'create' ? 'new-password' : 'current-password';
       $('acc-switch').textContent = mode === 'create' ? 'Already have an account? Log in' : 'New here? Create an account';
     }
-    function showAccount() {
+    function showAccount(mode, msg, ok) {
       accEl.hidden = false; held.clear(); tapped.clear();
-      const last = store.get(STORE.last), accounts = store.get(STORE.accounts) || {};
-      setAccMode(last && accounts[last] ? 'login' : 'create');
+      const last = store.get(STORE.last);
+      setAccMode(mode || (last ? 'login' : 'create'));
       $('acc-email').value = last || ''; $('acc-pass').value = '';
+      if (msg) accMsg(msg, ok);
+      if (!sb) { accMsg("Can't reach the account server. Check your connection and reload, or play offline."); $('acc-switch').textContent = 'Play offline (save with files only)'; }
       setTimeout(() => (accMode === 'login' && last ? $('acc-pass') : accMode === 'create' ? $('acc-name') : $('acc-email')).focus(), 0);
     }
-    $('acc-switch').addEventListener('click', e => { e.preventDefault(); setAccMode(accMode === 'create' ? 'login' : 'create'); });
+    $('acc-switch').addEventListener('click', e => {
+      e.preventDefault();
+      if (!sb) { enterGame(null, 'hero'); return; }   // offline fallback
+      setAccMode(accMode === 'create' ? 'login' : 'create');
+    });
     $('acc-name').addEventListener('input', () => { const v = cleanName($('acc-name').value); if (v !== $('acc-name').value) $('acc-name').value = v; });
+    let pendingEmail = '';   // email waiting for confirmation (for "resend")
+    $('acc-resend').addEventListener('click', async e => {
+      e.preventDefault();
+      if (!pendingEmail) return;
+      const { error } = await sb.auth.resend({ type: 'signup', email: pendingEmail, options: { emailRedirectTo: RETURN_URL } });
+      accMsg(error ? error.message : `Sent again to ${pendingEmail}. Check your inbox (and spam).`, !error);
+    });
     $('acc-form').addEventListener('submit', async e => {
       e.preventDefault();
-      const err = m => { $('acc-err').textContent = m; };
+      if (!sb) return;
       const email = $('acc-email').value.trim().toLowerCase(), pass = $('acc-pass').value;
-      const accounts = store.get(STORE.accounts) || {};
-      if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) return err('Enter a valid email.');
-      if (accMode === 'create') {
-        const name = cleanName($('acc-name').value);
-        if (!name) return err('Enter a hero name (letters only).');
-        if (accounts[email]) return err('This email already has an account. Log in instead.');
-        if (pass.length < 4) return err('Password needs at least 4 characters.');
-        const salt = randomSalt();
-        accounts[email] = { name, salt, hash: await sha256(salt + pass), created: Date.now() };
-        if (!store.set(STORE.accounts, accounts)) return err("This browser blocks storage, so accounts can't be saved.");
-        logIn(email, name, false);
-      } else {
-        const acc = accounts[email];
-        if (!acc || acc.hash !== await sha256(acc.salt + pass)) return err('Wrong email or password.');
-        logIn(email, acc.name, true);
-      }
+      if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) return accMsg('Enter a valid email.');
+      if (pass.length < 6) return accMsg('Password needs at least 6 characters.');
+      $('acc-submit').disabled = true; $('acc-resend-row').hidden = true;
+      try {
+        if (accMode === 'create') {
+          const name = cleanName($('acc-name').value);
+          if (!name) return accMsg('Enter a hero name (letters only).');
+          const { data, error } = await sb.auth.signUp({ email, password: pass, options: { data: { hero_name: name }, emailRedirectTo: RETURN_URL } });
+          if (error) return accMsg(error.message);
+          // Supabase answers an already-registered email with a user that has no identities (so it doesn't reveal who is signed up)
+          if (data.user && Array.isArray(data.user.identities) && data.user.identities.length === 0)
+            return accMsg('This email already has an account. Log in instead.');
+          store.set(STORE.last, email);
+          if (data.session) return enterGame(data.session.user);   // confirmation switched off in Supabase: straight in
+          pendingEmail = email; setAccMode('login'); $('acc-email').value = email;
+          accMsg(`Almost done! We sent a confirmation link to ${email}. Open it to activate your account; it brings you back here.`, true);
+          $('acc-resend-row').hidden = false;
+        } else {
+          const { data, error } = await sb.auth.signInWithPassword({ email, password: pass });
+          if (error) {
+            if (/confirm/i.test(error.message)) { pendingEmail = email; $('acc-resend-row').hidden = false; return accMsg('Please confirm your email first: open the link we sent you.'); }
+            return accMsg(/invalid/i.test(error.message) ? 'Wrong email or password.' : error.message);
+          }
+          store.set(STORE.last, email);
+          enterGame(data.user);
+        }
+      } finally { $('acc-submit').disabled = false; }
     });
-    function logIn(email, name, loadSave) {
-      account = email; heroName = name; store.set(STORE.last, email);
+    // logged in (or offline with user = null): start a new run, then continue from the online save if there is one
+    async function enterGame(user, offlineName) {
+      account = user ? { id: user.id, email: user.email } : null;
+      heroName = user ? (user.user_metadata?.hero_name || user.email.split('@')[0]).slice(0, 10) : offlineName;
       accEl.hidden = true; document.activeElement?.blur();
-      newGame();
-      const save = loadSave && store.get(STORE.save(email));
-      if (save && save.state) { applySave(save.state); float('welcome back', '#3ddc84', player.x + 0.5, player.y - 0.8); }   // continue where you saved
-      renderStats();
+      newGame(); renderStats();
+      if (!account) return;
+      cloud = { state: 'checking' };
+      const { data } = await fetchSave();
+      if (data && account && account.id === user.id) { applySave(data.state); float('welcome back', '#3ddc84', player.x + 0.5, player.y - 0.8); }
     }
-    function logOut() { ui = null; closePanels(); account = null; heroName = null; cheatsUnlocked = false; newGame(); renderStats(); showAccount(); }
-    if (!account) showAccount();
+    async function logOut() {
+      ui = null; closePanels(); cheatsUnlocked = false;
+      if (sb && account) await sb.auth.signOut();
+      account = null; heroName = null; cloud = { state: 'none' };
+      newGame(); renderStats(); showAccount('login');
+    }
+    // on page load: already logged in (Supabase keeps the session), or just back from the confirmation link?
+    (async () => {
+      const hash = new URLSearchParams(location.hash.slice(1));
+      const linkError = hash.get('error_description');
+      if (!sb) return showAccount();
+      const { data } = await sb.auth.getSession();
+      if (location.hash) history.replaceState(null, '', location.pathname + location.search);   // tidy the address bar
+      if (data.session) {
+        const confirmedNow = hash.get('type') === 'signup';
+        await enterGame(data.session.user);
+        if (confirmedNow) float('email confirmed!', '#3ddc84', player.x + 0.5, player.y - 1.2);
+      } else if (linkError) showAccount('login', `That link didn't work (${linkError.replace(/\+/g, ' ')}). Log in to get a new one.`);
+      else showAccount();
+    })();
 
     function openCheats() {
       if (cheatsUnlocked) { openWindow('cheat'); return; }
