@@ -241,11 +241,11 @@
   // Zones sit on a map grid; id "a:b" = map coordinates (a grows upward, b grows to the right).
   // City is 0:0, the first slums 0:1 (right of the city). Neighbours: up a+1, down a-1, right b+1, left b-1.
   const ZONE_TYPES = {
-    city:       { name: 'city' },
-    slums:      { name: 'slums' },
-    lake:       { name: 'toxic lake' },
-    factoryIn:  { name: 'abandoned factory entrance' },
-    factory:    { name: 'abandoned factory' },
+    city:       { name: 'city', floor: 'ground' },   // floor: seamless ground texture (ART key)
+    slums:      { name: 'slums', floor: 'groundSlums' },
+    lake:       { name: 'toxic lake', floor: 'groundLake' },
+    factoryIn:  { name: 'abandoned factory entrance', floor: 'groundFactory' },
+    factory:    { name: 'abandoned factory', floor: 'groundFactory' },
   };
   const ZONE_LIST = {
     '0:0': 'city',
@@ -315,7 +315,7 @@
   for (const id in ZONE_LIST) {
     const type = ZONE_LIST[id], [a, b] = coordOf(id), seed = 7331 + (a + 5) * 97 + (b + 5) * 13;
     AREAS[id] = { id, type, name: ZONE_TYPES[type].name, walls: [], exits: ZONE_EXITS[id],
-                  decals: type === 'slums' ? { ...SLUMS_DECALS, seed } : { seed },
+                  decals: type === 'slums' ? { ...SLUMS_DECALS, seed } : false,   // lake / factory: clean floor for now (their own decor comes later)
                   drips: type === 'slums' ? (Math.max(Math.abs(a), Math.abs(b)) >= 3 ? 2 : 1) : 0 };
   }
   AREAS['0:0'].walls = [
@@ -387,6 +387,7 @@
     slot:         'art/slot.png',   // slot frame: inventory, equipment, abilities, inventory button
     bananaSword:  'art/bananaSword.png',   // item icon
     ground:       'art/ground.jpg',   // seamless street floor, no joints (repeats every 6 x 6 tiles)
+    groundSlums: 'art/groundSlums.jpg', groundFactory: 'art/groundFactory.jpg', groundLake: 'art/groundLake.jpg',   // zone floors, same repeat
     decals:       'art/decals.png',   // 16 floor details, 4 x 4 cells
     wireStraight: 'art/wireStraight.png',   // razor-wire coil, horizontal, joins left/right
     wireCorner:   'art/wireCorner.png',   // razor-wire corner, arms to the left and bottom
@@ -1297,7 +1298,7 @@
     }
     const GROUND_REPEAT = 6;   // tiles per texture repeat
     function buildGround() {
-      const im = ART.ground;
+      const im = ART[ZONE_TYPES[AREAS[areaName].type].floor];
       if (!ready(im)) return null;
       const g = document.createElement('canvas'); g.width = canvas.width; g.height = canvas.height;
       const gx = g.getContext('2d'); gx.imageSmoothingQuality = 'high';
