@@ -1,0 +1,1664 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Little Game</title>
+<style>
+  :root { color-scheme: dark; --bg: #000; --grid: #fff; --player: #808080; --muted: #8a8a8a;
+          /* on-screen width of the grid; one tile is --w / 17 */
+          --w: min(100vw - 32px, 1360px, calc((100vh - 140px) * 17 / 11)); }
+  html, body { height: 100%; }
+  body {
+    background: var(--bg); color: var(--grid); margin: 0;
+    padding-inline: 16px; box-sizing: border-box;
+    display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 16px;
+    font: 13px/1.4 ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+    user-select: none; -webkit-user-select: none;
+  }
+  /* stage and HUD share one width so the HUD lines up with the grid's edges */
+  #stage, .hud { width: var(--w); }
+  #stage { aspect-ratio: 17 / 11; position: relative; }
+  canvas { display: block; width: 100%; height: 100%; object-fit: contain; touch-action: none; }
+  /* HUD: left (portrait + body stats) · middle (ability tiles) · right (charisma, money, deals) */
+  .hud { display: grid; grid-template-columns: 1fr auto 1fr; gap: 16px 24px; align-items: center;
+         font-size: 26px; font-variant-numeric: tabular-nums; }
+  .hud-left, .hud-right { display: flex; gap: 24px; align-items: center; }
+  .hud-right { justify-self: end; }
+  .abilities { display: flex; gap: 8px; }
+  .inv-btn { width: calc(var(--w) / 17); aspect-ratio: 1; margin-left: 24px; padding: 0; box-sizing: border-box;
+             background: transparent; color: var(--grid); border: 2px solid var(--grid); font: 1.3em/1 ui-monospace, monospace; cursor: pointer; }
+  .inv-btn { background: center / 62% no-repeat, center / 100% no-repeat; border: 0; }
+  .inv-btn:hover { background-color: rgba(255, 255, 255, 0.08); }
+  .inv-btn:focus-visible { outline: 2px solid #ffdc00; outline-offset: 2px; }
+  .ability[data-key]:not([data-key=""])::after { content: attr(data-key); position: absolute; right: 8%; bottom: 4%; font-size: 1.4em; color: #fff; text-shadow: 0 0 3px #000, 0 0 3px #000; }
+  .ability { position: relative;
+             width: calc(var(--w) / 17); aspect-ratio: 1; box-sizing: border-box; background: center / 100% no-repeat;
+             display: grid; place-items: center; padding: 8%; text-align: center; font-size: 0.42em; font-weight: 600; line-height: 1.05; color: #ff2bd6; }   /* learned skill's name until it has art */
+  @media (max-width: 760px) {
+    .hud { display: flex; flex-wrap: wrap; justify-content: space-between; font-size: 16px; gap: 8px 12px; }
+    .abilities { order: 3; width: 100%; justify-content: center; }
+    .hud-left, .hud-right, .stats, .right-row { gap: 10px; }
+    .abilities { gap: 4px; }
+    .inv-btn { margin-left: 12px; }
+  }
+  /* naming screen, shown over the grid at the start of a game */
+  .naming[hidden] { display: none; }
+  .naming { position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; background: rgba(0, 0, 0, 0.6); }
+  .naming-box { background: #000; border: 2px solid var(--grid); padding: 28px 32px; display: grid; gap: 16px; max-width: calc(100% - 32px); box-sizing: border-box; }
+  .naming-box h2 { margin: 0; font-size: 28px; }
+  .naming-box input { font: 600 28px ui-monospace, "SF Mono", Menlo, Consolas, monospace; color: var(--grid); background: transparent;
+                      border: 0; border-bottom: 2px solid var(--grid); padding: 4px 0; width: 12ch; max-width: 100%; outline: none; }
+  .naming-box input:focus-visible { border-bottom-color: #ffdc00; }
+  .naming-box p { margin: 0; color: var(--muted); font-size: 16px; }
+  .naming-box label { display: grid; gap: 4px; color: var(--muted); font-size: 16px; }
+  .naming-box.form input { font-size: 22px; width: 22ch; }
+  .naming-box .err { color: #e5484d; min-height: 1.4em; }
+  .naming-box button { font: 600 20px ui-monospace, "SF Mono", Menlo, Consolas, monospace; color: #000; background: var(--grid); border: 0; padding: 10px 16px; cursor: pointer; justify-self: start; }
+  .naming-box button:focus-visible { outline: 2px solid #ffdc00; outline-offset: 2px; }
+  .naming-box a { color: #00e5ff; }
+  .portrait { width: calc(var(--w) / 17); aspect-ratio: 1; background: #1B2233 center / cover no-repeat; flex: none; }   /* same size as a grid tile; placeholder for the hero's picture */
+  .hero-col { display: grid; gap: 2px; }
+  .hero-name { font-size: 0.7em; font-weight: 600; color: var(--grid); line-height: 1.1; }
+  .counter { color: var(--muted); white-space: nowrap; }
+  .right-col { display: grid; gap: 2px; justify-items: end; }
+  .right-row { display: flex; gap: 24px; align-items: center; }
+  .area-name { font-size: 0.7em; font-weight: 600; color: var(--muted); line-height: 1.1; text-transform: uppercase; letter-spacing: 0.08em; }
+  .counter b { color: var(--grid); font-weight: 600; }
+  .stats { display: flex; gap: 24px; color: var(--grid); }
+  .stat { display: inline-flex; align-items: baseline; gap: 10px; }
+  .stat i { font-style: normal; font-size: 1.3em; line-height: 1; }
+  .stat b { font-weight: 600; }
+  .stat.hp i { color: #e5484d; }
+  .stat.str i { color: #ff8a3d; }
+  .stat.mana i { color: #4ea1ff; }
+  .stat.nrg i { color: #9dff5c; }
+  .stat.cha i { color: #b58cff; }
+  .stat.gold i { color: #f5c542; }
+</style>
+</head>
+<body>
+<div id="stage"><canvas id="c" width="1360" height="880" aria-label="Game grid, 17 by 11 tiles"></canvas>
+  <!-- account screen at the start: create an account (name, email, password) or log in. Stored in this browser only. -->
+  <div class="naming" id="account" hidden>
+    <form class="naming-box form" id="acc-form" role="dialog" aria-labelledby="acc-title" novalidate>
+      <h2 id="acc-title">Create account</h2>
+      <label id="acc-name-row">Hero name <input id="acc-name" maxlength="10" autocomplete="username" spellcheck="false"></label>
+      <label>Email <input id="acc-email" type="email" autocomplete="email" spellcheck="false"></label>
+      <label>Password <input id="acc-pass" type="password" autocomplete="new-password"></label>
+      <p class="err" id="acc-err" role="alert"></p>
+      <button type="submit" id="acc-submit">Create account</button>
+      <p><a href="#" id="acc-switch">Already have an account? Log in</a></p>
+      <p id="acc-hint">Name: letters only, up to 10 · password: 4+ characters. Accounts are saved in this browser only.</p>
+    </form>
+  </div>
+  <!-- cheat password prompt (P) -->
+  <div class="naming" id="cheat-lock" hidden>
+    <form class="naming-box form" id="cheat-form" role="dialog" aria-labelledby="cheat-title">
+      <h2 id="cheat-title">Cheats</h2>
+      <label>Password <input id="cheat-pass" type="password" autocomplete="off"></label>
+      <p class="err" id="cheat-err" role="alert"></p>
+      <p>Enter to unlock · Esc to cancel</p>
+    </form>
+  </div>
+  <input type="file" id="save-upload" accept=".json,application/json" hidden>
+</div>
+
+<div class="hud">
+  <div class="hud-left">
+    <div class="portrait" id="portrait" role="img" aria-label="Hero portrait (placeholder)"></div>
+    <div class="hero-col">
+    <div class="hero-name" id="hud-name">hero</div>
+    <div class="stats" aria-label="Hero stats">
+      <span class="stat hp" title="Health"><i aria-hidden="true">&#x2665;&#xFE0E;</i><b id="stat-health">10</b></span>
+      <span class="stat str" title="Strength"><i aria-hidden="true">&#x2694;&#xFE0E;</i><b id="stat-strength">1</b></span>
+      <span class="stat mana" title="Mana"><i aria-hidden="true">&#x25C6;</i><b id="stat-mana">0</b></span>
+    </div>
+    </div>
+  </div>
+  <div class="abilities" aria-label="Abilities (empty)">
+    <div class="ability"></div><div class="ability"></div><div class="ability"></div>
+    <button class="inv-btn" id="inv-btn" title="Inventory (I)" aria-label="Inventory (I)"></button>
+  </div>
+  <div class="hud-right">
+    <div class="right-col">
+    <div class="area-name" id="area-name" title="Current area">city</div>
+    <div class="right-row">
+    <div class="stats">
+      <span class="stat nrg" title="Energy"><i aria-hidden="true">&#x26A1;&#xFE0E;</i><b id="stat-energy">10</b></span>
+      <span class="stat cha" title="Charisma"><i aria-hidden="true">&#x2726;</i><b id="stat-charisma">1</b></span>
+      <span class="stat gold" title="Money"><i aria-hidden="true">$</i><b id="stat-money">0</b></span>
+    </div>
+    <div class="counter" title="Deals made at work">deals <b id="stat-deals">0</b></div>
+
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+  const COLS = 17, ROWS = 11, TILE = 80;
+  // cheat menu (P) is locked behind a password; only its SHA-256 is kept here
+  const CHEAT_HASH = '97c10efe01d5c9c88704a12d361d8429b3a6aa2412290a0773109d5d2d603d5e';
+  // accounts + saves live in this browser's localStorage (no server): one account per email in this browser
+  const STORE = { accounts: 'littlegame.accounts', save: email => 'littlegame.save.' + email, last: 'littlegame.lastEmail' };
+  const store = {
+    get(k) { try { return JSON.parse(localStorage.getItem(k)); } catch { return null; } },
+    set(k, v) { try { localStorage.setItem(k, JSON.stringify(v)); return true; } catch { return false; } },
+  };
+  async function sha256(text) {
+    if (crypto.subtle) {
+      const buf = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(text));
+      return [...new Uint8Array(buf)].map(b => b.toString(16).padStart(2, '0')).join('');
+    }
+    let h = 5381; for (const ch of text) h = (h * 33 + ch.charCodeAt(0)) >>> 0; return 'x' + h.toString(16);   // fallback (non-https)
+  }
+  const randomSalt = () => [...crypto.getRandomValues(new Uint8Array(16))].map(b => b.toString(16).padStart(2, '0')).join('');
+  const SAVE_VERSION = 1;
+  const canvas = document.getElementById('c');
+  const ctx = canvas.getContext('2d');
+  const MONO = 'ui-monospace, "SF Mono", Menlo, Consolas, monospace';
+
+  // ---- rules --------------------------------------------------------------
+  const START_STATS = { health: 10, strength: 1, mana: 0, charisma: 1, money: 0, energy: 10 };
+  // max values; mana's cap is 0 for now (things may raise it later). Other stats have no cap.
+  const CAPS = { health: 10, energy: 20, mana: 0 };
+  const BASE_CAPS = { ...CAPS };   // the cheat menu can raise CAPS; "new game" puts these back
+  const capped = (st, v) => st in CAPS ? Math.min(CAPS[st], v) : v;
+  const REST = { price: 1, gain: { health: 5, energy: 5, mana: 1 }, cooldownMs: 5 * 60 * 1000 };   // HomeDome: Space asks to rest for 1$; then 5 min (real time) until the next rest
+
+  // price here is the starting price. Patches (patch: true): each purchase installs the next level (shown as "lvl N"
+  // in the shop, starting at lvl 0) and raises that patch's price by 15%, rounded up.
+  // Food: never rises on purchase; instead it inflates by FOOD_INFLATION after every work shift (shown rounded up).
+  const SHOP_ITEMS = [
+    { name: 'food',      price: 1,   gain: { energy: 10, health: 1 }, art: 'food' },
+    { name: 'smile patch',   price: 30,  gain: { charisma: 1 }, patch: true, art: 'smilePatch' },
+    { name: 'social patch',  price: 90,  gain: { charisma: 2 }, patch: true, art: 'socialPatch' },
+    { name: 'persona patch', price: 240, gain: { charisma: 3 }, patch: true, art: 'personaPatch' },
+    // class 'equipment': goes to the inventory, gives its bonus only once equipped (I → A/D → Space).
+    // kind: only one item per kind (e.g. one sword), counting inventory and equipped items. Bought once.
+    { name: 'banana sword', price: 400, gain: { strength: 4, charisma: 1 }, class: 'equipment', kind: 'sword', art: 'bananaSword' },
+  ];
+  // items that are never sold, only looted
+  // class 'resource': stacks (up to `stack` per inventory slot), used for crafting later.
+  // class 'skill': doesn't stack; Space in the inventory learns it and puts it in an ability slot (effects come later).
+  const LOOT_ITEMS = [
+    { name: 'tar',        class: 'resource', stack: 64, gain: {}, art: 'tart', value: 2 },   // value: price per piece (the Scrap Dealer pays this)
+    { name: 'magic tar',  class: 'skill', gain: {}, art: 'magicTart' },
+    { name: 'scrap',      class: 'resource', stack: 64, gain: {}, value: 1, art: 'scrap' },   // from selling equipment; also sold by the Scrap Dealer
+  ];
+  // Scrap Dealer (slums): buys equipment for 40% of its shop price plus 1% of that price in scrap (rounded down),
+  // resources for 100% of their value (whole stack at once), and sells scrap for 2$ each. Skills and equipped items can't be sold.
+  const SCRAP_DEALER = { equipShare: 0.4, scrapPerCost: 0.01, scrapPrice: 2 };
+  const INVENTORY_SLOTS = 4;
+  const ABILITY_SLOTS = 3;   // spell slots in the bar; keys 1 2 3 cast them
+  // spells (learned from 'skill' items). Magic tar: a projectile toward the closest enemy, up to `range` tiles.
+  // On hit the enemy can't move for `rootMs` and takes dot[0]–dot[1] damage every second, `ticks` times.
+  const SPELLS = {
+    'magic tar': { mana: 1, range: 5, speed: 9, rootMs: 3000, dot: [1, 2], ticks: 3, tickMs: 1000 },
+  };
+  // critical strike (spells only): 0.03% per charisma point, capped at 15%. A crit adds the hero's strength to the damage.
+  const CRIT_PER_CHA = 0.0003, CRIT_CAP = 0.15;
+  const HERO_MANA_REGEN_MS = 30000;   // hero gets 1 mana back every 30 s of game time (up to the mana cap)
+  const EQUIP_SLOTS = 3;   // shown on the right of the hero view (H)
+  const itemDef = name => SHOP_ITEMS.find(it => it.name === name) || LOOT_ITEMS.find(it => it.name === name);
+  const DEFAULT_NAME = 'hero';
+  const cleanName = v => v.replace(/[^\p{L}]/gu, '').slice(0, 10);   // letters only (any alphabet), up to 10
+  const startPrices = () => Object.fromEntries(SHOP_ITEMS.map(it => [it.name, it.price]));
+  const raisePrice = p => Math.ceil(p * 115 / 100);   // integer maths avoids float drift (60 * 1.15 = 68.999…)
+  const FOOD_INFLATION = 0.0062;   // +0.62% food price per work shift → average run ≈ 1000 turns (see design notes)
+  const shown = (name, p) => name === 'food' ? Math.ceil(p - 1e-9) : p;   // food keeps a fractional price internally
+
+  // work: trade health for money, 3 random deals, all reroll after one is taken
+  // charisma 1 → 1-4 health for 2-5 money; each extra charisma point adds +1 to max health risk
+  // and +2 to max money, so risk keeps growing but each health point pays more
+  const rand = (a, b) => a + Math.floor(Math.random() * (b - a + 1));
+  const newDeals = cha => Array.from({ length: 3 }, () => ({ energy: rand(1, 3 + cha), money: rand(2, 3 + 2 * cha) }));   // work costs energy
+
+  // solid things the hero can't walk through, in on-screen coordinates (column, row — counted from 1).
+  // x, y = bottom-right tile of the footprint for even widths, bottom-centre for odd; w × h = footprint in tiles,
+  // spreading left of x (and right for odd widths) and up from y. Art is centred on the whole footprint.
+  // label: shown above it while the hero faces any of its tiles; opens: which window Space opens; art: picture key.
+  // ---- razor wire -----------------------------------------------------------
+  // Coils run along the city border and block the hero. Corner art has arms to the left and bottom;
+  // rot = clockwise quarter turns: 0 = left+bottom, 1 = top+left, 2 = right+top, 3 = bottom+right.
+  // Straight art runs left-right; rot 1 makes it run top-bottom. Tiles in on-screen coordinates (from 1).
+  function cityCoils() {
+    const c = [], add = (x, y, kind, rot) => c.push({ x, y, kind, rot });
+    add(1, 1, 'corner', 3); add(17, 1, 'corner', 0); add(1, 11, 'corner', 2); add(17, 11, 'corner', 1);
+    add(17, 6, 'corner', 2);   // right edge, above the exit: comes from the top, bends out of the map
+    add(17, 9, 'corner', 3);   // right edge, below the exit: comes from the bottom, bends out of the map
+    for (let x = 2; x <= 16; x++) { add(x, 1, 'straight', 0); add(x, 11, 'straight', 0); }
+    for (let y = 2; y <= 10; y++) add(1, y, 'straight', 1);
+    for (const y of [2, 3, 4, 5, 10]) add(17, y, 'straight', 1);   // 17/7 and 17/8 stay open (exit)
+    return c;
+  }
+
+  // ---- areas ----------------------------------------------------------------
+  // exits: stepping onto any of these tiles (column, row — counted from 1) takes the hero to another area,
+  // arriving on the given column in the same row, facing `face`.
+  const AREAS = {
+    city: {
+      walls: [
+        { x: 2, y: 7, w: 2, h: 2, color: '#2e9e44', label: 'ATB-Market', opens: 'shop', art: 'shop', artW: 2.5 },
+        // CaaCaanTeng noodle bar (closed, decorative): columns 6–8, rows 5–6. Solid, nothing to open.
+        // Overlaps TradeCorp on 8/6; TradeCorp is drawn in front of it.
+        { x: 7, y: 6, w: 3, h: 2, color: '#8a3a7a', label: 'CaaCaanTeng', art: 'noodleBar', artW: 3.2 },
+        // hover-car charging station (decorative): columns 12–13, rows 5–6. Solid, no name, nothing to open.
+        { x: 13, y: 6, w: 2, h: 2, color: '#3a4257', art: 'charging', artW: 2.3 },
+        // front: true draws the picture in front of other buildings (not of the hero)
+        { x: 9, y: 7, w: 2, h: 2, color: '#2f6fdb', label: 'TradeCorp', opens: 'work', art: 'work', artW: 2.5, front: true },
+        // HomeDome apartments: columns 3–4, rows 3–6, front faces down (door toward row 7). Solid, no function yet.
+        { x: 4, y: 6, w: 2, h: 4, color: '#f2f2f2', label: 'HomeDome', opens: 'rest', art: 'homedome', artW: 2.2 },
+      ],
+      decals: true,
+      exits: [{ tiles: [[17, 7], [17, 8]], to: 'slums', arriveX: 2, face: 1 }],
+      coils: cityCoils(),
+      tar: { side: 'right', row: 7.5 },   // tar puddle at the exit: map edge, centred between rows 7 and 8
+    },
+    slums: {
+      walls: [
+        // Scrap Dealer: columns 13–16, rows 5–6 (right side of the slums). Space opens it.
+        { x: 14, y: 6, w: 4, h: 2, color: '#6b4a2e', label: 'Scrap Dealer', opens: 'scrap', art: 'scrapDealer', artW: 4.5 },
+      ],
+      // floor details: more trash, leaves and stains, denser than the city, own layout
+      decals: { chance: 1 / 3.5, seed: 7331, weights: { litter: 5, leaves: 5, 'oil stain': 3, crack: 2, 'crack web': 2,
+                'puddle cyan': 1, 'puddle pink': 1, graffiti: 1, manhole: 0.5 } },
+      exits: [{ tiles: [[1, 7], [1, 8]], to: 'city', arriveX: 16, face: -1 }],
+      tar: { side: 'left', row: 7.5 },
+    },
+  };
+  let areaName = 'city';
+  let WALLS = AREAS.city.walls;
+  // coils under a building are skipped (the building covers that tile)
+  const coilAt = (x, y) => (AREAS[areaName].coils || []).find(c => c.x - 1 === x && c.y - 1 === y && !wallAt(x, y));
+  const exitAt = (x, y) => AREAS[areaName].exits.find(e => e.tiles.some(([tx, ty]) => tx - 1 === x && ty - 1 === y));
+  // footprint in 0-based tiles
+  const foot = w => { const ww = w.w || 1, hh = w.h || 1, x0 = w.x - 1 - Math.floor(ww / 2) + (ww % 2 ? 0 : 1);
+    return { x0, x1: x0 + ww - 1, y0: w.y - hh, y1: w.y - 1 }; };
+  // where buildings overlap, the one you can open wins (e.g. TradeCorp over CaaCaanTeng on column 8)
+  const wallAt = (x, y) => { const hits = WALLS.filter(w => { const f = foot(w); return x >= f.x0 && x <= f.x1 && y >= f.y0 && y <= f.y1; });
+    return hits.find(w => w.opens) || hits[0]; };
+  const inGrid = (x, y) => x >= 0 && x < COLS && y >= 0 && y < ROWS;
+  const free = (x, y) => inGrid(x, y) && !wallAt(x, y) && !coilAt(x, y);
+  const footCX = w => { const f = foot(w); return (f.x0 + f.x1 + 1) / 2; };   // footprint centre, in tiles
+  const START = { x: 8, y: 7 };   // 0-based: column 9, row 8 (just below TradeCorp)
+
+  // ---- enemies ----------------------------------------------------------------
+  // Drip: half human, half oil slime. Lives in the middle of the slums (column 9, row 6).
+  // When the hero comes within `aggro` tiles (diagonals count as 1) he chases at 1 tile per second
+  // and keeps chasing until the hero leaves the slums. Next to the hero (diagonals too) he attacks once per second.
+  // Each attack has a 33% chance to also cast Tart (costs 3 mana): the hero can't move for 2 s.
+  // Mana comes back at 1 per 5 s. Beaten: lies as a puddle that can be looted (face it, Space) for money, tar and
+  // a rare magic tar; comes back after 60 s or when the slums are re-entered (unlooted loot is lost then).
+  // All timers run on game time, which stops while a window is open.
+  const DRIP = { name: 'Drip', hp: 10, atk: [1, 2], mana: 3, manaRegenMs: 5000, aggro: 4, stepMs: 1000, attackMs: 1000,
+                 windupMs: 400, tart: { chance: 1 / 3, cost: 3, rootMs: 2000 }, respawnMs: 60000,
+                 loot: { money: [4, 8], tar: [0, 1], magicTarChance: 0.01 },   // rolled when he dies, taken with Space
+                 spawn: { x: 9, y: 6 } };   // spawn in on-screen coordinates (from 1)
+  const HERO_ATTACK_MS = 1000;   // hero: Space while facing an enemy hits for `strength`, at most once per second
+  // sprite calibration (px in each image): body = hood top to puddle bottom, ax = puddle centre in a cell
+  const DRIP_ART = { idle: { frames: 1, body: 288, ax: 164.5 }, attack: { frames: 4, body: 198, ax: 241 }, hurt: { frames: 2, body: 334, ax: 203.5 } };
+  const DRIP_BODY = 1.5;   // tiles from hood top to puddle bottom (hero is 1.75 tiles tall)
+
+  // ---- art (drawn over the tile grid; the grid still does all collision) ----
+  // hero: smooth chibi art from ChatGPT, facing right; flipped for left. Feet sit on the bottom-centre of his tile.
+  // art files are published next to this page in the art/ folder (not embedded), so the game file stays small
+  const ART_SRC = {
+    heroSprite:   'art/heroSprite.png',
+    heroFull:     'art/heroFull.png',
+    heroPunchSide: 'art/heroPunchSide.png', heroPunchDown: 'art/heroPunchDown.png', heroPunchUp: 'art/heroPunchUp.png',   // attack sheets, 4 frames each
+    heroSwordSide: 'art/heroSwordSide.png', heroSwordDown: 'art/heroSwordDown.png', heroSwordUp: 'art/heroSwordUp.png',
+    heroWalk:     'art/heroWalk.png',   // 4 walk frames side by side, facing right
+    heroWalkDown: 'art/heroWalkDown.png',   // 4 walk frames facing the viewer
+    heroWalkUp:   'art/heroWalkUp.png',   // 4 walk frames seen from behind
+    shop:         'art/shop.png',   // shop building (mirrored: awning on the right)
+    work:         'art/work.png',   // work building, 3 x 2 tile footprint
+    invIcon:      'art/invIcon.png',   // inventory button (backpack)
+    slot:         'art/slot.png',   // slot frame: inventory, equipment, abilities, inventory button
+    bananaSword:  'art/bananaSword.png',   // item icon
+    ground:       'art/ground.jpg',   // seamless street floor, no joints (repeats every 6 x 6 tiles)
+    decals:       'art/decals.png',   // 16 floor details, 4 x 4 cells
+    wireStraight: 'art/wireStraight.png',   // razor-wire coil, horizontal, joins left/right
+    wireCorner:   'art/wireCorner.png',   // razor-wire corner, arms to the left and bottom
+    tar:          'art/tar.png',   // tar puddle flowing in from the right edge (mirrored for the left edge)
+    homedome:     'art/homedome.png',   // HomeDome apartments, front view (faces down)
+    noodleBar:    'art/noodleBar.png',   // CaaCaanTeng noodle bar, front view, closed
+    charging:     'art/charging.png',   // hover-car charging station, front view
+    food: 'art/food.png',   // noodle bowl item icon
+    dripIdle: 'art/dripIdle.png',   // Drip, idle / combat stance, faces left
+    dripAttack: 'art/dripAttack.png',   // Drip attack, 4 equal cells, faces left
+    dripHurt: 'art/dripHurt.png',   // Drip hurt + defeated, 2 equal cells
+    dripPortrait: 'art/dripPortrait.png',   // Drip portrait 256x256
+    smilePatch: 'art/smilePatch.png',   // smile patch item icon
+    socialPatch: 'art/socialPatch.png',   // social patch item icon
+    personaPatch: 'art/personaPatch.png',   // persona patch item icon
+    tart: 'art/tart.png',   // tart resource icon
+    magicTart: 'art/magicTart.png',   // magic tart item + spell icon
+    scrapDealer: 'art/scrapDealer.png',   // slums scrap dealer building, front turned slightly left
+    scrap: 'art/scrap.png',   // scrap resource icon
+    heroPortrait: 'art/heroPortrait.png',
+  };
+  const ART = Object.fromEntries(Object.entries(ART_SRC).map(([k, src]) => { const im = new Image(); im.src = src; return [k, im]; }));
+  const ready = im => im && im.complete && im.naturalWidth > 0;
+  const WALK_FRAMES = 4, FRAMES_PER_TILE = 2;   // walk cycle: 2 frames per tile stepped, full cycle every 2 tiles
+  const HERO_H = 1.75;   // hero sprite height in tiles (his head overlaps the tile above)
+  // hero attack animations: 4 frames per sheet; side sheets face right (mirrored for left).
+  // Cells are aligned on the boots: ax = boots centre x, foot = px from the cell bottom to the soles. The hero is 277 px tall
+  // in every sheet, like the 280 px walk frames, so they share one scale.
+  const HERO_ATTACK_SHEETS = { punch: { side: 'heroPunchSide', down: 'heroPunchDown', up: 'heroPunchUp' },
+                               sword: { side: 'heroSwordSide', down: 'heroSwordDown', up: 'heroSwordUp' } };
+  const ATTACK_CELLS = {
+    heroPunchSide: { cellW: 275, cellH: 283, ax: 98.0, foot: 2.1 },
+    heroPunchDown: { cellW: 183, cellH: 283, ax: 91.3, foot: 5.0 },
+    heroPunchUp: { cellW: 214, cellH: 356, ax: 95.7, foot: 5.3 },
+    heroSwordSide: { cellW: 332, cellH: 341, ax: 137.0, foot: 3.5 },
+    heroSwordDown: { cellW: 219, cellH: 405, ax: 106.0, foot: 31.2 },
+    heroSwordUp: { cellW: 281, cellH: 389, ax: 147.8, foot: 3.6 }
+  };
+  const HERO_ATTACK_ANIM_MS = 400;   // 4 frames × 100 ms
+
+  const ICON = { health: '♥', strength: '⚔\uFE0E', mana: '◆', charisma: '✦', money: '$', energy: '⚡\uFE0E' };
+
+  function start(saved) {
+    if (saved.areaName && AREAS[saved.areaName]) { areaName = saved.areaName; WALLS = AREAS[areaName].walls; }
+    const player = { x: saved.x ?? START.x, y: saved.y ?? START.y };
+    if (!free(player.x, player.y)) { player.x = START.x; player.y = START.y; }   // e.g. a building moved onto him
+    // facing direction: right by default, then whichever movement button was pressed last
+    const facing = { x: saved.fx ?? 1, y: saved.fy ?? 0 };
+    const stats = { ...START_STATS, ...(saved.stats || {}) };
+    for (const st in CAPS) stats[st] = capped(st, stats[st]);   // older saves may be over the current caps
+    let deals = saved.deals || newDeals(stats.charisma);
+    let dealsDone = saved.dealsDone ?? 0;   // how many work deals the hero has taken this run
+    let heroName = saved.heroName ?? null;  // the account's name
+    let account = saved.account ?? null;    // logged-in email, or null (account screen shows)
+    let cheatsUnlocked = false;             // after the right password, for this page visit
+    const inventory = saved.inventory ? saved.inventory.map(it => ({ ...it, name: { 'tart': 'tar', 'magic tart': 'magic tar' }[it.name] || it.name })) : [];   // [{ name, kind, class }] — no bonuses while here
+    const equipped = saved.equipped ? [...saved.equipped] : [];      // equipped items — their bonuses apply
+    let restReadyAt = saved.restReadyAt ?? 0;   // Date.now() when the HomeDome can be used again
+    const RENAMED = { 'tart': 'tar', 'magic tart': 'magic tar' };   // older saves used these item names
+    const skills = saved.skills ? saved.skills.map(s => RENAMED[s] || s) : [];            // learned skill names, shown in the ability slots
+    const carried = () => [...inventory, ...equipped];
+    const prices = { ...startPrices(), ...(saved.prices || {}) };
+    const startLevels = () => Object.fromEntries(SHOP_ITEMS.filter(it => it.patch).map(it => [it.name, 0]));
+    const levels = { ...startLevels(), ...(saved.levels || {}) };   // installed level of each patch
+    // open window: null, or { kind: 'shop' | 'work' | 'menu', cursor, msg }
+    let ui = null;
+    window.claude?.hot?.snapshot?.(() => ({ x: player.x, y: player.y, fx: facing.x, fy: facing.y, stats, deals, prices, dealsDone, heroName, inventory, equipped, skills, areaName, restReadyAt, levels, account }));
+
+    document.getElementById('portrait').style.backgroundImage = `url(${ART_SRC.heroPortrait})`;
+    document.getElementById('inv-btn').style.backgroundImage = `url(${ART_SRC.invIcon}), url(${ART_SRC.slot})`;
+    document.querySelectorAll('.ability').forEach(el => el.style.backgroundImage = `url(${ART_SRC.slot})`);
+    let lookX = facing.x < 0 ? -1 : 1;
+    let stepsTaken = 0;   // drives the walk animation
+    let moveDir = { x: 0, y: 0 };   // direction of the current step (picks the walk sheet)   // which way the sprite faces (keeps the last left/right when moving up/down)
+
+    function renderStats() {
+      document.getElementById('portrait').title = heroName || DEFAULT_NAME;
+      document.getElementById('hud-name').textContent = heroName || DEFAULT_NAME;
+      document.getElementById('stat-deals').textContent = dealsDone;
+      document.getElementById('area-name').textContent = areaName;
+      document.getElementById('stat-health').textContent = stats.health;
+      document.getElementById('stat-energy').textContent = stats.energy;
+      document.getElementById('stat-strength').textContent = stats.strength;
+      document.getElementById('stat-mana').textContent = stats.mana;
+      document.getElementById('stat-charisma').textContent = stats.charisma;
+      document.getElementById('stat-money').textContent = stats.money;
+      document.querySelectorAll('.ability').forEach((el, i) => {   // learned spells: icon over the slot frame, key number in the corner
+        const sp = skills[i], art = sp && ART_SRC[(itemDef(sp) || {}).art];
+        el.style.backgroundImage = art ? `url(${art}), url(${ART_SRC.slot})` : `url(${ART_SRC.slot})`;
+        el.style.backgroundSize = art ? '62%, 100%' : '100%';
+        el.textContent = sp && !art ? sp : '';
+        el.dataset.key = sp ? String(i + 1) : '';
+        el.title = sp ? `${sp} · key ${i + 1} · ${SPELLS[sp] ? SPELLS[sp].mana + ' mana' : ''}` : 'empty spell slot';
+      });
+    }
+    renderStats();
+
+    // ---- windows ------------------------------------------------------------
+    // each row: { left, right, act() -> message }
+    function rows() {
+      if (!ui) return [];
+      if (ui.kind === 'shop') return SHOP_ITEMS.map(it => {
+        const gains = Object.entries(it.gain);
+        const owned = it.kind && carried().some(x => x.name === it.name);
+        return {
+          left: it.patch ? `${it.name}  lvl ${levels[it.name]}` : it.name,
+          pic: it.art || '', item: it.art ? { name: it.name } : null,   // '' = empty picture slot
+          right: `${gains.map(([st, n]) => `+${n} ${ICON[st]}`).join(' ')}   ${owned ? 'owned' : shown(it.name, prices[it.name]) + '$'}`,
+          act() {
+            const price = shown(it.name, prices[it.name]);
+            if (owned) return `You already have the ${it.name}.`;
+            if (it.kind && carried().some(x => x.kind === it.kind)) return `You can only carry one ${it.kind}.`;
+            if (it.kind && inventory.length >= INVENTORY_SLOTS) return 'Your inventory is full.';
+            if (stats.money < price) return `Not enough money for ${it.name}.`;
+            // refuse only if nothing it gives can go up (food still helps when only energy or only health is full)
+            if (gains.every(([st]) => st in CAPS && stats[st] >= CAPS[st]))
+              return gains.length > 1 ? 'You are already full.' : `Your ${gains[0][0]} is already full (${CAPS[gains[0][0]]}).`;
+            stats.money -= price;
+            if (it.class === 'equipment') {   // no bonus until equipped
+              inventory.push({ name: it.name, kind: it.kind, class: it.class });
+              return `Got the ${it.name}. Equip it in your inventory (I, Space).`;
+            }
+            for (const [st, n] of gains) stats[st] = capped(st, stats[st] + n);
+            if (it.gain.charisma) deals = newDeals(stats.charisma);
+            if (it.name !== 'food') prices[it.name] = raisePrice(price);
+            if (it.patch) { levels[it.name]++; return `Installed ${it.name} lvl ${levels[it.name]}. Next: ${prices[it.name]}$.`; }
+            return it.name === 'food' ? `Bought ${it.name}.` : `Bought ${it.name}. Now ${prices[it.name]}$.`;
+          },
+        };
+      });
+      if (ui.kind === 'work') return deals.map(d => ({
+        left: `use ${d.energy ?? d.health} ${ICON.energy}`, right: `get ${d.money}$`,
+        act() {
+          const cost = d.energy ?? d.health;   // older saved deals used "health"
+          if (stats.energy < cost) return 'Not enough energy for that deal. Eat something.';
+          stats.energy -= cost; stats.money += d.money; dealsDone++;
+          prices.food *= 1 + FOOD_INFLATION;
+          deals = newDeals(stats.charisma);
+          return `Worked: -${cost} ${ICON.energy}, +${d.money}$. New deals.`;
+        },
+      }));
+      if (ui.kind === 'menu') {
+        const has = !!store.get(STORE.save(account)), when = has ? new Date(store.get(STORE.save(account)).savedAt).toLocaleString() : '';
+        return [
+          { left: 'resume', right: '', act() { ui = null; } },
+          { left: 'save game', right: 'in this browser', act() { return saveToBrowser() ? 'Game saved in this browser.' : 'Could not save (browser storage is blocked).'; } },
+          { left: 'load game', right: has ? when : 'no save yet', act() { if (!has) return 'No saved game in this browser yet.'; applySave(store.get(STORE.save(account)).state); ui = null; float('game loaded', '#3ddc84', player.x + 0.5, player.y - 0.8); } },
+          { left: 'download save file', right: '.json', act() { downloadSave(); return 'Save file downloaded.'; } },
+          { left: 'upload save file', right: '.json', act() { document.getElementById('save-upload').click(); return 'Choose a save file…'; } },
+          { left: 'controls', right: '', act() { openWindow('controls'); } },
+          { left: 'new game', right: '', act() { newGame(); } },
+          { left: 'log out', right: heroName || '', act() { logOut(); } },
+        ];
+      }
+      if (ui.kind === 'loot') return lootRows();
+      if (ui.kind === 'cheat') return cheatRows();
+      if (ui.kind === 'scrap') return scrapRows();
+      if (ui.kind === 'rest') {
+        const wait = restReadyAt - Date.now();
+        const clock = ms => { const s = Math.ceil(ms / 1000); return `${Math.floor(s / 60)}:${String(s % 60).padStart(2, '0')}`; };
+        if (wait > 0) return [{ left: 'not tired yet', right: `rest again in ${clock(wait)}`, act() { return 'You rested recently. Come back later.'; } }];
+        return [{
+        left: `rest for ${REST.price}$?`, right: Object.entries(REST.gain).map(([st, n]) => `+${n} ${ICON[st]}`).join('  '),
+        act() {
+          if (stats.money < REST.price) return `Not enough money to rest (${REST.price}$).`;
+          const up = Object.entries(REST.gain).map(([st, n]) => [st, capped(st, stats[st] + n) - stats[st]]).filter(([, d]) => d > 0);
+          if (!up.length) return 'You are already fully rested.';
+          stats.money -= REST.price;
+          for (const [st, d] of up) stats[st] += d;
+          restReadyAt = Date.now() + REST.cooldownMs;
+          ui = null;   // rested: close the popup and show what came back over the hero
+          const colors = { health: '#e5484d', energy: '#9dff5c', mana: '#4ea1ff' };
+          up.forEach(([st, d], i) => float(`+${d} ${ICON[st]}`, colors[st], player.x + 0.5, player.y - 0.6 - 0.45 * i));
+        },
+      }];
+      }
+      if (ui.kind === 'gameover') return [{ left: 'new game', right: '', act() { newGame(); } }];
+      if (ui.kind === 'controls') return CONTROLS.map(([key, what]) => ({ left: key, right: what, act() {} }));
+      return [];
+    }
+    function newGame() {
+      Object.assign(stats, START_STATS); dealsDone = 0; Object.assign(prices, startPrices()); deals = newDeals(stats.charisma);
+      enterArea('city', START.x, START.y, 1, true);
+      inventory.length = 0; equipped.length = 0; skills.length = 0; restReadyAt = 0; Object.assign(levels, startLevels());
+      rootedUntil = 0; floaters.length = 0; Object.assign(CAPS, BASE_CAPS);
+      ui = null; closePanels();
+    }
+
+    // ---- saving -------------------------------------------------------------------
+    // everything a run needs; drip/fights/timers restart when loaded
+    function snapshot() {
+      return { x: player.x, y: player.y, fx: facing.x, fy: facing.y, stats: { ...stats }, deals, prices: { ...prices }, dealsDone,
+               inventory: inventory.map(it => ({ ...it })), equipped: equipped.map(it => ({ ...it })), skills: [...skills],
+               areaName, restReadyAt, levels: { ...levels }, manaCap: CAPS.mana };
+    }
+    function applySave(s) {
+      Object.assign(CAPS, BASE_CAPS, s.manaCap !== undefined ? { mana: s.manaCap } : {});
+      Object.assign(stats, START_STATS, s.stats || {});
+      deals = s.deals || newDeals(stats.charisma); dealsDone = s.dealsDone || 0;
+      Object.assign(prices, startPrices(), s.prices || {}); Object.assign(levels, startLevels(), s.levels || {});
+      inventory.length = 0; inventory.push(...(s.inventory || []));
+      equipped.length = 0; equipped.push(...(s.equipped || []));
+      skills.length = 0; skills.push(...(s.skills || []));
+      restReadyAt = s.restReadyAt || 0; rootedUntil = 0; floaters.length = 0; closePanels();
+      const area = AREAS[s.areaName] ? s.areaName : 'city';
+      enterArea(area, s.x ?? START.x, s.y ?? START.y, s.fx || 1, true);
+      facing.x = s.fx ?? 1; facing.y = s.fy ?? 0;
+      if (!free(player.x, player.y)) { player.x = START.x; player.y = START.y; fromX = player.x; fromY = player.y; }
+      renderStats();
+    }
+    function saveToBrowser() {
+      return store.set(STORE.save(account), { game: 'little-game', version: SAVE_VERSION, savedAt: Date.now(), name: heroName, state: snapshot() });
+    }
+    function downloadSave() {
+      const data = { game: 'little-game', version: SAVE_VERSION, savedAt: Date.now(), name: heroName, state: snapshot() };
+      const a = document.createElement('a');
+      a.href = URL.createObjectURL(new Blob([JSON.stringify(data, null, 1)], { type: 'application/json' }));
+      a.download = `little-game-${(heroName || 'hero').toLowerCase()}-${new Date().toISOString().slice(0, 10)}.json`;
+      document.body.appendChild(a); a.click(); a.remove();
+      setTimeout(() => URL.revokeObjectURL(a.href), 1000);
+    }
+    document.getElementById('save-upload').addEventListener('change', async e => {
+      const file = e.target.files[0]; e.target.value = '';
+      if (!file) return;
+      try {
+        const data = JSON.parse(await file.text());
+        if (data.game !== 'little-game' || !data.state) throw new Error('not a save');
+        applySave(data.state); ui = null;
+        float('save file loaded', '#3ddc84', player.x + 0.5, player.y - 0.8);
+      } catch { if (ui) ui.msg = "That file isn't a Little Game save."; }
+    });
+
+    // Scrap Dealer window: first row buys 1 scrap, then one row per inventory slot to sell it
+    function scrapRows() {
+      const S = SCRAP_DEALER, done = msg => { ui.cursor = Math.min(ui.cursor, inventory.length); return msg; };
+      const list = [{ left: 'buy scrap', item: { name: 'scrap' }, pic: 'scrap', right: `-${S.scrapPrice}$`, act() {
+        if (stats.money < S.scrapPrice) return `Not enough money (${S.scrapPrice}$).`;
+        if (addItem('scrap', 1)) return 'Your inventory is full.';
+        stats.money -= S.scrapPrice; return `Bought 1 scrap for ${S.scrapPrice}$.`;
+      } }];
+      inventory.forEach((it, idx) => {
+        const def = itemDef(it.name) || {}, n = it.count || 1;
+        const row = { left: `sell ${it.name}`, item: { name: it.name, count: n }, pic: it.name };
+        if (def.class === 'equipment') {
+          const money = Math.round(def.price * S.equipShare), scrap = Math.floor(def.price * S.scrapPerCost);
+          row.right = `+${money}$${scrap ? `  +${scrap} scrap` : ''}`;
+          row.act = () => {
+            inventory.splice(idx, 1); stats.money += money;
+            const lost = scrap ? addItem('scrap', scrap) : 0;
+            return done(`Sold ${it.name}: +${money}$${scrap ? `, +${scrap - lost} scrap` : ''}${lost ? ` (${lost} scrap didn't fit)` : ''}.`);
+          };
+        } else if (def.class === 'resource') {
+          const money = (def.value || 0) * n;
+          row.right = `×${n}  +${money}$`;
+          row.act = () => { inventory.splice(idx, 1); stats.money += money; return done(`Sold ${n} ${it.name}: +${money}$.`); };
+        } else {
+          row.right = "won't buy";
+          row.act = () => `The dealer doesn't buy ${def.class === 'skill' ? 'skills' : 'that'}.`;
+        }
+        list.push(row);
+      });
+      return list;
+    }
+
+    // ---- cheat menu (P) — FOR TESTING ONLY, remove before release -----------------------
+    function cheatRows() {
+      const row = (left, right, act) => ({ left, right, act() { const m = act(); renderStats(); return m; } });
+      const give = (name, n) => { const left = addItem(name, n); return left ? `Inventory full: ${n - left} of ${n} ${name} added.` : `Added ${n} ${name}.`; };
+      return [
+        row('money', '+500$', () => { stats.money += 500; return '+500$.'; }),
+        row('refill', 'full ♥ ⚡ ◆', () => { for (const st in CAPS) stats[st] = CAPS[st]; return 'Health, energy and mana refilled.'; }),
+        row('mana cap', `+3 (now ${CAPS.mana})`, () => { CAPS.mana += 3; stats.mana = CAPS.mana; return `Mana cap ${CAPS.mana}, mana full.`; }),
+        row('charisma', '+10 ✦', () => { stats.charisma += 10; deals = newDeals(stats.charisma); return `Charisma ${stats.charisma}.`; }),
+        row('strength', '+5 ⚔', () => { stats.strength += 5; return `Strength ${stats.strength}.`; }),
+        row('magic tar', 'into inventory', () => give('magic tar', 1)),
+        row('tar', '+10 into inventory', () => give('tar', 10)),
+        row('banana sword', 'into inventory', () => { if (inventory.length >= INVENTORY_SLOTS) return 'Inventory full.'; inventory.push({ name: 'banana sword', kind: 'sword', class: 'equipment' }); return 'Added banana sword.'; }),
+        row('rest cooldown', 'reset', () => { restReadyAt = 0; return 'HomeDome can be used again.'; }),
+        row('Drip', areaName !== 'slums' ? 'only in the slums' : drip && !drip.dead ? 'defeat (loot drops)' : 'respawn', () => {
+          if (areaName !== 'slums' || !drip) return 'Drip lives in the slums.';
+          if (drip.dead) { spawnDrip(); return 'Drip is back.'; }
+          damageDrip(drip.hp, 'cheat', '#8a8a8a'); return 'Drip defeated. His loot is on the puddle.';
+        }),
+        row('go to', areaName === 'city' ? 'slums' : 'city', () => {
+          const to = areaName === 'city' ? 'slums' : 'city';
+          ui = null; enterArea(to, to === 'city' ? START.x : 1, to === 'city' ? START.y : 7, 1);
+        }),
+      ];
+    }
+    const TITLES = { shop: 'ATB-Market', work: 'TradeCorp', menu: 'Menu', controls: 'Controls', hero: 'Hero', inventory: 'Inventory', gameover: 'Game over', loot: 'Loot · Drip', rest: 'HomeDome', cheat: 'Cheats (testing)', scrap: 'Scrap Dealer' };
+    const CONTROLS = [
+      ['W A S D', 'move'],
+      ['two keys, e.g. W+D', 'move diagonally'],
+      ['Space', 'open / select'],
+      ['Space (facing an enemy)', 'attack'],
+      ['Space (facing a beaten enemy)', 'loot'],
+      ['Esc', 'close all windows'],
+      ['Esc (nothing open)', 'menu'],
+      ['H', 'hero (left)'],
+      ['I', 'inventory (bottom right)'],
+      ['H / I (both open)', 'switch focus'],
+      ['W / S (hero)', 'choose equipped item'],
+      ['Space (hero)', 'unequip'],
+      ['A / D (inventory)', 'choose a slot'],
+      ['Space (inventory)', 'equip / learn'],
+      ['W / S', 'choose in a window'],
+      ['1 2 3', 'pick a row (window) / cast spell'],
+    ];
+
+    function openWindow(kind) {
+      ui = { kind, cursor: 0, msg: '' };
+      held.clear(); tapped.clear();
+    }
+    const locked = () => !!ui && ui.kind === 'gameover';   // only "new game" gets you out
+    function closeWindow() { if (!locked()) ui = null; }
+
+    // side panels: inventory (bottom right) and hero (middle left) can be open at the same time.
+    // Keys go to the focused one: the last one opened (H / I on an open but unfocused panel focuses it; a click too).
+    // Like other windows they pause the game and stop the hero from walking. Esc closes everything.
+    const panels = { inventory: null, hero: null };   // each: { cursor, msg } or null
+    let focus = null;                                 // 'inventory' | 'hero' | null
+    const anyOpen = () => !!ui || !!panels.inventory || !!panels.hero;
+    function togglePanel(name) {
+      if (locked()) return;
+      if (!panels[name]) { panels[name] = { cursor: 0, msg: '' }; focus = name; held.clear(); tapped.clear(); }
+      else if (focus !== name) focus = name;
+      else { panels[name] = null; const other = name === 'hero' ? 'inventory' : 'hero'; focus = panels[other] ? other : null; }
+    }
+    function closePanels() { panels.inventory = panels.hero = null; focus = null; }
+    function closeAll() { if (locked()) return; ui = null; closePanels(); }
+
+    function choose(i) {
+      const list = rows();
+      if (!ui || i < 0 || i >= list.length) return;
+      ui.cursor = i;
+      const msg = list[i].act();
+      if (ui) ui.msg = msg || '';
+      renderStats();
+    }
+    function moveCursor(d) {
+      const n = rows().length;
+      if (ui && n) { ui.cursor = (ui.cursor + d + n) % n; ui.msg = ''; }
+    }
+
+    // equip the selected inventory item: only class 'equipment'; bonuses apply from now on
+    // Space in the inventory: equipment is equipped, a skill is learned, resources just sit there
+    function useSelected(pn) {
+      const item = inventory[pn.cursor];
+      if (!item) { pn.msg = 'This slot is empty.'; return; }
+      const def = itemDef(item.name) || {};
+      if (def.class === 'skill') {
+        if (skills.includes(item.name)) { pn.msg = `You already know ${item.name}.`; return; }
+        if (skills.length >= ABILITY_SLOTS) { pn.msg = 'No free spell slot.'; return; }
+        inventory.splice(pn.cursor, 1); skills.push(item.name);
+        pn.msg = `Learned ${item.name}: spell slot ${skills.length}, key ${skills.length}.`;
+        renderStats(); return;
+      }
+      if (def.class === 'resource') { pn.msg = `${item.name} is a resource, used for crafting later.`; return; }
+      equipSelected(item, def, pn);
+    }
+    // Space on an equipped slot in the hero panel: the item goes back to the backpack and its bonuses are removed
+    function unequipSelected(pn) {
+      const item = equipped[pn.cursor];
+      if (!item) { pn.msg = 'Nothing equipped in this slot.'; return; }
+      if (inventory.length >= INVENTORY_SLOTS) { pn.msg = 'Your inventory is full.'; return; }
+      const def = itemDef(item.name) || { gain: {} };
+      equipped.splice(pn.cursor, 1);
+      inventory.push(item);
+      const gains = Object.entries(def.gain);
+      for (const [st, n] of gains) stats[st] -= n;
+      if (def.gain.charisma) deals = newDeals(stats.charisma);
+      pn.cursor = Math.min(pn.cursor, Math.max(0, equipped.length - 1));
+      pn.msg = `Unequipped the ${item.name}: ${gains.map(([st, n]) => `-${n} ${ICON[st]}`).join(' ')}`;
+      renderStats();
+    }
+    function equipSelected(item, def, pn) {
+      if (!def || def.class !== 'equipment') { pn.msg = `The ${item.name} can't be equipped.`; return; }
+      if (equipped.length >= EQUIP_SLOTS) { pn.msg = 'No free equipment slot.'; return; }
+      inventory.splice(pn.cursor, 1);
+      equipped.push(item);
+      const gains = Object.entries(def.gain);
+      for (const [st, n] of gains) stats[st] += n;
+      if (def.gain.charisma) deals = newDeals(stats.charisma);
+      pn.msg = `Equipped the ${item.name}: ${gains.map(([st, n]) => `+${n} ${ICON[st]}`).join(' ')}`;
+      renderStats();
+    }
+
+    // Space: open the tile the hero faces, pick the highlighted row, or equip in the inventory
+    function spacePressed() {
+      if (ui) { choose(ui.cursor); return; }
+      if (focus === 'inventory' && panels.inventory) { useSelected(panels.inventory); return; }
+      if (focus === 'hero' && panels.hero) { unequipSelected(panels.hero); return; }
+      if (moving) return;
+      if (dripAt(player.x + facing.x, player.y + facing.y)) { heroAttack(); return; }
+      if (lootable()) { openWindow('loot'); return; }
+      const w = wallAt(player.x + facing.x, player.y + facing.y);
+      if (w && w.opens) openWindow(w.opens);
+    }
+    function escPressed() { if (locked()) return; if (anyOpen()) closeAll(); else openWindow('menu'); }   // Esc: close everything, or open the menu
+
+    // ---- combat -----------------------------------------------------------------
+    let gameTime = 0, lastFrame = performance.now();   // game clock: stops while a window is open
+    let drip = null;   // the slums enemy, or null in other areas
+    let rootedUntil = 0;   // Tart: hero can't move until this game time
+    let heroNextAttack = 0, heroHurtStart = -1e9, heroAttackStart = -1e9, heroAttackDir = 'side';
+    const hasSword = () => equipped.some(it => it.kind === 'sword');
+    const floaters = [];   // rising combat text: { text, color, x, y, t } (x, y in tiles)
+    const float = (text, color, x, y) => floaters.push({ text, color, x, y, t: gameTime });
+    const dripAt = (x, y) => drip && !drip.dead && drip.x === x && drip.y === y;
+    const heroFree = (x, y) => free(x, y) && !dripAt(x, y);
+    const cheb = (ax, ay, bx, by) => Math.max(Math.abs(ax - bx), Math.abs(ay - by));
+
+    function spawnDrip() {
+      let sx = DRIP.spawn.x - 1, sy = DRIP.spawn.y - 1;
+      if (!free(sx, sy) || (sx === player.x && sy === player.y)) {   // nearest free tile that isn't the hero's
+        let best = null;
+        for (let y = 0; y < ROWS; y++) for (let x = 0; x < COLS; x++) {
+          if (!free(x, y) || exitAt(x, y) || (x === player.x && y === player.y)) continue;
+          const d = Math.hypot(x - sx, y - sy); if (!best || d < best.d) best = { x, y, d };
+        }
+        if (best) { sx = best.x; sy = best.y; }
+      }
+      drip = { x: sx, y: sy, fromX: sx, fromY: sy, stepStart: -1e9, hp: DRIP.hp, mana: DRIP.mana, manaT: gameTime,
+               aggro: false, nextAttack: 0, attackStart: -1e9, hitAt: 0, hurtStart: -1e9, dead: false, deadAt: 0, lookX: -1 };
+    }
+
+    function updateDrip() {
+      if (!drip) return;
+      const t = gameTime;
+      if (drip.dead) { if (t - drip.deadAt >= DRIP.respawnMs) spawnDrip(); return; }
+      while (drip.dot && t >= drip.dot.next) {   // magic tar damage over time
+        const sp = drip.dot.spell;
+        spellHit(rand(sp.dot[0], sp.dot[1]));
+        if (drip.dead) return;
+        if (--drip.dot.left <= 0) drip.dot = null; else drip.dot.next += sp.tickMs;
+      }
+      if (drip.mana >= DRIP.mana) drip.manaT = t;   // regen timer only runs while mana is missing
+      while (drip.mana < DRIP.mana && t - drip.manaT >= DRIP.manaRegenMs) { drip.mana++; drip.manaT += DRIP.manaRegenMs; }
+      const dist = cheb(player.x, player.y, drip.x, drip.y);
+      if (!drip.aggro && dist <= DRIP.aggro) drip.aggro = true;
+      if (!drip.aggro) return;
+      if (player.x !== drip.x) drip.lookX = player.x > drip.x ? 1 : -1;
+      if (drip.hitAt && t >= drip.hitAt) { drip.hitAt = 0; dripStrikes(); }
+      if (t - drip.stepStart < DRIP.stepMs) return;              // still gliding to the next tile
+      const stuck = t < (drip.stunUntil || 0);                   // magic tar: can still swing, can't walk
+      if (dist === 1) {                                         // next to the hero: attack once per second
+        if (t >= drip.nextAttack && !drip.hitAt) { drip.attackStart = t; drip.hitAt = t + DRIP.windupMs; drip.nextAttack = t + DRIP.attackMs; }
+        return;
+      }
+      if (stuck || drip.hitAt || t - drip.attackStart < 700) return;   // stuck, or letting the swing finish
+      // step to the neighbouring tile that gets closest to the hero (no corner cutting, not onto the hero or an exit)
+      let best = null;
+      for (let dy = -1; dy <= 1; dy++) for (let dx = -1; dx <= 1; dx++) {
+        const nx = drip.x + dx, ny = drip.y + dy;
+        if ((!dx && !dy) || !free(nx, ny) || exitAt(nx, ny) || (nx === player.x && ny === player.y)) continue;
+        if (dx && dy && (!free(drip.x + dx, drip.y) || !free(drip.x, drip.y + dy))) continue;
+        const score = cheb(nx, ny, player.x, player.y) * 100 + Math.hypot(nx - player.x, ny - player.y);
+        if (!best || score < best.score) best = { nx, ny, score };
+      }
+      if (!best || cheb(best.nx, best.ny, player.x, player.y) >= dist) return;
+      drip.fromX = drip.x; drip.fromY = drip.y; drip.x = best.nx; drip.y = best.ny; drip.stepStart = t;
+    }
+
+    // Drip's swing lands (after the wind-up) if the hero is still next to him
+    function dripStrikes() {
+      if (cheb(player.x, player.y, drip.x, drip.y) !== 1 || stats.health <= 0) return;
+      const dmg = rand(DRIP.atk[0], DRIP.atk[1]);
+      stats.health = Math.max(0, stats.health - dmg);
+      heroHurtStart = gameTime;
+      float(`-${dmg}`, '#e5484d', player.x + 0.5, player.y - 0.6);
+      if (drip.mana >= DRIP.tart.cost && Math.random() < DRIP.tart.chance) {
+        drip.mana -= DRIP.tart.cost;
+        rootedUntil = gameTime + DRIP.tart.rootMs;
+        float('Tart!', '#ff2bd6', player.x + 0.5, player.y - 1.1);
+      }
+      renderStats();
+      if (stats.health <= 0) gameOver();
+    }
+
+    function heroAttack() {
+      if (gameTime < heroNextAttack) return;
+      heroNextAttack = gameTime + HERO_ATTACK_MS;
+      heroAttackStart = gameTime;   // attack animation in the facing direction (diagonals use the side view)
+      heroAttackDir = facing.x ? 'side' : facing.y > 0 ? 'down' : 'up';
+      if (facing.x) lookX = facing.x;
+      damageDrip(stats.strength, `-${stats.strength}`, '#fff');
+    }
+
+    function damageDrip(dmg, text, color) {
+      drip.hp = Math.max(0, drip.hp - dmg);
+      drip.hurtStart = gameTime; drip.aggro = true;
+      float(text, color, drip.x + 0.5, drip.y - 0.9);
+      if (drip.hp <= 0) {   // nothing is given yet: the loot waits on his puddle
+        drip.dead = true; drip.deadAt = gameTime; drip.hitAt = 0; drip.dot = null; drip.stunUntil = 0;
+        const L = DRIP.loot, items = [];
+        const tars = rand(L.tar[0], L.tar[1]);
+        if (tars) items.push({ name: 'tar', count: tars });
+        if (Math.random() < L.magicTarChance) items.push({ name: 'magic tar', count: 1 });
+        drip.loot = { money: rand(L.money[0], L.money[1]), items };
+      }
+    }
+
+    // ---- spells -----------------------------------------------------------------
+    const critChance = () => Math.min(CRIT_CAP, stats.charisma * CRIT_PER_CHA);
+    const projectiles = [];   // { x, y (tile units, centre), dx, dy (unit), flown, spell, t }
+    let heroManaT = 0;        // game time when the hero's next mana point is due
+
+    // a spell's damage lands: roll a critical strike (adds strength)
+    function spellHit(base) {
+      const crit = Math.random() < critChance();
+      const dmg = base + (crit ? stats.strength : 0);
+      damageDrip(dmg, crit ? `-${dmg} crit!` : `-${dmg}`, crit ? '#ffe600' : '#ff2bd6');
+    }
+
+    function castSpell(slot) {
+      const name = skills[slot], sp = name && SPELLS[name];
+      if (!sp) return;
+      const hx = player.x + 0.5, hy = player.y + 0.5;
+      if (stats.mana < sp.mana) { float(`no mana (${sp.mana} ${ICON.mana})`, '#4ea1ff', hx, player.y - 0.7); return; }
+      stats.mana -= sp.mana; renderStats();
+      // aim at the closest living enemy in this area; with none, shoot where the hero faces
+      let dx = facing.x, dy = facing.y;
+      if (drip && !drip.dead) { const d = dripPos(); dx = d.x + 0.5 - hx; dy = d.y + 0.5 - hy; }
+      if (!dx && !dy) dx = lookX;
+      const len = Math.hypot(dx, dy);
+      projectiles.push({ x: hx, y: hy, dx: dx / len, dy: dy / len, flown: 0, spell: sp, t: gameTime });
+      if (dx) lookX = dx > 0 ? 1 : -1;
+    }
+
+    function updateProjectiles(dt) {
+      for (let i = projectiles.length - 1; i >= 0; i--) {
+        const pr = projectiles[i], step = Math.min(pr.spell.speed * dt / 1000, pr.spell.range - pr.flown);
+        pr.x += pr.dx * step; pr.y += pr.dy * step; pr.flown += step;
+        let gone = false;
+        if (drip && !drip.dead) {   // hit check first, so a target right at the end of the range still counts
+          const d = dripPos();
+          if (Math.hypot(d.x + 0.5 - pr.x, d.y + 0.5 - pr.y) < 0.55) {   // hit: root + damage over time (refreshes if already on)
+            drip.stunUntil = gameTime + pr.spell.rootMs;
+            drip.dot = { spell: pr.spell, left: pr.spell.ticks, next: gameTime + pr.spell.tickMs };
+            drip.aggro = true;
+            float('stuck!', '#ff2bd6', drip.x + 0.5, drip.y - 1.3);
+            gone = true;
+          }
+        }
+        gone = gone || pr.flown >= pr.spell.range - 1e-6 || !inGrid(Math.floor(pr.x), Math.floor(pr.y)) || !!wallAt(Math.floor(pr.x), Math.floor(pr.y));
+        if (gone) projectiles.splice(i, 1);
+      }
+    }
+
+    function updateHeroMana() {
+      if (stats.mana >= CAPS.mana) { heroManaT = gameTime + HERO_MANA_REGEN_MS; return; }
+      if (gameTime >= heroManaT) { stats.mana = capped('mana', stats.mana + 1); heroManaT = gameTime + HERO_MANA_REGEN_MS; renderStats(); }
+    }
+
+    // beaten Drip with loot on the tile the hero faces (or stands on)
+    const lootable = () => drip && drip.dead && drip.loot &&
+      ((drip.x === player.x + facing.x && drip.y === player.y + facing.y) || (drip.x === player.x && drip.y === player.y));
+
+    // put n of an item into the inventory: fills existing stacks first, then empty slots. Returns what didn't fit.
+    function addItem(name, n) {
+      const def = itemDef(name) || {}, max = def.stack || 1;
+      if (max > 1) for (const it of inventory) {
+        if (it.name !== name || (it.count || 1) >= max) continue;
+        const k = Math.min(n, max - (it.count || 1)); it.count = (it.count || 1) + k; n -= k;
+        if (!n) return 0;
+      }
+      while (n > 0 && inventory.length < INVENTORY_SLOTS) {
+        const k = Math.min(n, max); inventory.push({ name, class: def.class, kind: def.kind, count: k }); n -= k;
+      }
+      return n;
+    }
+
+    // loot window: one row per thing on the puddle; Space takes the highlighted one. Closes when the puddle is empty.
+    function lootRows() {
+      if (!drip || !drip.loot) return [];
+      const L = drip.loot, list = [];
+      const taken = () => {   // after taking something: close when empty, keep the highlight in range
+        if (!L.money && !L.items.length) { drip.loot = null; ui = null; return; }
+        ui.cursor = Math.min(ui.cursor, (L.money ? 1 : 0) + L.items.length - 1);
+      };
+      if (L.money) list.push({ left: 'money', item: { name: 'money' }, pic: 'money', right: `${L.money}$`, act() {
+        const m = L.money; stats.money += m; L.money = 0;
+        taken(); return `Took ${m}$.`;
+      } });
+      for (const it of L.items) list.push({ left: it.name, item: { name: it.name, count: it.count }, pic: it.name, right: `×${it.count}`, act() {
+        const left = addItem(it.name, it.count), got = it.count - left;
+        if (!got) return 'Your inventory is full.';
+        it.count = left;
+        if (!left) L.items.splice(L.items.indexOf(it), 1);
+        taken(); return left ? `Took ${got} ${it.name}. Inventory full.` : `Took ${it.name}.`;
+      } });
+      return list;
+    }
+
+    function gameOver() {
+      closePanels();
+      ui = { kind: 'gameover', cursor: 0, msg: `${heroName || DEFAULT_NAME} fell in the ${areaName}. Deals made: ${dealsDone}.` };
+      held.clear(); tapped.clear();
+    }
+
+    // ---- movement -------------------------------------------------------------
+    const KEYS = ['w', 'a', 's', 'd'];
+    const held = new Set();      // movement keys currently held
+    const tapped = new Set();    // keys pressed since the last step, even if already released
+    const COMBO_MS = 60;         // short wait so W+D pressed together counts as one diagonal step
+    const MOVE_MS = 180;         // time to glide from one tile to the next (steady speed)
+    let comboTimer = null;
+    // glide state: player.x/y is the tile we are on or heading to; from* is where the glide started
+    let moving = false, fromX = player.x, fromY = player.y, moveStart = 0;
+
+    function direction() {
+      const keys = new Set([...held, ...tapped]);
+      tapped.clear();
+      return [
+        (keys.has('d') ? 1 : 0) - (keys.has('a') ? 1 : 0),
+        (keys.has('s') ? 1 : 0) - (keys.has('w') ? 1 : 0),
+      ];
+    }
+
+    function tryStep(startTime) {
+      if (anyOpen() || gameTime < rootedUntil) return false;   // Tart holds the hero in place
+      const [dx, dy] = direction();
+      if (!dx && !dy) return false;
+      if (dx && dy && dripAt(player.x + dx, player.y + dy)) return false;   // pushing into an enemy on a diagonal just faces him
+      // try the full step; if blocked diagonally, slide along the free axis instead
+      const options = [[dx, dy], dx && dy ? [dx, 0] : null, dx && dy ? [0, dy] : null].filter(Boolean);
+      // a diagonal step also needs both side tiles free, so the hero can't squeeze past a wall's corner
+      const ok = options.find(([ox, oy]) =>
+        heroFree(player.x + ox, player.y + oy) &&
+        (!ox || !oy || (heroFree(player.x + ox, player.y) && heroFree(player.x, player.y + oy))));
+      if (!ok) return false;
+      fromX = player.x; fromY = player.y;
+      player.x += ok[0]; player.y += ok[1];
+      moveStart = startTime; moving = true; stepsTaken++;
+      moveDir = { x: ok[0], y: ok[1] };
+      facing.x = dx; facing.y = dy; if (dx) lookX = dx;   // face where the keys point (e.g. back to right after letting go of W)
+      return true;
+    }
+
+    function press(keys) {
+      if (!ui && focus && panels[focus]) {   // focused panel: inventory A/D along the slots, hero W/S (or A/D) through equipped slots
+        const pn = panels[focus];
+        const d = (keys.includes('d') ? 1 : 0) - (keys.includes('a') ? 1 : 0);
+        const v = (keys.includes('s') ? 1 : 0) - (keys.includes('w') ? 1 : 0);
+        const step = focus === 'inventory' ? d : v || d, n = focus === 'inventory' ? INVENTORY_SLOTS : EQUIP_SLOTS;
+        if (step) { pn.cursor = (pn.cursor + step + n) % n; pn.msg = ''; }
+        return;
+      }
+      if (ui) {                              // inside a window W/S move the highlight
+        if (keys.includes('w')) moveCursor(-1);
+        if (keys.includes('s')) moveCursor(1);
+        return;
+      }
+      keys.forEach(k => { held.add(k); tapped.add(k); });
+      // face along every movement key held, so W+D faces diagonally (needed to hit an enemy standing on a diagonal)
+      facing.x = (held.has('d') ? 1 : 0) - (held.has('a') ? 1 : 0);
+      facing.y = (held.has('s') ? 1 : 0) - (held.has('w') ? 1 : 0);
+      if (!facing.x && !facing.y) { facing.x = (keys.includes('d') ? 1 : 0) - (keys.includes('a') ? 1 : 0); facing.y = (keys.includes('s') ? 1 : 0) - (keys.includes('w') ? 1 : 0); }
+      if (facing.x) lookX = facing.x;
+      if (moving || comboTimer) return;   // a glide in progress picks the keys up when it lands
+      comboTimer = setTimeout(() => { comboTimer = null; tryStep(performance.now()); }, COMBO_MS);
+    }
+
+    function release(keys) { keys.forEach(k => held.delete(k)); }
+
+    // ---- drawing ------------------------------------------------------------
+    let rowRects = [];   // canvas-space hit areas of window rows, for taps/clicks
+
+    function frame(now) {
+      const dt = !anyOpen() && !naming() ? Math.min(100, now - lastFrame) : 0;
+      gameTime += dt;   // game clock pauses behind windows
+      lastFrame = now;
+      if (dt) { updateDrip(); updateProjectiles(dt); updateHeroMana(); }
+      // keys still held when Tart wears off (or a blocking enemy moves): start walking again
+      if (!moving && !comboTimer && held.size && !anyOpen()) tryStep(now);
+      let rx = player.x, ry = player.y;
+      if (moving) {
+        const t = (now - moveStart) / MOVE_MS;
+        if (t >= 1) {
+          moving = false;
+          const ex = exitAt(player.x, player.y);
+          if (ex) enterArea(ex.to, ex.arriveX - 1, player.y, ex.face);
+          // keep going without a pause if keys are still held, so speed stays constant
+          const landed = moveStart + MOVE_MS;
+          if ((held.size || tapped.size) && tryStep(now - landed < MOVE_MS ? landed : now)) {
+            const t2 = Math.min(1, (now - moveStart) / MOVE_MS);
+            rx = fromX + (player.x - fromX) * t2; ry = fromY + (player.y - fromY) * t2;
+          }
+        } else {
+          rx = fromX + (player.x - fromX) * t; ry = fromY + (player.y - fromY) * t;
+        }
+      }
+      draw(rx, ry);
+      requestAnimationFrame(frame);
+    }
+
+    // ground: seamless floor texture repeated every 6 x 6 tiles, built once into an offscreen canvas.
+    // It has no joints, so the grid is invisible; decals (cracks, manholes…) will snap to tiles on top of it.
+    let groundLayer = null;   // rebuilt when the area changes
+    let areaFade = 0, areaBanner = 0;   // timestamps for the transition fade and the area name banner
+    function enterArea(name, x, y, face, instant) {
+      areaName = name; WALLS = AREAS[name].walls;
+      player.x = x; player.y = y; fromX = x; fromY = y;
+      facing.x = face; facing.y = 0; lookX = face; moving = false;
+      groundLayer = null;
+      drip = null; rootedUntil = 0; projectiles.length = 0;
+      if (name === 'slums') spawnDrip();   // Drip is back at full health every time the slums are entered
+      if (!instant) { areaFade = performance.now(); areaBanner = areaFade; }
+      renderStats();
+    }
+    const GROUND_REPEAT = 6;   // tiles per texture repeat
+    function buildGround() {
+      const im = ART.ground;
+      if (!ready(im)) return null;
+      const g = document.createElement('canvas'); g.width = canvas.width; g.height = canvas.height;
+      const gx = g.getContext('2d'); gx.imageSmoothingQuality = 'high';
+      const B = GROUND_REPEAT * TILE;
+      for (let y = 0; y < g.height; y += B) for (let x = 0; x < g.width; x += B) gx.drawImage(im, x, y, B, B);
+      if (AREAS[areaName].decals) placeDecals(gx);
+      drawCoils(gx);
+      drawTar(gx);
+      return g;
+    }
+
+    // tar puddle: its straight edge sits on the map edge, flowing in from outside; flat, walkable
+    const TAR_H = 2.8;   // height in tiles (covers both exit rows with some spill above and below)
+    function drawTar(gx) {
+      const t = AREAS[areaName].tar, im = ART.tar;
+      if (!t || !ready(im)) return;
+      const h = TAR_H * TILE, w = h * im.naturalWidth / im.naturalHeight, cy = (t.row - 0.5) * TILE;
+      gx.save();
+      if (t.side === 'right') gx.drawImage(im, canvas.width - w, cy - h / 2, w, h);
+      else { gx.translate(w, 0); gx.scale(-1, 1); gx.drawImage(im, 0, cy - h / 2, w, h); }
+      gx.restore();
+    }
+
+    // razor wire is flat on the ground layer (drawn once, under the hero)
+    function drawCoils(gx) {
+      for (const c of AREAS[areaName].coils || []) {
+        if (wallAt(c.x - 1, c.y - 1)) continue;
+        const im = ART[c.kind === 'corner' ? 'wireCorner' : 'wireStraight'];
+        if (!ready(im)) continue;
+        gx.save();
+        gx.translate((c.x - 0.5) * TILE, (c.y - 0.5) * TILE); gx.rotate(c.rot * Math.PI / 2);
+        gx.drawImage(im, -TILE / 2, -TILE / 2, TILE, TILE);
+        gx.restore();
+      }
+    }
+
+    // floor details: one per chosen tile, snapped to the tile centre. Fixed seed, so the street is the same every game.
+    // weight = how often; size = fraction of a tile; turn: 'free' (any quarter turn + mirror), 'quarter', 'half',
+    // 'mirror' (left/right only, e.g. puddles keep vertical reflections), 'none'; alpha = how strongly it shows.
+    const DECALS = [   // weight 0 = not used
+      { name: 'crack',       weight: 3,   size: 0.95, turn: 'free' },
+      { name: 'crack web',   weight: 3,   size: 0.8,  turn: 'free' },
+      { name: 'manhole',     weight: 1,   size: 0.72, turn: 'free' },
+      { name: 'drain grate', weight: 0,   size: 0.7,  turn: 'quarter' },
+      { name: 'puddle cyan', weight: 1.5, size: 0.85, turn: 'mirror' },
+      { name: 'puddle pink', weight: 1.5, size: 0.85, turn: 'mirror' },
+      { name: 'oil stain',   weight: 2,   size: 0.8,  turn: 'free' },
+      { name: 'litter',      weight: 2,   size: 0.75, turn: 'free' },
+      { name: 'yellow line', weight: 0,   size: 0.85, turn: 'quarter', alpha: 0.75 },
+      { name: 'crosswalk',   weight: 0, size: 0.85, turn: 'quarter', alpha: 0.75 },
+      { name: 'arrow',       weight: 0, size: 0.75, turn: 'quarter', alpha: 0.75 },
+      { name: 'metal plate', weight: 0,   size: 0.6,  turn: 'quarter' },
+      { name: 'floor light', weight: 0, size: 0.6,  turn: 'half' },
+      { name: 'cable',       weight: 0,   size: 0.95, turn: 'free' },
+      { name: 'graffiti',    weight: 0.5, size: 0.75, turn: 'none', alpha: 0.75 },
+      { name: 'leaves',      weight: 2,   size: 0.8,  turn: 'free' },
+    ];
+    const DECAL_CHANCE = 1 / 6;   // city: share of free tiles that get a detail (areas can override: decals.chance)
+    function placeDecals(gx) {
+      const sheet = ART.decals;
+      if (!ready(sheet)) return;
+      const cell = sheet.naturalWidth / 4;
+      const cfg = typeof AREAS[areaName].decals === 'object' ? AREAS[areaName].decals : {};
+      const weight = d => cfg.weights ? (cfg.weights[d.name] ?? 0) : d.weight;
+      const chance = cfg.chance ?? DECAL_CHANCE;
+      let seed = cfg.seed ?? 20260923;
+      const rnd = () => (seed = (seed * 16807) % 2147483647) / 2147483647;
+      const total = DECALS.reduce((t, d) => t + weight(d), 0);
+      const pick = () => { let r = rnd() * total; for (let i = 0; i < DECALS.length; i++) { r -= weight(DECALS[i]); if (r <= 0 && weight(DECALS[i]) > 0) return i; } return 0; };
+      const placed = {};   // "x,y" -> decal index
+      for (let y = 0; y < ROWS; y++) for (let x = 0; x < COLS; x++) {
+        if (rnd() >= chance || wallAt(x, y) || coilAt(x, y) || exitAt(x, y) || (areaName === 'city' && x === START.x && y === START.y)) continue;
+        let i = pick(), tries = 0;
+        const nearSame = k => { for (let dy = -1; dy <= 1; dy++) for (let dx = -1; dx <= 1; dx++) if (placed[(x + dx) + ',' + (y + dy)] === k) return true; return false; };
+        while (nearSame(i) && tries++ < 8) i = pick();
+        if (nearSame(i)) continue;
+        placed[x + ',' + y] = i;
+        const d = DECALS[i], sz = d.size * TILE;
+        let rot = 0, fx = 1;
+        if (d.turn === 'free' || d.turn === 'quarter') rot = Math.floor(rnd() * 4) * Math.PI / 2;
+        if (d.turn === 'half') rot = rnd() < 0.5 ? 0 : Math.PI;
+        if (d.turn === 'free' || d.turn === 'mirror') fx = rnd() < 0.5 ? -1 : 1;
+        gx.save();
+        gx.globalAlpha = d.alpha ?? 0.9;
+        gx.translate((x + 0.5) * TILE, (y + 0.5) * TILE); gx.rotate(rot); gx.scale(fx, 1);
+        gx.drawImage(sheet, (i % 4) * cell, Math.floor(i / 4) * cell, cell, cell, -sz / 2, -sz / 2, sz, sz);
+        gx.restore();
+      }
+    }
+
+    function draw(rx, ry) {
+      ctx.fillStyle = '#000';
+      ctx.fillRect(0, 0, canvas.width, canvas.height);
+      const wantDecals = AREAS[areaName].decals && ready(ART.decals);
+      const wantWire = !!AREAS[areaName].coils && ready(ART.wireStraight) && ready(ART.wireCorner);
+      const wantTar = !!AREAS[areaName].tar && ready(ART.tar);
+      if (!groundLayer || (wantDecals && !groundLayer.hasDecals) || (wantWire && !groundLayer.hasWire) || (wantTar && !groundLayer.hasTar)) {
+        groundLayer = buildGround();
+        if (groundLayer) { groundLayer.hasDecals = wantDecals; groundLayer.hasWire = wantWire; groundLayer.hasTar = wantTar; }
+      }
+      if (groundLayer) ctx.drawImage(groundLayer, 0, 0);
+
+      // grid lines only until the floor texture is loaded (its slab joints are the grid)
+      if (!groundLayer) {
+      ctx.strokeStyle = 'rgba(255, 255, 255, 0.12)';
+      ctx.lineWidth = 2;
+      ctx.beginPath();
+      for (let x = 0; x <= COLS; x++) { const px = Math.min(Math.max(x * TILE, 1), canvas.width - 1); ctx.moveTo(px, 0); ctx.lineTo(px, canvas.height); }
+      for (let y = 0; y <= ROWS; y++) { const py = Math.min(Math.max(y * TILE, 1), canvas.height - 1); ctx.moveTo(0, py); ctx.lineTo(canvas.width, py); }
+      ctx.stroke();
+      }
+
+      // tile the hero is facing: yellow at 5% opacity, follows the hero as he glides
+      ctx.fillStyle = 'rgba(255, 220, 0, 0.05)';
+      ctx.fillRect(Math.round((rx + facing.x) * TILE), Math.round((ry + facing.y) * TILE), TILE, TILE);
+
+      // exits: soft glow fading toward the map edge, with a chevron pointing out
+      for (const e of AREAS[areaName].exits) for (const [tx, ty] of e.tiles) {
+        const x0 = (tx - 1) * TILE, y0 = (ty - 1) * TILE, out = tx === 1 ? -1 : 1;
+        const gr = ctx.createLinearGradient(out > 0 ? x0 : x0 + TILE, 0, out > 0 ? x0 + TILE : x0, 0);
+        gr.addColorStop(0, 'rgba(0, 229, 255, 0)'); gr.addColorStop(1, 'rgba(0, 229, 255, 0.08)');
+        ctx.fillStyle = gr; ctx.fillRect(x0, y0, TILE, TILE);
+        ctx.strokeStyle = 'rgba(0, 229, 255, 0.55)'; ctx.lineWidth = 4; ctx.beginPath();
+        const cx = x0 + TILE / 2, cy = y0 + TILE / 2;
+        ctx.moveTo(cx - 8 * out, cy - 12); ctx.lineTo(cx + 8 * out, cy); ctx.lineTo(cx - 8 * out, cy + 12); ctx.stroke();
+      }
+
+      // depth sort: things higher on screen first, so whatever is lower is drawn in front
+      // buildings: split around the hero by their bottom row; among buildings, "front" ones are drawn last
+      const order = (a, b) => (a.y + (a.front ? 10 : 0)) - (b.y + (b.front ? 10 : 0));
+      WALLS.filter(w => w.y - 1 <= ry).sort(order).forEach(drawWall);
+      if (gameTime < rootedUntil) drawTart(rx, ry);
+      // hero and enemies: lower on screen is drawn in front; a beaten enemy lies flat under everyone
+      const actors = [{ y: ry, draw: () => drawHeroSprite(rx, ry) }];
+      if (drip) { const d = dripPos(); actors.push({ y: drip.dead ? -1e9 : d.y, draw: () => drawDrip(d) }); }
+      actors.sort((a, b) => a.y - b.y).forEach(a => a.draw());
+      WALLS.filter(w => w.y - 1 > ry).sort(order).forEach(drawWall);
+      drawProjectiles();
+      drawFloaters();
+      if (drip && drip.aggro && !drip.dead) drawFoePanel();
+
+      // name of the tile the yellow highlight is on
+      const looked = wallAt(Math.round(rx) + facing.x, Math.round(ry) + facing.y);
+      if (looked && looked.label && !anyOpen()) {
+        ctx.fillStyle = '#fff';
+        ctx.font = '600 28px ' + MONO;
+        ctx.textAlign = 'center'; ctx.textBaseline = 'bottom';
+        ctx.fillText(looked.label, footCX(looked) * TILE, Math.max(40, wallTop(looked) - 10));   // keep tall buildings' names on screen
+      }
+
+      // area change: quick fade from black and the area's name
+      const since = performance.now() - areaFade;
+      if (areaFade && since < 300) { ctx.fillStyle = `rgba(0, 0, 0, ${1 - since / 300})`; ctx.fillRect(0, 0, canvas.width, canvas.height); }
+      const bs = performance.now() - areaBanner;
+      if (areaBanner && bs < 1600) {
+        ctx.globalAlpha = bs < 1200 ? 1 : 1 - (bs - 1200) / 400;
+        ctx.fillStyle = '#fff'; ctx.font = '600 44px ' + MONO; ctx.textAlign = 'center'; ctx.textBaseline = 'top';
+        ctx.fillText(areaName, canvas.width / 2, 40);
+        ctx.globalAlpha = 1;
+      }
+
+      rowRects = [];
+      drawPanels();
+      if (ui) drawWindow();
+    }
+
+    // a wall: its picture (anchored bottom-centre on the footprint) or, until there is art, coloured tiles
+    function artSize(w) {
+      const im = ART[w.art];
+      if (!w.art || !ready(im)) return null;
+      const dw = (w.artW || w.w || 1) * TILE; return { im, dw, dh: dw * im.naturalHeight / im.naturalWidth };
+    }
+    function wallTop(w) { const a = artSize(w), f = foot(w); return a ? (f.y1 + 1) * TILE - a.dh : f.y0 * TILE; }
+    function drawWall(w) {
+      const f = foot(w), a = artSize(w);
+      if (a) {
+        ctx.imageSmoothingQuality = 'high';
+        ctx.drawImage(a.im, footCX(w) * TILE - a.dw / 2, (f.y1 + 1) * TILE - a.dh, a.dw, a.dh);
+      } else {
+        ctx.fillStyle = w.color;
+        ctx.fillRect(f.x0 * TILE, f.y0 * TILE, (f.x1 - f.x0 + 1) * TILE, (f.y1 - f.y0 + 1) * TILE);
+      }
+    }
+
+    // ---- combat drawing ---------------------------------------------------------
+    function dripPos() {
+      const p = Math.min(1, (gameTime - drip.stepStart) / DRIP.stepMs);
+      return { x: drip.fromX + (drip.x - drip.fromX) * p, y: drip.fromY + (drip.y - drip.fromY) * p };
+    }
+    // one cell of a Drip sheet, puddle centre on the tile's bottom-centre, scaled so his body is DRIP_BODY tiles
+    function drawDripCell(im, spec, frame, cx, feet, squash) {
+      const fw = im.naturalWidth / spec.frames, fh = im.naturalHeight, s = DRIP_BODY * TILE / spec.body;
+      ctx.save(); ctx.translate(cx, feet); if (drip.lookX > 0) ctx.scale(-1, 1);   // art faces left
+      ctx.scale(1, squash || 1);
+      ctx.imageSmoothingQuality = 'high';
+      ctx.drawImage(im, frame * fw, 0, fw, fh, -spec.ax * s, -fh * s, fw * s, fh * s);
+      ctx.restore();
+    }
+    function drawDrip(d) {
+      const t = gameTime, cx = (d.x + 0.5) * TILE, feet = (d.y + 1) * TILE - 2;
+      if (drip.dead) {
+        if (ready(ART.dripHurt)) drawDripCell(ART.dripHurt, DRIP_ART.hurt, 1, cx, feet);
+        if (drip.loot) {   // loot waiting: a pulsing gold glint over the puddle, "loot" when faced
+          const k = 0.5 + 0.5 * Math.sin(performance.now() / 250), gy = feet - 52;
+          ctx.save(); ctx.globalAlpha = 0.5 + 0.5 * k; ctx.fillStyle = '#f5c542';
+          ctx.translate(cx + 18, gy); ctx.scale(0.8 + 0.3 * k, 0.8 + 0.3 * k);
+          ctx.beginPath(); ctx.moveTo(0, -12); ctx.lineTo(3, -3); ctx.lineTo(12, 0); ctx.lineTo(3, 3); ctx.lineTo(0, 12); ctx.lineTo(-3, 3); ctx.lineTo(-12, 0); ctx.lineTo(-3, -3); ctx.closePath(); ctx.fill();
+          ctx.restore();
+          if (lootable() && !anyOpen()) {
+            ctx.fillStyle = '#fff'; ctx.font = '600 24px ' + MONO; ctx.textAlign = 'center'; ctx.textBaseline = 'bottom';
+            ctx.fillText('loot (Space)', cx, feet - 70);
+          }
+        }
+        return;
+      }
+      const sinceAtk = t - drip.attackStart, sinceHurt = t - drip.hurtStart;
+      if (sinceAtk < 700 && ready(ART.dripAttack)) drawDripCell(ART.dripAttack, DRIP_ART.attack, Math.min(3, Math.floor(sinceAtk / 175)), cx, feet);
+      else if (sinceHurt < 300 && ready(ART.dripHurt)) drawDripCell(ART.dripHurt, DRIP_ART.hurt, 0, cx, feet);
+      else if (ready(ART.dripIdle)) drawDripCell(ART.dripIdle, DRIP_ART.idle, 0, cx, feet, 1 + 0.025 * Math.sin(t / 260));   // oily wobble
+      else { ctx.fillStyle = '#10131C'; ctx.fillRect(d.x * TILE + 10, d.y * TILE + 10, TILE - 20, TILE - 20); }
+      if (t < (drip.stunUntil || 0)) {   // magic tar: glowing magenta ring pinning him down
+        const k = 0.6 + 0.4 * Math.sin(t / 120);
+        ctx.save(); ctx.globalAlpha = k; ctx.strokeStyle = '#ff2bd6'; ctx.lineWidth = 4;
+        ctx.beginPath(); ctx.ellipse(cx, feet - 8, 46, 16, 0, 0, Math.PI * 2); ctx.stroke(); ctx.restore();
+      }
+      // health bar over his head
+      const bw = 64, bx = cx - bw / 2, by = feet - DRIP_BODY * TILE - 18;
+      ctx.fillStyle = 'rgba(0, 0, 0, 0.7)'; ctx.fillRect(bx - 2, by - 2, bw + 4, 12);
+      ctx.fillStyle = '#e5484d'; ctx.fillRect(bx, by, bw * drip.hp / DRIP.hp, 8);
+    }
+    // Tart: the hero stands stuck in a glossy oil puddle
+    function drawTart(rx, ry) {
+      const cx = (rx + 0.5) * TILE, cy = (ry + 1) * TILE - 10, left = (rootedUntil - gameTime) / DRIP.tart.rootMs;
+      ctx.save();
+      ctx.globalAlpha = Math.min(1, left * 4);
+      ctx.fillStyle = '#10131C'; ctx.beginPath(); ctx.ellipse(cx, cy, 40, 15, 0, 0, Math.PI * 2); ctx.fill();
+      ctx.lineWidth = 3; ctx.strokeStyle = '#ff2bd6'; ctx.beginPath(); ctx.ellipse(cx, cy, 40, 15, 0, Math.PI * 1.1, Math.PI * 1.6); ctx.stroke();
+      ctx.strokeStyle = '#00e5ff'; ctx.beginPath(); ctx.ellipse(cx, cy, 40, 15, 0, Math.PI * 0.1, Math.PI * 0.5); ctx.stroke();
+      ctx.restore();
+    }
+    function drawProjectiles() {
+      for (const pr of projectiles) {
+        const x = pr.x * TILE, y = pr.y * TILE - 30, s = 44;   // flies at chest height
+        ctx.save(); ctx.translate(x, y); ctx.rotate((gameTime - pr.t) / 90);
+        if (ready(ART.magicTart)) ctx.drawImage(ART.magicTart, -s / 2, -s / 2, s, s);
+        else { ctx.fillStyle = '#ff2bd6'; ctx.beginPath(); ctx.arc(0, 0, 10, 0, Math.PI * 2); ctx.fill(); }
+        ctx.restore();
+      }
+    }
+    function drawFloaters() {
+      const LIFE = 900;
+      for (let i = floaters.length - 1; i >= 0; i--) if (gameTime - floaters[i].t > LIFE) floaters.splice(i, 1);
+      ctx.save(); ctx.textAlign = 'center'; ctx.textBaseline = 'middle'; ctx.font = '700 30px ' + MONO; ctx.lineWidth = 5; ctx.strokeStyle = '#000';
+      for (const f of floaters) {
+        const k = (gameTime - f.t) / LIFE, x = f.x * TILE, y = f.y * TILE - k * 36;
+        ctx.globalAlpha = 1 - k * k;
+        ctx.strokeText(f.text, x, y); ctx.fillStyle = f.color; ctx.fillText(f.text, x, y);
+      }
+      ctx.restore();
+    }
+    // enemy panel at the top while fighting: portrait, name, health, mana
+    function drawFoePanel() {
+      const w = 300, h = 80, x = (canvas.width - w) / 2, y = 12;
+      ctx.fillStyle = 'rgba(0, 0, 0, 0.75)'; ctx.fillRect(x, y, w, h);
+      ctx.strokeStyle = 'rgba(255, 43, 214, 0.6)'; ctx.lineWidth = 2; ctx.strokeRect(x + 1, y + 1, w - 2, h - 2);
+      if (ready(ART.dripPortrait)) { ctx.imageSmoothingQuality = 'high'; ctx.drawImage(ART.dripPortrait, x + 8, y + 8, 64, 64); }
+      const tx = x + 84, bw = w - 84 - 14;
+      ctx.textAlign = 'left'; ctx.textBaseline = 'middle'; ctx.fillStyle = '#fff'; ctx.font = '600 22px ' + MONO;
+      ctx.fillText(DRIP.name, tx, y + 20);
+      ctx.fillStyle = '#3a1418'; ctx.fillRect(tx, y + 36, bw, 12);
+      ctx.fillStyle = '#e5484d'; ctx.fillRect(tx, y + 36, bw * drip.hp / DRIP.hp, 12);
+      ctx.fillStyle = '#fff'; ctx.font = '600 14px ' + MONO; ctx.textAlign = 'right';
+      ctx.fillText(`${drip.hp}/${DRIP.hp}`, tx + bw, y + 20);
+      ctx.fillStyle = '#4ea1ff'; ctx.font = '18px ' + MONO; ctx.textAlign = 'left';
+      ctx.fillText(ICON.mana.repeat(drip.mana) + '◇'.repeat(DRIP.mana - drip.mana), tx, y + 62);
+    }
+
+    // hero sprite: feet on the bottom-centre of his tile, small bob while walking, mirrored when facing left
+    // hero sprite: feet on the bottom-centre of his tile, mirrored when facing left.
+    // While attacking: the punch or sword sheet for the facing direction. With a sword equipped (and not attacking)
+    // the sword is drawn on his back: behind him in the side and front views, over the backpack in the back view.
+    function drawHeroSprite(rx, ry) {
+      const im = ART.heroSprite, walk = ART.heroWalk;
+      if (!ready(im)) {   // fallback until the image loads
+        ctx.fillStyle = '#808080'; ctx.fillRect(Math.round(rx * TILE), Math.round(ry * TILE), TILE, TILE); return;
+      }
+      const h = HERO_H * TILE, k = h / 280;   // k: sheet px -> canvas px (walk frames are 280 px tall)
+      const cx = (rx + 0.5) * TILE, feet = (ry + 1) * TILE - 4;
+      ctx.save();
+      if (gameTime - heroHurtStart < 300 && Math.floor((gameTime - heroHurtStart) / 60) % 2 === 0) ctx.globalAlpha = 0.35;   // hit blink
+      ctx.imageSmoothingQuality = 'high';
+      ctx.translate(cx, feet);
+      const since = gameTime - heroAttackStart;
+      const key = since < HERO_ATTACK_ANIM_MS && HERO_ATTACK_SHEETS[hasSword() ? 'sword' : 'punch'][heroAttackDir];
+      if (key && ready(ART[key])) {   // attack frame
+        const c = ATTACK_CELLS[key], f = Math.min(3, Math.floor(since / (HERO_ATTACK_ANIM_MS / 4)));
+        if (heroAttackDir === 'side' && lookX < 0) ctx.scale(-1, 1);
+        ctx.drawImage(ART[key], f * c.cellW, 0, c.cellW, c.cellH, -c.ax * k, -(c.cellH - c.foot - 2) * k, c.cellW * k, c.cellH * k);
+        ctx.restore(); return;
+      }
+      // straight down / up use the front / back walk (never mirrored); everything else uses the side walk
+      const view = moving && moveDir.x === 0 ? (moveDir.y > 0 ? 'down' : 'up') : 'side';
+      const vert = view === 'down' ? ART.heroWalkDown : view === 'up' ? ART.heroWalkUp : null;
+      const sheet = vert && ready(vert) ? vert : walk;
+      if (lookX < 0 && sheet === walk) ctx.scale(-1, 1);
+      const sword = hasSword() && ready(ART.bananaSword);
+      if (sword && view !== 'up') drawBackSword(view, h);   // behind the body
+      if (moving && ready(sheet)) {   // walk cycle frame, picked by distance walked
+        const t = Math.min(0.999, (performance.now() - moveStart) / MOVE_MS);
+        const f = ((stepsTaken - 1) * FRAMES_PER_TILE + Math.floor(t * FRAMES_PER_TILE)) % WALK_FRAMES;
+        const fw = sheet.naturalWidth / WALK_FRAMES, fh = sheet.naturalHeight, w = h * fw / fh;
+        ctx.drawImage(sheet, f * fw, 0, fw, fh, -w / 2, -h, w, h);
+      } else {
+        const w = h * im.naturalWidth / im.naturalHeight;
+        ctx.drawImage(im, -w / 2, -h, w, h);
+      }
+      if (sword && view === 'up') drawBackSword(view, h);    // over the backpack
+      ctx.restore();
+    }
+    // sheathed banana sword: the icon (blade tip up-right) turned so the handle sticks up over his shoulder.
+    // Positions are fractions of the hero's height, measured from his feet, in the sprite's own (facing-right) space.
+    const BACK_SWORD = { side: { x: -0.13, y: -0.62, rot: 115, size: 0.52 },
+                         down: { x: 0.12, y: -0.62, rot: 150, size: 0.52 },
+                         up:   { x: 0.00, y: -0.60, rot: 180, size: 0.52 } };
+    function drawBackSword(view, h) {
+      const b = BACK_SWORD[view], s = b.size * h, bob = moving ? Math.sin((performance.now() - moveStart) / MOVE_MS * Math.PI * 2) * 1.5 : 0;
+      ctx.save();
+      ctx.translate(b.x * h, b.y * h + bob); ctx.rotate(b.rot * Math.PI / 180);
+      ctx.drawImage(ART.bananaSword, -s / 2, -s / 2, s, s);
+      ctx.restore();
+    }
+
+    function drawWindow() {
+      const list = rows();
+      const info = ui.kind === 'controls';          // read-only list, nothing to select
+      const rowH = info ? 38 : ui.kind === 'shop' || ui.kind === 'loot' || ui.kind === 'scrap' ? 88 : ui.kind === 'cheat' ? 50 : 64;   // shop and loot rows are taller for the item pictures
+      const hero = ui.kind === 'hero', inv = ui.kind === 'inventory';
+      const pw = (hero || inv || ui.kind === 'shop' || ui.kind === 'scrap' ? 11 : 9) * TILE, ph = hero || inv ? 7 * TILE : ui.kind === 'rest' ? 5 * TILE : Math.max(6 * TILE, 110 + list.length * rowH + 130);
+      const px = (canvas.width - pw) / 2, py = (canvas.height - ph) / 2;
+      ctx.fillStyle = 'rgba(0, 0, 0, 0.6)';
+      ctx.fillRect(0, 0, canvas.width, canvas.height);
+      ctx.fillStyle = '#000';
+      ctx.fillRect(px, py, pw, ph);
+      ctx.strokeStyle = '#fff'; ctx.lineWidth = 2;
+      ctx.strokeRect(px + 1, py + 1, pw - 2, ph - 2);
+
+      ctx.textBaseline = 'middle';
+      ctx.fillStyle = '#fff';
+      ctx.textAlign = 'left';
+      ctx.font = '600 40px ' + MONO;
+      ctx.fillText(hero ? (heroName || DEFAULT_NAME) : TITLES[ui.kind], px + 40, py + 56);
+      if (ui.kind === 'shop' || ui.kind === 'work' || ui.kind === 'scrap') {   // wallet in the corner
+        ctx.textAlign = 'right';
+        ctx.font = '26px ' + MONO;
+        ctx.fillStyle = '#8a8a8a';
+        ctx.fillText(`${ICON.energy} ${stats.energy}   ${stats.money}$`, px + pw - 40, py + 56);
+      }
+
+      const top = py + 110;
+      list.forEach((r, i) => {
+        const y = top + i * rowH, sel = !info && i === ui.cursor;
+        rowRects.push({ x: px + 24, y, w: pw - 48, h: rowH - 8, i });
+        if (sel) { ctx.fillStyle = 'rgba(255, 220, 0, 0.12)'; ctx.fillRect(px + 24, y, pw - 48, rowH - 8); }
+        ctx.fillStyle = sel || info ? '#fff' : '#cfcfcf';
+        ctx.font = (sel ? '600 ' : '') + (info ? '22px ' : ui.kind === 'cheat' ? '26px ' : '30px ') + MONO;
+        ctx.textAlign = 'left';
+        let tx = px + 40;
+        if (r.pic !== undefined) {   // item picture slot (shop)
+          const sz = rowH - 12, sx = px + 74, sy = y + (rowH - 8 - sz) / 2;
+          drawSlot(sx, sy, sz, r.item || (r.pic ? { name: r.left } : null));
+          ctx.fillStyle = sel ? '#fff' : '#cfcfcf'; ctx.font = (sel ? '600 ' : '') + '30px ' + MONO;
+          ctx.textAlign = 'left'; ctx.textBaseline = 'middle';
+          if (sel) ctx.fillText('>', px + 40, y + (rowH - 8) / 2);
+          tx = sx + sz + 16;
+          ctx.fillText(r.left, tx, y + (rowH - 8) / 2);
+        } else ctx.fillText((info ? '' : sel ? '> ' : '  ') + r.left, tx, y + (rowH - 8) / 2);
+        ctx.textAlign = 'right';
+        if (info) ctx.fillStyle = '#8a8a8a';
+        ctx.fillText(r.right, px + pw - 40, y + (rowH - 8) / 2);
+      });
+
+      ctx.textAlign = 'left';
+      if (ui.msg) {
+        ctx.fillStyle = '#f5c542';
+        ctx.font = '26px ' + MONO;
+        ctx.fillText(ui.msg, px + 40, py + ph - 88);
+      }
+      ctx.fillStyle = '#8a8a8a';
+      ctx.font = '22px ' + MONO;
+      ctx.fillText(hero ? 'H or Esc close' : ui.kind === 'gameover' ? 'Space start a new game' : inv ? 'A/D/W/S choose · Space equip/learn/unequip · I or Esc close' : ui.kind === 'loot' ? 'W/S choose · Space take · Esc close' : ui.kind === 'cheat' ? 'W/S choose · Space apply · P or Esc close' : ui.kind === 'scrap' ? 'W/S choose · Space buy / sell · Esc close' : ui.kind === 'rest' ? (restReadyAt > Date.now() ? 'Esc close' : 'Space confirm · Esc close') : info ? 'Esc close' : 'W/S choose · Space select · Esc close', px + 40, py + ph - 40);
+    }
+
+    // one square slot; item = { name } or null
+    function drawSlot(x, y, size, item) {
+      const frame = ART.slot;
+      if (ready(frame)) { ctx.imageSmoothingQuality = 'high'; ctx.drawImage(frame, x, y, size, size); }
+      const pic = item && ART[(itemDef(item.name) || {}).art];
+      if (item && item.name === 'money') {   // money has no item art: a big gold $
+        ctx.fillStyle = '#f5c542'; ctx.font = `700 ${Math.round(size * 0.55)}px ` + MONO; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+        ctx.fillText('$', x + size / 2, y + size / 2 + size * 0.03);
+      } else if (item && ready(pic)) {   // item picture inside the frame
+        const i = size * 0.14;
+        ctx.imageSmoothingQuality = 'high';
+        ctx.drawImage(pic, x + i, y + i, size - 2 * i, size - 2 * i);
+      } else if (item) {
+        const i = size * 0.16;
+        ctx.fillStyle = '#f2d24b'; ctx.fillRect(x + i, y + i, size - 2 * i, size - 2 * i);   // placeholder art for the item
+        const fs = Math.round(size * 0.14);   // text scales with the slot
+        ctx.fillStyle = '#000'; ctx.font = `600 ${fs}px ` + MONO; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+        item.name.split(' ').forEach((w, j, arr) => ctx.fillText(w, x + size / 2, y + size / 2 + (j - (arr.length - 1) / 2) * fs * 1.2));
+      }
+      if (item && (item.count || 1) > 1) {   // stack size, bottom-right
+        const fs = Math.round(size * 0.2);
+        ctx.font = `700 ${fs}px ` + MONO; ctx.textAlign = 'right'; ctx.textBaseline = 'alphabetic';
+        ctx.lineWidth = 4; ctx.strokeStyle = '#000'; ctx.strokeText(item.count, x + size - size * 0.1, y + size - size * 0.1);
+        ctx.fillStyle = '#fff'; ctx.fillText(item.count, x + size - size * 0.1, y + size - size * 0.1);
+      }
+      if (!item && !ready(frame)) {
+        ctx.strokeStyle = 'rgba(255, 255, 255, 0.35)'; ctx.lineWidth = 2;
+        ctx.strokeRect(x + 1, y + 1, size - 2, size - 2);
+      }
+    }
+
+    // inventory: a row of INVENTORY_SLOTS slots
+    // ---- side panels ------------------------------------------------------------
+    const INV_PANEL = { w: 7 * TILE, h: 290 }, HERO_PANEL = { w: 8 * TILE, h: 6 * TILE };
+    function drawPanels() {
+      if (panels.hero) drawHeroPanel();
+      if (panels.inventory) drawInventoryPanel();
+    }
+    function panelFrame(x, y, w, h, title, on) {
+      ctx.fillStyle = 'rgba(0, 0, 0, 0.9)'; ctx.fillRect(x, y, w, h);
+      ctx.strokeStyle = on ? '#fff' : 'rgba(255, 255, 255, 0.35)'; ctx.lineWidth = 2; ctx.strokeRect(x + 1, y + 1, w - 2, h - 2);
+      ctx.fillStyle = on ? '#fff' : '#8a8a8a'; ctx.font = '600 28px ' + MONO; ctx.textAlign = 'left'; ctx.textBaseline = 'middle';
+      ctx.fillText(title, x + 24, y + 34);
+    }
+    function selFrame(x, y, size, on) {   // yellow frame on the selected slot (grey when the panel isn't focused)
+      ctx.strokeStyle = on ? '#ffdc00' : 'rgba(255, 220, 0, 0.35)'; ctx.lineWidth = 4;
+      ctx.strokeRect(x - 5, y - 5, size + 10, size + 10);
+    }
+    const bonusText = def => def ? Object.entries(def.gain || {}).map(([st, n]) => `+${n} ${ICON[st]}`).join(' ') : '';
+
+    // inventory: bottom right, just above the info bar. Backpack slots only (equipped items are in the hero panel).
+    function drawInventoryPanel() {
+      const pn = panels.inventory, on = focus === 'inventory', w = INV_PANEL.w, h = INV_PANEL.h;
+      const x = canvas.width - w - 16, y = canvas.height - h - 16;
+      panelFrame(x, y, w, h, 'Inventory', on);
+      const size = 96, gap = 16, total = INVENTORY_SLOTS * size + (INVENTORY_SLOTS - 1) * gap, x0 = x + (w - total) / 2, sy = y + 62;
+      for (let i = 0; i < INVENTORY_SLOTS; i++) {
+        const sx = x0 + i * (size + gap);
+        drawSlot(sx, sy, size, inventory[i] || null);
+        rowRects.push({ x: sx, y: sy, w: size, h: size, i, panel: 'inventory' });
+        if (i === pn.cursor) selFrame(sx, sy, size, on);
+      }
+      ctx.textAlign = 'left'; ctx.textBaseline = 'middle'; ctx.font = '18px ' + MONO;
+      const ly = sy + size + 26, sel = inventory[pn.cursor];
+      if (pn.msg) { ctx.fillStyle = '#f5c542'; ctx.fillText(pn.msg, x + 24, ly); }
+      else if (sel) {   // what the selected item is, and its total price
+        const def = itemDef(sel.name) || {}, n = sel.count || 1;
+        ctx.fillStyle = '#fff';
+        ctx.fillText(`${sel.name} · ${sel.class || 'item'}${sel.class === 'resource' ? ` · ${n}/${def.stack}` : ''}`, x + 24, ly);
+        ctx.fillStyle = '#cfcfcf';
+        ctx.fillText(sel.class === 'skill' ? 'Space to learn' : sel.class === 'resource' ? 'crafting resource' : `${bonusText(def)} when equipped · Space equip`, x + 24, ly + 26);
+        const unit = def.class === 'equipment' ? def.price : def.value;   // equipment: shop price; resources: value per piece
+        ctx.fillStyle = '#f5c542';
+        ctx.fillText(unit === undefined ? 'total price: —' : `total price: ${unit * n}$${n > 1 ? `  (${n} × ${unit}$)` : ''}`, x + 24, ly + 52);
+      } else { ctx.fillStyle = '#8a8a8a'; ctx.fillText('empty slot', x + 24, ly); }
+      ctx.fillStyle = '#8a8a8a'; ctx.font = '16px ' + MONO;
+      ctx.fillText('A/D choose · Space use · I or Esc close', x + 24, y + h - 18);
+    }
+
+    // hero: middle left. Full-body picture, stats, and the equipped slots (W/S choose, Space unequips).
+    function drawHeroPanel() {
+      const pn = panels.hero, on = focus === 'hero', w = HERO_PANEL.w, h = HERO_PANEL.h;
+      const x = 16, y = (canvas.height - h) / 2, top = y + 64;
+      panelFrame(x, y, w, h, heroName || DEFAULT_NAME, on);
+      const bw = 180, bh = 320;
+      ctx.fillStyle = '#1B2233'; ctx.fillRect(x + 24, top, bw, bh);
+      const full = ART.heroFull;
+      if (ready(full)) {   // full-body art, fitted into the box
+        const ih = bh - 24, iw = Math.min(bw - 16, ih * full.naturalWidth / full.naturalHeight), ih2 = iw * full.naturalHeight / full.naturalWidth;
+        ctx.imageSmoothingQuality = 'high'; ctx.drawImage(full, x + 24 + (bw - iw) / 2, top + (bh - ih2) / 2, iw, ih2);
+      }
+      const lines = [
+        [`${ICON.health} health`, stats.health, 'health'], [`${ICON.strength} strength`, stats.strength, 'strength'],
+        [`${ICON.mana} mana`, stats.mana, 'mana'], [`${ICON.charisma} charisma`, stats.charisma, 'charisma'],
+        [`${ICON.energy} energy`, stats.energy, 'energy'],
+        ['crit (spells)', `${(critChance() * 100).toFixed(2)}%`, 'crit'],
+      ];
+      const bonus = {};   // equipment bonus, shown as "base +bonus" with the bonus in green
+      for (const it of equipped) for (const [st, n] of Object.entries((itemDef(it.name) || {}).gain || {})) bonus[st] = (bonus[st] || 0) + n;
+      const lx = x + 24 + bw + 24, rx = x + w - 24 - 96 - 24;
+      ctx.font = '20px ' + MONO; ctx.textBaseline = 'middle';
+      lines.forEach(([k, v, key], i) => {
+        const ly = top + 16 + i * 38, b = bonus[key] || 0;
+        ctx.textAlign = 'left'; ctx.fillStyle = '#8a8a8a'; ctx.fillText(k, lx, ly);
+        ctx.textAlign = 'right';
+        if (b) {
+          const extra = ` +${b}`;
+          ctx.fillStyle = '#3ddc84'; ctx.fillText(extra, rx, ly);
+          ctx.fillStyle = '#fff'; ctx.fillText(String(v - b), rx - ctx.measureText(extra).width, ly);
+        } else { ctx.fillStyle = '#fff'; ctx.fillText(String(v), rx, ly); }
+      });
+      const size = 96, gap = 16, sx = x + w - 24 - size;
+      for (let i = 0; i < EQUIP_SLOTS; i++) {
+        const sy = top + i * (size + gap);
+        drawSlot(sx, sy, size, equipped[i] || null);
+        rowRects.push({ x: sx, y: sy, w: size, h: size, i, panel: 'hero' });
+        if (i === pn.cursor) selFrame(sx, sy, size, on);
+      }
+      ctx.textAlign = 'left'; ctx.font = '18px ' + MONO;
+      const ly = top + bh + 30, sel = equipped[pn.cursor];
+      if (pn.msg) { ctx.fillStyle = '#f5c542'; ctx.fillText(pn.msg, x + 24, ly); }
+      else if (sel) { ctx.fillStyle = '#cfcfcf'; ctx.fillText(`${sel.name} · ${bonusText(itemDef(sel.name))} · Space to unequip`, x + 24, ly); }
+      else { ctx.fillStyle = '#8a8a8a'; ctx.fillText('empty equipment slot', x + 24, ly); }
+      ctx.fillStyle = '#8a8a8a'; ctx.font = '16px ' + MONO;
+      ctx.fillText('W/S choose · Space unequip · H or Esc close', x + 24, y + h - 18);
+    }
+
+    function toggleInventory() { if (!ui) togglePanel('inventory'); }
+    document.getElementById('inv-btn').addEventListener('click', e => { e.currentTarget.blur(); if (!naming()) toggleInventory(); });
+
+    // ---- account screen + cheat password -------------------------------------------
+    const accEl = document.getElementById('account'), lockEl = document.getElementById('cheat-lock');
+    const naming = () => !accEl.hidden || !lockEl.hidden;   // an overlay with text fields is open: the game ignores keys
+    const $ = id => document.getElementById(id);
+    let accMode = 'create';
+    function setAccMode(mode) {
+      accMode = mode; $('acc-err').textContent = '';
+      $('acc-title').textContent = mode === 'create' ? 'Create account' : 'Log in';
+      $('acc-submit').textContent = mode === 'create' ? 'Create account' : 'Log in';
+      $('acc-name-row').hidden = mode !== 'create';
+      $('acc-pass').autocomplete = mode === 'create' ? 'new-password' : 'current-password';
+      $('acc-switch').textContent = mode === 'create' ? 'Already have an account? Log in' : 'New here? Create an account';
+    }
+    function showAccount() {
+      accEl.hidden = false; held.clear(); tapped.clear();
+      const last = store.get(STORE.last), accounts = store.get(STORE.accounts) || {};
+      setAccMode(last && accounts[last] ? 'login' : 'create');
+      $('acc-email').value = last || ''; $('acc-pass').value = '';
+      setTimeout(() => (accMode === 'login' && last ? $('acc-pass') : accMode === 'create' ? $('acc-name') : $('acc-email')).focus(), 0);
+    }
+    $('acc-switch').addEventListener('click', e => { e.preventDefault(); setAccMode(accMode === 'create' ? 'login' : 'create'); });
+    $('acc-name').addEventListener('input', () => { const v = cleanName($('acc-name').value); if (v !== $('acc-name').value) $('acc-name').value = v; });
+    $('acc-form').addEventListener('submit', async e => {
+      e.preventDefault();
+      const err = m => { $('acc-err').textContent = m; };
+      const email = $('acc-email').value.trim().toLowerCase(), pass = $('acc-pass').value;
+      const accounts = store.get(STORE.accounts) || {};
+      if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) return err('Enter a valid email.');
+      if (accMode === 'create') {
+        const name = cleanName($('acc-name').value);
+        if (!name) return err('Enter a hero name (letters only).');
+        if (accounts[email]) return err('This email already has an account. Log in instead.');
+        if (pass.length < 4) return err('Password needs at least 4 characters.');
+        const salt = randomSalt();
+        accounts[email] = { name, salt, hash: await sha256(salt + pass), created: Date.now() };
+        if (!store.set(STORE.accounts, accounts)) return err("This browser blocks storage, so accounts can't be saved.");
+        logIn(email, name, false);
+      } else {
+        const acc = accounts[email];
+        if (!acc || acc.hash !== await sha256(acc.salt + pass)) return err('Wrong email or password.');
+        logIn(email, acc.name, true);
+      }
+    });
+    function logIn(email, name, loadSave) {
+      account = email; heroName = name; store.set(STORE.last, email);
+      accEl.hidden = true; document.activeElement?.blur();
+      newGame();
+      const save = loadSave && store.get(STORE.save(email));
+      if (save && save.state) { applySave(save.state); float('welcome back', '#3ddc84', player.x + 0.5, player.y - 0.8); }   // continue where you saved
+      renderStats();
+    }
+    function logOut() { ui = null; closePanels(); account = null; heroName = null; cheatsUnlocked = false; newGame(); renderStats(); showAccount(); }
+    if (!account) showAccount();
+
+    function openCheats() {
+      if (cheatsUnlocked) { openWindow('cheat'); return; }
+      lockEl.hidden = false; $('cheat-err').textContent = ''; $('cheat-pass').value = ''; held.clear(); tapped.clear();
+      setTimeout(() => $('cheat-pass').focus(), 0);
+    }
+    $('cheat-form').addEventListener('submit', async e => {
+      e.preventDefault();
+      if (await sha256($('cheat-pass').value) !== CHEAT_HASH) { $('cheat-err').textContent = 'Wrong password.'; $('cheat-pass').select(); return; }
+      cheatsUnlocked = true; lockEl.hidden = true; document.activeElement?.blur(); openWindow('cheat');
+    });
+    $('cheat-pass').addEventListener('keydown', e => { if (e.key === 'Escape') { e.preventDefault(); lockEl.hidden = true; document.activeElement?.blur(); } });
+
+    // ---- input --------------------------------------------------------------
+    addEventListener('keydown', e => {
+      if (naming() || e.metaKey || e.ctrlKey || e.altKey) return;
+      const k = e.key.toLowerCase();
+      if (e.code === 'Space') { e.preventDefault(); if (!e.repeat) spacePressed(); return; }
+      if (k === 'p') { e.preventDefault(); if (!e.repeat && !locked()) { if (ui && ui.kind === 'cheat') closeWindow(); else openCheats(); } return; }   // CHEAT menu (testing) — remove before release
+      if (k === 'i') { e.preventDefault(); if (!e.repeat && !ui) togglePanel('inventory'); return; }
+      if (k === 'h') { e.preventDefault(); if (!e.repeat && !ui) togglePanel('hero'); return; }
+      if (e.key === 'Escape') { e.preventDefault(); if (!e.repeat) escPressed(); return; }
+      if (ui && /^[1-9]$/.test(e.key)) { choose(+e.key - 1); return; }
+      if (!anyOpen() && /^[1-3]$/.test(e.key)) { e.preventDefault(); if (!e.repeat) castSpell(+e.key - 1); return; }
+      if (!KEYS.includes(k)) return;
+      e.preventDefault();
+      if (anyOpen()) { press([k]); return; }        // cursor moves, repeat allowed
+      if (!e.repeat) press([k]);
+    });
+    addEventListener('keyup', e => {
+      const k = e.key.toLowerCase();
+      if (KEYS.includes(k)) release([k]);
+    });
+    addEventListener('blur', () => held.clear());
+
+    // tap/click a row in a window to pick it
+    canvas.addEventListener('pointerdown', e => {
+      if (!anyOpen() || naming()) return;
+      const r = canvas.getBoundingClientRect();
+      const s = Math.min(r.width / canvas.width, r.height / canvas.height);   // object-fit: contain
+      const ox = (r.width - canvas.width * s) / 2, oy = (r.height - canvas.height * s) / 2;
+      const cx = (e.clientX - r.left - ox) / s, cy = (e.clientY - r.top - oy) / s;
+      const hit = rowRects.find(b => (!ui || !b.panel) && cx >= b.x && cx <= b.x + b.w && cy >= b.y && cy <= b.y + b.h);
+      if (hit && hit.panel) { focus = hit.panel; panels[hit.panel].cursor = hit.i; panels[hit.panel].msg = ''; }   // click a panel slot: focus + select
+      else if (hit) choose(hit.i);
+    });
+
+    if (areaName === 'slums') spawnDrip();   // loaded straight into the slums
+    requestAnimationFrame(frame);
+  }
+
+  window.claude?.hot?.ready ? window.claude.hot.ready(start) : start(window.claude?.hot?.data ?? {});
+</script>
+
+</body>
+</html>
