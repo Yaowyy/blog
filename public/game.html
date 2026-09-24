@@ -416,6 +416,71 @@
   ];
   AREAS['0:0'].decals = true;   // city: the default detail mix
   AREAS['0:0'].coils = cityCoils();
+  // toxic lake: one lake where the 4 lake zones meet; each zone shows its quarter (about 1/4 of the zone).
+  // art: that quarter's picture, drawn flat on the ground at x, y (px). rows: '#' = water tile (blocked; spells fly over it).
+  const LAKE = {
+    '0:-2': { art: 'lakeTL', x: 612, y: 307, rows: [
+      '.....................',
+      '.....................',
+      '.....................',
+      '.....................',
+      '.....................',
+      '.....................',
+      '................##...',
+      '.............########',
+      '...........##########',
+      '...........##########',
+      '...........##########',
+      '..........###########',
+      '..........###########',
+    ] },
+    '0:-1': { art: 'lakeTR', x: 0, y: 342, rows: [
+      '.....................',
+      '.....................',
+      '.....................',
+      '.....................',
+      '.....................',
+      '.....................',
+      '.#####...............',
+      '########.............',
+      '##########...........',
+      '############.........',
+      '############.........',
+      '############.........',
+      '#############........',
+    ] },
+    '-1:-2': { art: 'lakeBL', x: 582, y: 0, rows: [
+      '........#############',
+      '.........############',
+      '..........###########',
+      '...........##########',
+      '...........##########',
+      '..............#######',
+      '.................####',
+      '.....................',
+      '.....................',
+      '.....................',
+      '.....................',
+      '.....................',
+      '.....................',
+    ] },
+    '-1:-1': { art: 'lakeBR', x: 0, y: 0, rows: [
+      '#############........',
+      '#############........',
+      '############.........',
+      '##########...........',
+      '#########............',
+      '#########............',
+      '########.............',
+      '.....................',
+      '.....................',
+      '.....................',
+      '.....................',
+      '.....................',
+      '.....................',
+    ] },
+  };
+  for (const id in LAKE) AREAS[id].lake = LAKE[id];
   AREAS['0:1'].walls = [
     { x: 17, y: 5, w: 4, h: 2, color: '#6b4a2e', label: 'Scrap Dealer', opens: 'scrap', art: 'scrapDealer', artW: 4.5 },
   ];
@@ -433,7 +498,8 @@
   const wallAt = (x, y) => { const hits = WALLS.filter(w => { const f = foot(w); return x >= f.x0 && x <= f.x1 && y >= f.y0 && y <= f.y1; });
     return hits.find(w => w.opens) || hits[0]; };
   const inGrid = (x, y) => x >= 0 && x < COLS && y >= 0 && y < ROWS;
-  const free = (x, y) => inGrid(x, y) && !wallAt(x, y) && !coilAt(x, y);
+  const lakeAt = (x, y) => { const l = AREAS[areaName].lake; return !!l && l.rows[y] && l.rows[y][x] === '#'; };
+  const free = (x, y) => inGrid(x, y) && !wallAt(x, y) && !coilAt(x, y) && !lakeAt(x, y);
   const footCX = w => { const f = foot(w); return (f.x0 + f.x1 + 1) / 2; };   // footprint centre, in tiles
   const START = { x: 8, y: 7 };   // 0-based: column 9, row 8 (just below TradeCorp)
 
@@ -475,6 +541,7 @@
     bananaSword:  'art/bananaSword.png',   // item icon
     ground:       'art/ground.jpg',   // seamless street floor, no joints (repeats every 6 x 6 tiles)
     groundSlums: 'art/groundSlums.jpg', groundFactory: 'art/groundFactory.jpg', groundLake: 'art/groundLake.jpg',   // zone floors, same repeat
+    lakeTL: 'art/lakeTL.webp', lakeTR: 'art/lakeTR.webp', lakeBL: 'art/lakeBL.webp', lakeBR: 'art/lakeBR.webp',   // toxic lake quarters (see LAKE)
     decals:       'art/decals.png',   // 16 floor details, 4 x 4 cells
     wireStraight: 'art/wireStraight.png',   // razor-wire coil, horizontal, joins left/right
     wireCorner:   'art/wireCorner.png',   // razor-wire corner, arms to the left and bottom
@@ -1429,6 +1496,8 @@
       const B = GROUND_REPEAT * TILE;
       for (let y = 0; y < g.height; y += B) for (let x = 0; x < g.width; x += B) gx.drawImage(im, x, y, B, B);
       if (AREAS[areaName].decals) placeDecals(gx);
+      const lake = AREAS[areaName].lake;   // toxic lake quarter, flat on the ground
+      if (lake && ready(ART[lake.art])) gx.drawImage(ART[lake.art], lake.x, lake.y);
       drawCoils(gx);
       drawTar(gx);
       return g;
@@ -1526,9 +1595,10 @@
       const wantDecals = AREAS[areaName].decals && ready(ART.decals);
       const wantWire = !!AREAS[areaName].coils && ready(ART.wireStraight) && ready(ART.wireCorner);
       const wantTar = AREAS[areaName].exits.length > 0 && ready(ART.tar);
-      if (!groundLayer || (wantDecals && !groundLayer.hasDecals) || (wantWire && !groundLayer.hasWire) || (wantTar && !groundLayer.hasTar)) {
+      const wantLake = !!AREAS[areaName].lake && ready(ART[AREAS[areaName].lake.art]);
+      if (!groundLayer || (wantDecals && !groundLayer.hasDecals) || (wantWire && !groundLayer.hasWire) || (wantTar && !groundLayer.hasTar) || (wantLake && !groundLayer.hasLake)) {
         groundLayer = buildGround();
-        if (groundLayer) { groundLayer.hasDecals = wantDecals; groundLayer.hasWire = wantWire; groundLayer.hasTar = wantTar; }
+        if (groundLayer) { groundLayer.hasDecals = wantDecals; groundLayer.hasWire = wantWire; groundLayer.hasTar = wantTar; groundLayer.hasLake = wantLake; }
       }
       if (groundLayer) ctx.drawImage(groundLayer, 0, 0);
 
