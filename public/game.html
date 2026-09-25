@@ -713,6 +713,11 @@
                  windupMs: 400, spell: 'magic tar', respawnMs: [60000, 90000], lootMs: 30000, fadeMs: 2000,
                  loot: { money: [4, 8], tar: [0, 1], magicTarChance: 0.01 },   // rolled when he dies, taken with Space
                  spawns: [[{ x: 11, y: 7 }], [{ x: 8, y: 5 }, { x: 14, y: 9 }]] };   // spawn tiles (from 1) for 1 and for 2 Drips
+  // hero melee area: a half-disc whose flat side is the front edge of the hero's tile, facing where he looks.
+  // Radius 1.2 tiles covers the whole tile in front and a little beyond; a melee weapon makes the area 20% bigger
+  // (radius × √1.2). Every living enemy whose body (radius 0.25 tiles) touches the area is hit.
+  const MELEE = { radius: 1.2, weaponArea: 1.2, bodyR: 0.25, flashMs: 180 };
+  const MELEE_KINDS = ['sword'];   // equipment kinds that count as melee weapons
   const HERO_ATTACK_MS = 1000;   // hero: Space while facing an enemy hits for `strength`, at most once per second
   // sprite calibration (px in each image): body = hood top to puddle bottom, ax = puddle centre in a cell
   const DRIP_ART = { idle: { frames: 1, body: 288, ax: 164.5 }, attack: { frames: 4, body: 198, ax: 241 }, hurt: { frames: 2, body: 334, ax: 203.5 } };
@@ -1276,7 +1281,7 @@
       if (focus === 'inventory' && panels.inventory) { useSelected(panels.inventory); return; }
       if (focus === 'hero' && panels.hero) { unequipSelected(panels.hero); return; }
       if (moving) return;
-      if (dripAt(player.x + facing.x, player.y + facing.y)) { heroAttack(); return; }
+      if (meleeTargets().length) { heroAttack(); return; }   // an enemy inside the melee area
       if (lootable()) { lootTarget = lootable(); openWindow('loot'); return; }
       const w = wallAt(player.x + facing.x, player.y + facing.y);
       if (w && w.opens) openWindow(w.opens);
@@ -1526,8 +1531,31 @@
       heroAttackStart = gameTime;   // attack animation in the facing direction (diagonals use the side view)
       heroAttackDir = facing.x ? 'side' : facing.y > 0 ? 'down' : 'up';
       if (facing.x) lookX = facing.x;
-      drip = dripAt(player.x + facing.x, player.y + facing.y);
-      if (drip) damageDrip(stats.strength, `-${stats.strength}`, '#fff');
+      for (const d of meleeTargets()) { drip = d; damageDrip(stats.strength, `-${stats.strength}`, '#fff'); }
+    }
+    const hasMeleeWeapon = () => equipped.some(it => MELEE_KINDS.includes(it.kind));
+    function meleeArea() {   // origin (tile units, centre of the hero tile's front edge), unit direction, radius
+      const len = Math.hypot(facing.x, facing.y) || 1, dx = facing.x / len, dy = facing.y / len;
+      const r = MELEE.radius * (hasMeleeWeapon() ? Math.sqrt(MELEE.weaponArea) : 1);
+      return { ox: player.x + 0.5 + dx * 0.5, oy: player.y + 0.5 + dy * 0.5, dx, dy, r };
+    }
+    function meleeTargets() {
+      const a = meleeArea(), keep = drip;
+      const hits = drips.filter(d => {
+        if (d.dead) return false;
+        drip = d; const q = dripPos(), ex = q.x + 0.5 - a.ox, ey = q.y + 0.5 - a.oy;
+        return Math.hypot(ex, ey) <= a.r + MELEE.bodyR && ex * a.dx + ey * a.dy >= -MELEE.bodyR;   // inside the circle and on the front side
+      });
+      drip = keep; return hits;
+    }
+    // a quick faint flash of the swing area
+    function drawMeleeFlash() {
+      const t = gameTime - heroAttackStart;
+      if (t < 0 || t > MELEE.flashMs) return;
+      const a = meleeArea(), ang = Math.atan2(a.dy, a.dx);
+      ctx.save(); ctx.globalAlpha = 0.14 * (1 - t / MELEE.flashMs); ctx.fillStyle = hasMeleeWeapon() ? '#ffe600' : '#ffffff';
+      ctx.beginPath(); ctx.moveTo(a.ox * TILE, a.oy * TILE);
+      ctx.arc(a.ox * TILE, a.oy * TILE, a.r * TILE, ang - Math.PI / 2, ang + Math.PI / 2); ctx.closePath(); ctx.fill(); ctx.restore();
     }
 
     function damageDrip(dmg, text, color) {
@@ -2028,10 +2056,11 @@
       actors.sort((a, b) => a.y - b.y).forEach(a => a.draw());
       WALLS.filter(w => w.y - 1 > ry).sort(order).forEach(drawWall);
       drawBig(true, ry);    // columns that cover the hero (he is behind them)
+      drawMeleeFlash();
       drawProjectiles();
       drawFloaters();
       // enemy panel: the Drip the hero faces, else the nearest one chasing him
-      const foe = dripAt(player.x + facing.x, player.y + facing.y) || (hasTarget() ? target : null) ||
+      const foe = meleeTargets()[0] || (hasTarget() ? target : null) ||
         drips.filter(d => d.aggro && !d.dead).sort((a, b) => cheb(a.x, a.y, player.x, player.y) - cheb(b.x, b.y, player.x, player.y))[0];
       if (foe) { drip = foe; drawFoePanel(); }
 
@@ -2113,7 +2142,7 @@
       g.beginPath(); g.moveTo(S / 2 - h - off, S / 2); g.lineTo(S / 2 + h - off, S / 2 - h * 0.95); g.lineTo(S / 2 + h - off, S / 2 + h * 0.95); g.closePath(); g.fill();
       return (facingMarkerCanvas = c);
     }
-    const facingEnemy = () => !anyOpen() && dripAt(player.x + facing.x, player.y + facing.y) === drip;   // is the Drip being drawn the faced one?
+    const facingEnemy = () => !anyOpen() && !drip.dead && meleeTargets().includes(drip);   // is the enemy being drawn inside the hero's melee area?
     // the building the hero faces and can use (it has something to open)
     const facedBuilding = () => { if (anyOpen()) return null; const w = wallAt(player.x + facing.x, player.y + facing.y); return w && w.opens ? w : null; };
 
