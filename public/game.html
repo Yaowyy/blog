@@ -291,7 +291,7 @@
     { name: 'persona patch', price: 240, gain: { charisma: 3 }, patch: true, art: 'personaPatch', rarity: 'common' },
     // class 'equipment': goes to the inventory, gives its bonus only once equipped (I → A/D → Space).
     // kind: only one item per kind (e.g. one sword), counting inventory and equipped items. Bought once.
-    { name: 'banana sword', price: 400, gain: { strength: 4, charisma: 1 }, class: 'equipment', kind: 'sword', art: 'bananaSword', rarity: 'common' },
+    { name: 'banana sword', price: 400, gain: { strength: 4, charisma: 1 }, attackMs: -100, class: 'equipment', kind: 'sword', art: 'bananaSword', rarity: 'common' },   // attackMs: swings 0.1 s faster
   ];
   // items that are never sold, only looted
   // class 'resource': stacks (up to `stack` per inventory slot), used for crafting later.
@@ -884,7 +884,7 @@
         return {
           left: it.patch ? `${it.name}  lvl ${levels[it.name]}` : it.name,
           pic: it.art || '', item: it.art ? { name: it.name } : null,   // '' = empty picture slot
-          right: `${gains.map(([st, n]) => `+${n} ${ICON[st]}`).join(' ')}   ${owned ? 'owned' : shown(it.name, prices[it.name]) + '$'}`,
+          right: `${bonusText(it)}   ${owned ? 'owned' : shown(it.name, prices[it.name]) + '$'}`,
           act() {
             const price = shown(it.name, prices[it.name]);
             if (owned) return `You already have the ${it.name}.`;
@@ -1280,11 +1280,13 @@
       if (ui) { choose(ui.cursor); return; }
       if (focus === 'inventory' && panels.inventory) { useSelected(panels.inventory); return; }
       if (focus === 'hero' && panels.hero) { unequipSelected(panels.hero); return; }
-      if (moving) return;
-      if (meleeTargets().length) { heroAttack(); return; }   // an enemy inside the melee area
-      if (lootable()) { lootTarget = lootable(); openWindow('loot'); return; }
-      const w = wallAt(player.x + facing.x, player.y + facing.y);
-      if (w && w.opens) openWindow(w.opens);
+      // enemy in reach: swing. Otherwise loot / open the faced building if there is one, else swing at the air.
+      if (!meleeTargets().length && !moving) {
+        if (lootable()) { lootTarget = lootable(); openWindow('loot'); return; }
+        const w = wallAt(player.x + facing.x, player.y + facing.y);
+        if (w && w.opens) { openWindow(w.opens); return; }
+      }
+      heroAttack();
     }
     function goBack() { const b = ui.back; openWindow(b.kind, b.cursor, b.back); }
     function escPressed() {   // Esc: back to the previous window, or close everything, or drop the target, or open the menu
@@ -1527,12 +1529,14 @@
 
     function heroAttack() {
       if (gameTime < heroNextAttack) return;
-      heroNextAttack = gameTime + HERO_ATTACK_MS;
+      heroNextAttack = gameTime + heroAttackMs();
       heroAttackStart = gameTime;   // attack animation in the facing direction (diagonals use the side view)
       heroAttackDir = facing.x ? 'side' : facing.y > 0 ? 'down' : 'up';
       if (facing.x) lookX = facing.x;
       for (const d of meleeTargets()) { drip = d; damageDrip(stats.strength, `-${stats.strength}`, '#fff'); }
     }
+    // time between swings: 1 s with fists; equipment can shorten it (attackMs, e.g. banana sword -100 ms), at least 0.3 s
+    const heroAttackMs = () => Math.max(300, HERO_ATTACK_MS + equipped.reduce((t, it) => t + ((itemDef(it.name) || {}).attackMs || 0), 0));
     const hasMeleeWeapon = () => equipped.some(it => MELEE_KINDS.includes(it.kind));
     function meleeArea() {   // origin (tile units, centre of the hero tile's front edge), unit direction, radius
       const len = Math.hypot(facing.x, facing.y) || 1, dx = facing.x / len, dy = facing.y / len;
@@ -1553,7 +1557,7 @@
       const t = gameTime - heroAttackStart;
       if (t < 0 || t > MELEE.flashMs) return;
       const a = meleeArea(), ang = Math.atan2(a.dy, a.dx);
-      ctx.save(); ctx.globalAlpha = 0.14 * (1 - t / MELEE.flashMs); ctx.fillStyle = hasMeleeWeapon() ? '#ffe600' : '#ffffff';
+      ctx.save(); ctx.globalAlpha = 0.06 * (1 - t / MELEE.flashMs); ctx.fillStyle = hasMeleeWeapon() ? '#ffe600' : '#ffffff';
       ctx.beginPath(); ctx.moveTo(a.ox * TILE, a.oy * TILE);
       ctx.arc(a.ox * TILE, a.oy * TILE, a.r * TILE, ang - Math.PI / 2, ang + Math.PI / 2); ctx.closePath(); ctx.fill(); ctx.restore();
     }
@@ -2709,7 +2713,8 @@
       ctx.strokeStyle = on ? '#ffdc00' : 'rgba(255, 220, 0, 0.35)'; ctx.lineWidth = 4;
       ctx.strokeRect(x - 5, y - 5, size + 10, size + 10);
     }
-    const bonusText = def => def ? Object.entries(def.gain || {}).map(([st, n]) => `+${n} ${ICON[st]}`).join(' ') : '';
+    const bonusText = def => def ? [...Object.entries(def.gain || {}).map(([st, n]) => `+${n} ${ICON[st]}`),
+      ...(def.attackMs ? [`${def.attackMs > 0 ? '+' : ''}${(def.attackMs / 1000).toFixed(1)}s attack`] : [])].join(' ') : '';
 
     // inventory: bottom right, just above the info bar. Backpack slots only (equipped items are in the hero panel).
     function drawInventoryPanel() {
@@ -2758,6 +2763,7 @@
         [`${ICON.mana} mana`, stats.mana, 'mana'], [`${ICON.charisma} charisma`, stats.charisma, 'charisma'],
         [`${ICON.energy} energy`, stats.energy, 'energy'],
         ['crit (spells)', `${(critChance() * 100).toFixed(2)}%`, 'crit'],
+        ['attack speed', `${(heroAttackMs() / 1000).toFixed(1)}s`, 'atk'],
         ['level', `${hero.level}${hero.level < MAX_LEVEL ? `  (${hero.exp}/${expNeed(hero.level)})` : ' (max)'}`, 'level'],
       ];
       const bonus = {};   // equipment bonus, shown as "base +bonus" with the bonus in green
