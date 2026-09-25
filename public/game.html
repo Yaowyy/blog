@@ -7,7 +7,13 @@
 <style>
   :root { color-scheme: dark; --bg: #000; --grid: #fff; --player: #808080; --muted: #8a8a8a;
           /* on-screen width of the grid; one tile is --w / 21 */
-          --w: min(100vw - 32px, 1680px, calc((100vh - 140px) * 21 / 13)); }
+          --w: min(100vw - 32px, 1680px, calc((100vh - 180px) * 21 / 13)); }
+  /* experience bar between the map and the HUD, same width as the map */
+  .xpbar { width: var(--w); height: 22px; margin-bottom: -6px; position: relative; background: #141824; border: 1px solid #3a4257; box-sizing: border-box;
+           font: 600 14px/20px ui-monospace, "SF Mono", Menlo, Consolas, monospace; color: #fff; }
+  .xp-fill { position: absolute; inset: 0 auto 0 0; width: 0; background: linear-gradient(90deg, #6a3fd0, #b58cff); transition: width 0.3s; }
+  .xp-text { position: absolute; inset: 0; text-align: center; text-shadow: 0 0 3px #000, 0 0 3px #000; }
+  .xp-lvl { position: absolute; left: 8px; top: 0; color: #ffe600; text-shadow: 0 0 3px #000; }
   html, body { height: 100%; }
   body {
     background: var(--bg); color: var(--grid); margin: 0;
@@ -109,6 +115,7 @@
   </div>
 </div>
 
+<div class="xpbar" id="xpbar" title="Experience"><div class="xp-fill" id="xp-fill"></div><span class="xp-lvl" id="xp-lvl">lvl 1</span><span class="xp-text" id="xp-text">0 / 100</span></div>
 <div class="hud">
   <div class="hud-left">
     <div class="portrait" id="portrait" role="img" aria-label="Hero portrait (placeholder)"></div>
@@ -260,6 +267,17 @@
   // max values; mana's cap is 0 for now (things may raise it later). Other stats have no cap.
   const CAPS = { health: 10, energy: 20, mana: 0 };
   const BASE_CAPS = { ...CAPS };   // the cheat menu can raise CAPS; "new game" puts these back
+  // ---- experience and levels ----
+  // Level 1 → 2 needs 100 exp; each next level needs 1.6 × the previous, rounded to 10. Max level 20.
+  const MAX_LEVEL = 20;
+  const EXP_NEED = (() => { const a = [100]; while (a.length < MAX_LEVEL - 1) a.push(Math.round(a[a.length - 1] * 1.6 / 10) * 10); return a; })();
+  const expNeed = lvl => lvl >= MAX_LEVEL ? 0 : EXP_NEED[lvl - 1];   // exp to go from lvl to lvl + 1
+  // each level up: +5% health cap, +1% mana cap, +10% energy cap (compounding, shown as whole numbers), +0.1% crit chance
+  const LEVEL_GROWTH = { health: 0.05, mana: 0.01, energy: 0.10 }, LEVEL_CRIT = 0.001;
+  const LEVEL_EXP = { work: 1 };   // exp per work deal (enemies: `exp` in their rules)
+  const CAP_BASE = { ...CAPS };    // caps before the level bonus (Tar Orbs raise the mana base)
+  const hero = { level: 1, exp: 0 };
+  function recalcCaps() { for (const st in CAP_BASE) CAPS[st] = Math.round(CAP_BASE[st] * Math.pow(1 + LEVEL_GROWTH[st], hero.level - 1)); }
   const capped = (st, v) => st in CAPS ? Math.min(CAPS[st], v) : v;
   const REST = { price: 1, gain: { health: 5, energy: 5, mana: 1 }, cooldownMs: 5 * 60 * 1000 };   // HomeDome: Space asks to rest for 1$; then 5 min (real time) until the next rest
 
@@ -691,7 +709,7 @@
   // starts restoring mana (spawns with 0 of 3, +1 per 4 s). At 3 mana he casts Magic Tar at the hero (same spell as the hero's).
   // Beaten: his puddle can be looted for 30 s (face it, Space), then fades out over 2 s and is gone with any loot left.
   // He comes back 60–90 s after dying. All timers run on game time, which stops while a window is open.
-  const DRIP = { name: 'Drip', hp: 10, atk: [1, 2], mana: 3, manaRegenMs: 4000, aggro: 4, stepMs: 1000, attackMs: 1000,
+  const DRIP = { name: 'Drip', exp: 2, hp: 10, atk: [1, 2], mana: 3, manaRegenMs: 4000, aggro: 4, stepMs: 1000, attackMs: 1000,
                  windupMs: 400, spell: 'magic tar', respawnMs: [60000, 90000], lootMs: 30000, fadeMs: 2000,
                  loot: { money: [4, 8], tar: [0, 1], magicTarChance: 0.01 },   // rolled when he dies, taken with Space
                  spawns: [[{ x: 11, y: 7 }], [{ x: 8, y: 5 }, { x: 14, y: 9 }]] };   // spawn tiles (from 1) for 1 and for 2 Drips
@@ -703,7 +721,7 @@
   // `keep` tiles from the hero (backs off when he comes closer). Every `sprayEveryMs` he aims (aimMs) and sprays a cone of
   // toxic mist at where the hero stood: up to `sprayRange` tiles, `sprayHalfAngle` radians each side; the hero takes
   // `sprayDmg` every second he stays in it (step out of the cone to dodge). Doesn't melee. Same loot/fade/respawn timing as Drip.
-  const SCAV = { name: 'Toxic Scav', hp: 26, aggro: 5, keep: 3, stepMs: 1000, sprayRange: 3.5, sprayHalfAngle: 0.5,
+  const SCAV = { name: 'Toxic Scav', exp: 4, hp: 26, aggro: 5, keep: 3, stepMs: 1000, sprayRange: 3.5, sprayHalfAngle: 0.5,
                  sprayEveryMs: 3000, aimMs: 300, sprayMs: 1500, sprayTickMs: 500, sprayDmg: 1,   // 1 damage per 0.5 s in the cone = 2 per second
                  respawnMs: [90000, 120000], lootMs: 30000, fadeMs: 2000,
                  loot: { money: [10, 18], tar: [0, 1], mutagenChance: 0.1 } };
@@ -829,6 +847,10 @@
       document.getElementById('portrait').title = heroName || DEFAULT_NAME;
       document.getElementById('hud-name').textContent = heroName || DEFAULT_NAME;
       document.getElementById('stat-deals').textContent = dealsDone;
+      const need = expNeed(hero.level);
+      document.getElementById('xp-fill').style.width = (need ? Math.min(100, hero.exp / need * 100) : 100) + '%';
+      document.getElementById('xp-text').textContent = need ? `${hero.exp} / ${need}` : 'max level';
+      document.getElementById('xp-lvl').textContent = `lvl ${hero.level}`;
       document.getElementById('area-name').textContent = areaLabel(areaName);
       document.getElementById('stat-health').textContent = stats.health;
       document.getElementById('stat-energy').textContent = stats.energy;
@@ -885,7 +907,7 @@
         act() {
           const cost = d.energy ?? d.health;   // older saved deals used "health"
           if (stats.energy < cost) return 'Not enough energy for that deal. Eat something.';
-          stats.energy -= cost; stats.money += d.money; dealsDone++;
+          stats.energy -= cost; stats.money += d.money; dealsDone++; gainExp(LEVEL_EXP.work);
           prices.food *= 1 + FOOD_INFLATION;
           deals = newDeals(stats.charisma);
           return `Worked: -${cost} ${ICON.energy}, +${d.money}$. New deals.`;
@@ -974,7 +996,7 @@
       areaName = '0:0'; spawnAllDrips();
       enterArea('0:0', START.x, START.y, 1, true);
       inventory.length = 0; equipped.length = 0; skills.length = 0; restReadyAt = 0; Object.assign(levels, startLevels());
-      rootedUntil = 0; floaters.length = 0; Object.assign(CAPS, BASE_CAPS);
+      rootedUntil = 0; floaters.length = 0; Object.assign(CAP_BASE, BASE_CAPS); hero.level = 1; hero.exp = 0; recalcCaps();
       ui = null; closePanels();
     }
 
@@ -983,10 +1005,11 @@
     function snapshot() {
       return { x: player.x, y: player.y, fx: facing.x, fy: facing.y, stats: { ...stats }, deals, prices: { ...prices }, dealsDone,
                inventory: inventory.map(it => ({ ...it })), equipped: equipped.map(it => ({ ...it })), skills: [...skills],
-               areaName, restReadyAt, levels: { ...levels }, manaCap: CAPS.mana, discovered: [...discovered], enemies: saveEnemies() };
+               areaName, restReadyAt, levels: { ...levels }, manaCap: CAP_BASE.mana, level: hero.level, exp: hero.exp, discovered: [...discovered], enemies: saveEnemies() };
     }
     function applySave(s) {
-      Object.assign(CAPS, BASE_CAPS, s.manaCap !== undefined ? { mana: s.manaCap } : {});
+      Object.assign(CAP_BASE, BASE_CAPS, s.manaCap !== undefined ? { mana: s.manaCap } : {});
+      hero.level = Math.min(MAX_LEVEL, s.level || 1); hero.exp = s.exp || 0; recalcCaps();
       Object.assign(stats, START_STATS, s.stats || {});
       deals = s.deals || newDeals(stats.charisma); dealsDone = s.dealsDone || 0;
       Object.assign(prices, startPrices(), s.prices || {}); Object.assign(levels, startLevels(), s.levels || {});
@@ -1080,7 +1103,8 @@
       return [
         row('money', '+500$', () => { stats.money += 500; return '+500$.'; }),
         row('refill', 'full ♥ ⚡ ◆', () => { for (const st in CAPS) stats[st] = CAPS[st]; return 'Health, energy and mana refilled.'; }),
-        row('mana cap', `+3 (now ${CAPS.mana})`, () => { CAPS.mana += 3; stats.mana = CAPS.mana; return `Mana cap ${CAPS.mana}, mana full.`; }),
+        row('mana cap', `+3 (now ${CAPS.mana})`, () => { CAP_BASE.mana += 3; recalcCaps(); stats.mana = CAPS.mana; return `Mana cap ${CAPS.mana}, mana full.`; }),
+        row('exp', '+50', () => { gainExp(50); return `Level ${hero.level}, ${hero.exp}/${expNeed(hero.level)} exp.`; }),
         row('charisma', '+10 ✦', () => { stats.charisma += 10; deals = newDeals(stats.charisma); return `Charisma ${stats.charisma}.`; }),
         row('strength', '+5 ⚔', () => { stats.strength += 5; return `Strength ${stats.strength}.`; }),
         row('magic tar', 'into inventory', () => give('magic tar', 1)),
@@ -1210,7 +1234,7 @@
       }
       if (def.class === 'resource') { pn.msg = `${item.name} is a resource, used for crafting later.`; return; }
       if (def.consume) {   // consumable: use one (Tar Orb: +1 mana cap)
-        if (def.consume.manaCap) CAPS.mana += def.consume.manaCap;
+        if (def.consume.manaCap) { CAP_BASE.mana += def.consume.manaCap; recalcCaps(); }
         if ((item.count || 1) > 1) item.count--; else inventory.splice(pn.cursor, 1);
         pn.msg = `Consumed ${item.name}: mana cap +${def.consume.manaCap} (now ${CAPS.mana}).`;
         renderStats(); return;
@@ -1235,6 +1259,7 @@
     }
     function equipSelected(item, def, pn) {
       if (!def || def.class !== 'equipment') { pn.msg = `The ${item.name} can't be equipped.`; return; }
+      if (rarityOf(item.name) !== 'common' && hero.level < 2) { pn.msg = `Reach level 2 to equip ${rarityOf(item.name)} items.`; return; }
       if (equipped.length >= EQUIP_SLOTS) { pn.msg = 'No free equipment slot.'; return; }
       inventory.splice(pn.cursor, 1);
       equipped.push(item);
@@ -1519,12 +1544,28 @@
         if (L.magicTarChance && Math.random() < L.magicTarChance) items.push({ name: 'magic tar', count: 1 });
         if (L.mutagenChance && Math.random() < L.mutagenChance) items.push({ name: 'MutaGen', count: 1 });
         drip.loot = { money: rand(L.money[0], L.money[1]), items };
+        gainExp(T.exp || 0);
         if (target === drip) retarget();   // next closest enemy, or no target
       }
     }
 
     // ---- spells -----------------------------------------------------------------
-    const critChance = () => Math.min(CRIT_CAP, stats.charisma * CRIT_PER_CHA);
+    const critChance = () => Math.min(CRIT_CAP, stats.charisma * CRIT_PER_CHA) + LEVEL_CRIT * (hero.level - 1);   // +0.1% per level on top
+    // experience: level ups raise the caps, restore health, mana and energy, and show a banner over the hero
+    function gainExp(n) {
+      if (!n || hero.level >= MAX_LEVEL) return;
+      hero.exp += n;
+      float(`+${n} exp`, '#b58cff', player.x + 0.5, player.y - 1.1);
+      let up = 0;
+      while (hero.level < MAX_LEVEL && hero.exp >= expNeed(hero.level)) { hero.exp -= expNeed(hero.level); hero.level++; up++; }
+      if (hero.level >= MAX_LEVEL) hero.exp = 0;
+      if (up) {
+        recalcCaps();
+        stats.health = CAPS.health; stats.mana = CAPS.mana; stats.energy = CAPS.energy;
+        float(`LEVEL ${hero.level}!`, '#ffe600', player.x + 0.5, player.y - 1.6);
+      }
+      renderStats();
+    }
     const projectiles = [];   // { x, y (tile units, centre), dx, dy (unit), flown, spell, t }
     let heroManaT = 0;        // game time when the hero's next mana point is due
 
@@ -2688,6 +2729,7 @@
         [`${ICON.mana} mana`, stats.mana, 'mana'], [`${ICON.charisma} charisma`, stats.charisma, 'charisma'],
         [`${ICON.energy} energy`, stats.energy, 'energy'],
         ['crit (spells)', `${(critChance() * 100).toFixed(2)}%`, 'crit'],
+        ['level', `${hero.level}${hero.level < MAX_LEVEL ? `  (${hero.exp}/${expNeed(hero.level)})` : ' (max)'}`, 'level'],
       ];
       const bonus = {};   // equipment bonus, shown as "base +bonus" with the bonus in green
       for (const it of equipped) for (const [st, n] of Object.entries((itemDef(it.name) || {}).gain || {})) bonus[st] = (bonus[st] || 0) + n;
