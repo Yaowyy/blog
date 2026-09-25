@@ -524,9 +524,138 @@
     ] },
   };
   for (const id in LAKE) AREAS[id].lake = LAKE[id];
+  // big structures shared by 4 zones (like the lake, but standing up): the forest grove (-2:-3, -2:-2, -3:-3, -3:-2) and the
+  // abandoned factory (2:-3, 2:-2, 1:-3, 1:-2). Each zone draws its quarter picture at x, y (px); rows: '#' = footprint tile
+  // (blocked). The picture is drawn in 1-tile-wide columns, each sorted like a building whose bottom row is depth[column],
+  // so the hero walks behind the treetops / roofs and in front of the base. The factory's loading-dock gate (1:-3) is walkable.
+  const BIG = {
+    '-2:-3': { art: 'forestTL', x: 500, y: 66, depth: [12,12,12,12,12,12,12,12,12,12,12,12,12,12,12,12,12,12,12,12,12], rows: [
+      '.....................',
+      '.....................',
+      '.....................',
+      '.....................',
+      '.....................',
+      '.....................',
+      '.....................',
+      '..............#######',
+      '...........##########',
+      '.........############',
+      '........#############',
+      '........#############',
+      '.......##############',
+    ] },
+    '-2:-2': { art: 'forestTR', x: 0, y: 60, depth: [12,12,12,12,12,12,12,12,12,12,12,12,12,12,12,12,12,12,12,12,12], rows: [
+      '.....................',
+      '.....................',
+      '.....................',
+      '.....................',
+      '.....................',
+      '.....................',
+      '.....................',
+      '#######..............',
+      '##########...........',
+      '############.........',
+      '#############........',
+      '#############........',
+      '##############.......',
+    ] },
+    '-3:-3': { art: 'forestBL', x: 520, y: 0, depth: [0,0,0,0,0,0,0,0,2,2,2,3,3,4,4,4,5,5,5,5,5], rows: [
+      '.......##############',
+      '........#############',
+      '........#############',
+      '...........##########',
+      '.............########',
+      '................#####',
+      '.....................',
+      '.....................',
+      '.....................',
+      '.....................',
+      '.....................',
+      '.....................',
+      '.....................',
+    ] },
+    '-3:-2': { art: 'forestBR', x: 0, y: 0, depth: [5,5,5,5,5,5,5,4,4,4,3,3,2,1,1,1,1,1,1,1,1], rows: [
+      '##############.......',
+      '##############.......',
+      '#############........',
+      '############.........',
+      '##########...........',
+      '#######..............',
+      '.....................',
+      '.....................',
+      '.....................',
+      '.....................',
+      '.....................',
+      '.....................',
+      '.....................',
+    ] },
+    '2:-3': { art: 'factoryTL', x: 522, y: 209, depth: [12,12,12,12,12,12,12,12,12,12,12,12,12,12,12,12,12,12,12,12,12], rows: [
+      '.....................',
+      '.....................',
+      '.....................',
+      '.....................',
+      '.....................',
+      '.....................',
+      '.....................',
+      '.....................',
+      '..............#######',
+      '.......##############',
+      '.......##############',
+      '.......##############',
+      '.......##############',
+    ] },
+    '2:-2': { art: 'factoryTR', x: 0, y: 0, depth: [12,12,12,12,12,12,12,12,12,12,12,12,12,12,12,12,12,12,12,12,12], rows: [
+      '.....................',
+      '.....................',
+      '.....................',
+      '.....................',
+      '.....................',
+      '.....................',
+      '.....................',
+      '..........###........',
+      '#############........',
+      '##############.......',
+      '##############.......',
+      '##############.......',
+      '##############.......',
+    ] },
+    '1:-3': { art: 'factoryBL', x: 508, y: 0, depth: [2,2,2,2,2,2,2,2,3,3,3,3,3,3,3,3,4,3,3,4,4], rows: [
+      '.......###...########',
+      '.......###...########',
+      '.......###...########',
+      '........##...########',
+      '................#..##',
+      '.....................',
+      '.....................',
+      '.....................',
+      '.....................',
+      '.....................',
+      '.....................',
+      '.....................',
+      '.....................',
+    ] },
+    '1:-2': { art: 'factoryBR', x: 0, y: 0, depth: [4,5,5,5,5,5,5,5,5,5,5,5,4,4,4,4,4,4,4,4,4], rows: [
+      '##############.......',
+      '##############.......',
+      '##############.......',
+      '##############.......',
+      '##############.......',
+      '.###########.........',
+      '.....................',
+      '.....................',
+      '.....................',
+      '.....................',
+      '.....................',
+      '.....................',
+      '.....................',
+    ] },
+  };
+  for (const id in BIG) AREAS[id].big = BIG[id];
   // one Toxic Scav per toxic lake zone, on the shore away from the water and the passages
   const SCAV_SPAWNS = { '0:-2': { x: 6, y: 4 }, '-1:-1': { x: 16, y: 10 } };   // 2 for the 4 lake zones (opposite corners)
   for (const id in SCAV_SPAWNS) AREAS[id].foes.push({ kind: 'scav', spawn: SCAV_SPAWNS[id] });
+  // greaser 2:2: 4 Drips, one in each quarter of the zone
+  for (const sp of [{ x: 6, y: 4 }, { x: 16, y: 4 }, { x: 6, y: 10 }, { x: 16, y: 10 }]) AREAS['2:2'].foes.push({ kind: 'drip', spawn: sp });
   AREAS['0:1'].walls = [
     { x: 17, y: 5, w: 4, h: 2, color: '#6b4a2e', label: 'Scrap Dealer', opens: 'scrap', art: 'scrapDealer', artW: 4.5 },
     { x: 20, y: 6, w: 2, h: 2, color: '#3a4257', art: 'ruinMarket', artW: 2.9 },   // looted market (decorative ruin), right of the Scrap Dealer
@@ -549,7 +678,8 @@
     return hits.find(w => w.opens) || hits[0]; };
   const inGrid = (x, y) => x >= 0 && x < COLS && y >= 0 && y < ROWS;
   const lakeAt = (x, y) => { const l = AREAS[areaName].lake; return !!l && l.rows[y] && l.rows[y][x] === '#'; };
-  const free = (x, y) => inGrid(x, y) && !wallAt(x, y) && !coilAt(x, y) && !lakeAt(x, y);
+  const bigAt = (x, y) => { const b = AREAS[areaName].big; return !!b && b.rows[y] && b.rows[y][x] === '#'; };
+  const free = (x, y) => inGrid(x, y) && !wallAt(x, y) && !coilAt(x, y) && !lakeAt(x, y) && !bigAt(x, y);
   const footCX = w => { const f = foot(w); return (f.x0 + f.x1 + 1) / 2; };   // footprint centre, in tiles
   const START = { x: 8, y: 7 };   // 0-based: column 9, row 8 (just below TradeCorp)
 
@@ -605,6 +735,8 @@
     bananaSword:  'art/bananaSword.png',   // item icon
     ground:       'art/ground.jpg',   // seamless street floor, no joints (repeats every 6 x 6 tiles)
     groundSlums: 'art/groundSlums.jpg', groundFactory: 'art/groundFactory.jpg', groundLake: 'art/groundLake.jpg',   // zone floors, same repeat
+    forestTL: 'art/forestTL.webp', forestTR: 'art/forestTR.webp', forestBL: 'art/forestBL.webp', forestBR: 'art/forestBR.webp',   // big forest grove quarters (see BIG)
+    factoryTL: 'art/factoryTL.webp', factoryTR: 'art/factoryTR.webp', factoryBL: 'art/factoryBL.webp', factoryBR: 'art/factoryBR.webp',   // big factory quarters
     lakeTL: 'art/lakeTL.webp', lakeTR: 'art/lakeTR.webp', lakeBL: 'art/lakeBL.webp', lakeBR: 'art/lakeBR.webp',   // toxic lake quarters (see LAKE)
     decals:       'art/decals.png',   // 16 floor details, 4 x 4 cells
     wallStraight: 'art/wallStraight.png',   // city border wall with razor wire, horizontal, joins left/right
@@ -1202,7 +1334,7 @@
       const out = {};
       for (const id in zoneDrips) out[id] = zoneDrips[id].map(d => d.dead
         ? { dead: true, x: d.x, y: d.y, since: gameTime - d.deadAt, respawnIn: Math.max(0, d.respawnAt - gameTime), loot: d.loot || null }
-        : { hp: d.hp });
+        : { hp: d.hp, kind: d.kind, max: ET(d).hp });
       return out;
     }
     function loadEnemies(saved) {
@@ -1210,7 +1342,8 @@
       for (const id in saved) (saved[id] || []).forEach((e, i) => {
         const d = zoneDrips[id] && zoneDrips[id][i];
         if (!d) return;
-        if (!e.dead) { d.hp = Math.max(1, Math.min(ET(d).hp, e.hp ?? ET(d).hp)); return; }
+        if (e.kind && e.kind !== d.kind) return;   // a different enemy lives in this slot now: keep the fresh one
+        if (!e.dead) { if (e.max === ET(d).hp) d.hp = Math.max(1, Math.min(ET(d).hp, e.hp ?? ET(d).hp)); return; }   // max health changed (rebalance): full health
         Object.assign(d, { dead: true, hp: 0, x: e.x, y: e.y, fromX: e.x, fromY: e.y, aggro: false,
                            deadAt: gameTime - e.since, respawnAt: gameTime + e.respawnIn, loot: e.loot });
       });
@@ -1342,6 +1475,7 @@
       for (let dy = -1; dy <= 1; dy++) for (let dx = -1; dx <= 1; dx++) {
         const nx = d.x + dx, ny = d.y + dy;
         if ((!dx && !dy) || !free(nx, ny) || exitAt(nx, ny) || takenByDrip(nx, ny, d) || (nx === player.x && ny === player.y)) continue;
+        if (nx < 1 || ny < 1 || nx > COLS - 2 || ny > ROWS - 2) continue;   // stays off the 1-tile map border
         if (dx && dy && (!free(d.x + dx, d.y) || !free(d.x, d.y + dy))) continue;
         const score = off(nx, ny);
         if (score < best.score) best = { nx, ny, score };
@@ -1777,7 +1911,7 @@
       const pick = () => { let r = rnd() * total; for (let i = 0; i < DECALS.length; i++) { r -= weight(DECALS[i]); if (r <= 0 && weight(DECALS[i]) > 0) return i; } return 0; };
       const placed = {};   // "x,y" -> decal index
       for (let y = 0; y < ROWS; y++) for (let x = 0; x < COLS; x++) {
-        if (rnd() >= chance || wallAt(x, y) || coilAt(x, y) || exitAt(x, y) || lakeAt(x, y) || (areaName === '0:0' && x === START.x && y === START.y)) continue;
+        if (rnd() >= chance || wallAt(x, y) || coilAt(x, y) || exitAt(x, y) || lakeAt(x, y) || bigAt(x, y) || (areaName === '0:0' && x === START.x && y === START.y)) continue;
         let i = pick(), tries = 0;
         const nearSame = k => { if (cfg.cluster) return false; for (let dy = -1; dy <= 1; dy++) for (let dx = -1; dx <= 1; dx++) if (placed[(x + dx) + ',' + (y + dy)] === k) return true; return false; };
         while (nearSame(i) && tries++ < 8) i = pick();
@@ -1845,12 +1979,14 @@
       // buildings: split around the hero by their bottom row; among buildings, "front" ones are drawn last
       const order = (a, b) => (a.y + (a.front ? 10 : 0)) - (b.y + (b.front ? 10 : 0));
       WALLS.filter(w => w.y - 1 <= ry).sort(order).forEach(drawWall);
+      drawBig(false, ry);   // big grove / factory columns the hero stands in front of
       if (gameTime < rootedUntil) drawTart(rx, ry);
       // hero and enemies: lower on screen is drawn in front; a beaten enemy lies flat under everyone
       const actors = [{ y: ry, draw: () => drawHeroSprite(rx, ry) }];
       for (const e of drips) { drip = e; const d = dripPos(); actors.push({ y: e.dead ? -1e9 : d.y, draw: () => { drip = e; drawDrip(d); } }); }
       actors.sort((a, b) => a.y - b.y).forEach(a => a.draw());
       WALLS.filter(w => w.y - 1 > ry).sort(order).forEach(drawWall);
+      drawBig(true, ry);    // columns that cover the hero (he is behind them)
       drawProjectiles();
       drawFloaters();
       // enemy panel: the Drip the hero faces, else the nearest one chasing him
@@ -1885,6 +2021,18 @@
       if (ui) drawWindow();
     }
 
+    // big structure quarter, drawn in 1-tile columns; front = the columns whose base row is below the hero
+    function drawBig(front, ry) {
+      const b = AREAS[areaName].big, im = b && ART[b.art];
+      if (!im || !ready(im)) return;
+      ctx.imageSmoothingQuality = 'high';
+      for (let c = 0; c < COLS; c++) {
+        if ((b.depth[c] > ry) !== front) continue;
+        const sx0 = Math.max(0, c * TILE - b.x), sx1 = Math.min(im.naturalWidth, (c + 1) * TILE - b.x);
+        if (sx1 <= sx0) continue;
+        ctx.drawImage(im, sx0, 0, sx1 - sx0, im.naturalHeight, b.x + sx0, b.y, sx1 - sx0, im.naturalHeight);
+      }
+    }
     // a wall: its picture (anchored bottom-centre on the footprint) or, until there is art, coloured tiles
     function artSize(w) {
       const im = ART[w.art];
