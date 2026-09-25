@@ -273,14 +273,21 @@
   const MAX_LEVEL = 20;
   const EXP_NEED = (() => { const a = [100]; while (a.length < MAX_LEVEL - 1) a.push(Math.round(a[a.length - 1] * 1.6 / 10) * 10); return a; })();
   const expNeed = lvl => lvl >= MAX_LEVEL ? 0 : EXP_NEED[lvl - 1];   // exp to go from lvl to lvl + 1
-  // each level up: +5% health cap, +1% mana cap, +10% energy cap (compounding, shown as whole numbers), +0.1% crit chance
-  const LEVEL_GROWTH = { health: 0.05, mana: 0.01, energy: 0.10 }, LEVEL_CRIT = 0.001;
+  // each level up: health cap = round(10 + [1 + 0.2(L − 1)] × (L − 1)^0.8) (10 at lvl 1, 26 at lvl 10, 61 at lvl 20; see heroHealthCap),
+  // +1% mana cap, +10% energy cap (compounding, shown as whole numbers), +0.1% crit chance
+  const LEVEL_GROWTH = { mana: 0.01, energy: 0.10 }, LEVEL_CRIT = 0.001;
+  const HP_CURVE = { growth: 1, growthPerLvl: 0.2, shape: 0.8 };
+  const levelHealth = (base, L, shape, perLvl = HP_CURVE.growthPerLvl) => Math.round(base + (HP_CURVE.growth + perLvl * (L - 1)) * Math.pow(L - 1, shape));
+  const heroHealthCap = (base, L) => levelHealth(base, L, HP_CURVE.shape);
   const LEVEL_EXP = { work: 1 };   // exp per work deal. Discovering a zone: |a| + |b| of its coordinates (zoneSum).
-  // Killing an enemy: its base `exp` + (zone's |a| + |b|) / 2 (rounded down) + the enemy's level (zoneLevel).
+  // Killing an enemy: base `exp` × (2 × enemy level − hero level) + (zone's |a| + |b|) / 2 (rounded down), never below 0.
   // Enemy damage: base damage + (enemy level - hero level), never below 0 (npcDamage).
   const CAP_BASE = { ...CAPS };    // caps before the level bonus (Tar Orbs raise the mana base)
   const hero = { level: 1, exp: 0 };
-  function recalcCaps() { for (const st in CAP_BASE) CAPS[st] = Math.round(CAP_BASE[st] * Math.pow(1 + LEVEL_GROWTH[st], hero.level - 1)); }
+  function recalcCaps() {
+    for (const st in CAP_BASE) CAPS[st] = st === 'health' ? heroHealthCap(CAP_BASE.health, hero.level)
+      : Math.round(CAP_BASE[st] * Math.pow(1 + LEVEL_GROWTH[st], hero.level - 1));
+  }
   const capped = (st, v) => st in CAPS ? Math.min(CAPS[st], v) : v;
   const REST = { price: 1, gain: { health: 5, energy: 5, mana: 1 }, cooldownMs: 5 * 60 * 1000 };   // HomeDome: Space asks to rest for 1$; then 5 min (real time) until the next rest
 
@@ -750,6 +757,12 @@
                  respawnMs: [90000, 120000], lootMs: 30000, fadeMs: 2000,
                  loot: { money: [10, 18], tar: [0, 1], mutagenChance: 0.1 } };
   const ENEMY = { drip: DRIP, scav: SCAV };
+  // enemy max health: the hero's health curve with its own base and shape (hpShape); without hpShape it stays at `hp`.
+  // Drip: round(10 + [1 + 0.2(L − 1)] × (L − 1)^0.7) → 10 at lvl 1, 23 at lvl 10, 48 at lvl 20.
+  // Toxic Scav: round(26 + [1 + 0.3(L − 1)] × (L − 1)^0.8) → 26 at lvl 1, 47 at lvl 10, 97 at lvl 20.
+  DRIP.hpShape = 0.7; DRIP.hpGrowth = 0.2;
+  SCAV.hpShape = 0.8; SCAV.hpGrowth = 0.3;
+  const enemyMaxHp = (kind, zoneId) => { const T = ENEMY[kind]; return T.hpShape ? levelHealth(T.hp, zoneLevel(zoneId), T.hpShape, T.hpGrowth) : T.hp; };
   const ET = d => ENEMY[d.kind || 'drip'];   // an enemy's type (rules)
   // Scav sheets are cut to the hero's scale (277 px tall ≈ HERO_H tiles): ax = feet centre, foot = px from the cell bottom to the soles
   const SCAV_ART = { idle: { frames: 1, cellW: 215, cellH: 288, ax: 119.6, foot: 10.4 },
@@ -1398,7 +1411,7 @@
       const out = {};
       for (const id in zoneDrips) out[id] = zoneDrips[id].map(d => d.dead
         ? { dead: true, x: d.x, y: d.y, since: gameTime - d.deadAt, respawnIn: Math.max(0, d.respawnAt - gameTime), loot: d.loot || null }
-        : { hp: d.hp, kind: d.kind, max: ET(d).hp });
+        : { hp: d.hp, kind: d.kind, max: d.maxHp });
       return out;
     }
     function loadEnemies(saved) {
@@ -1407,7 +1420,7 @@
         const d = zoneDrips[id] && zoneDrips[id][i];
         if (!d) return;
         if (e.kind && e.kind !== d.kind) return;   // a different enemy lives in this slot now: keep the fresh one
-        if (!e.dead) { if (e.max === ET(d).hp) d.hp = Math.max(1, Math.min(ET(d).hp, e.hp ?? ET(d).hp)); return; }   // max health changed (rebalance): full health
+        if (!e.dead) { if (e.max === d.maxHp) d.hp = Math.max(1, Math.min(d.maxHp, e.hp ?? d.maxHp)); return; }   // max health changed (rebalance): full health
         Object.assign(d, { dead: true, hp: 0, x: e.x, y: e.y, fromX: e.x, fromY: e.y, aggro: false,
                            deadAt: gameTime - e.since, respawnAt: gameTime + e.respawnIn, loot: e.loot });
       });
@@ -1433,7 +1446,7 @@
         if (best) { sx = best.x; sy = best.y; }
       }
       WALLS = saveWalls;
-      return { kind, x: sx, y: sy, fromX: sx, fromY: sy, stepStart: -1e9, hp: ENEMY[kind].hp, mana: 0, manaT: 0, spawn, nextSpray: 0, spray: null,
+      return { kind, x: sx, y: sy, fromX: sx, fromY: sy, stepStart: -1e9, hp: enemyMaxHp(kind, zoneId), maxHp: enemyMaxHp(kind, zoneId), mana: 0, manaT: 0, spawn, nextSpray: 0, spray: null,
                aggro: false, nextAttack: 0, attackStart: -1e9, hitAt: 0, hurtStart: -1e9, dead: false, deadAt: 0, lookX: -1 };
     }
 
@@ -1441,7 +1454,7 @@
       // world-wide timers: loot expiry, fade-out and respawn run in every zone (cheap: a few timestamps)
       for (const id in zoneDrips) zoneDrips[id].forEach((d, i, list) => {
         if (!d.dead) {   // every enemy heals 1 health per minute (game time), up to his max
-          if (d.hp >= ET(d).hp) { d.regenT = 0; return; }
+          if (d.hp >= d.maxHp) { d.regenT = 0; return; }
           if (!d.regenT) d.regenT = gameTime + NPC_HEALTH_REGEN_MS;
           else if (gameTime >= d.regenT) { d.hp++; d.regenT += NPC_HEALTH_REGEN_MS; }
           return;
@@ -1615,7 +1628,7 @@
         if (L.magicTarChance && Math.random() < L.magicTarChance) items.push({ name: 'magic tar', count: 1 });
         if (L.mutagenChance && Math.random() < L.mutagenChance) items.push({ name: 'MutaGen', count: 1 });
         drip.loot = { money: rand(L.money[0], L.money[1]), items };
-        gainExp((T.exp || 0) + Math.floor(zoneSum(areaName) / 2) + npcLevel());   // base + half the zone's coordinate sum + his level
+        gainExp(Math.max(0, (T.exp || 0) * (npcLevel() * 2 - hero.level) + Math.floor(zoneSum(areaName) / 2)));   // base × (2 × his level − hero level) + half the zone's coordinate sum, at least 0
         if (target === drip) retarget();   // next closest enemy, or no target
       }
     }
@@ -2294,7 +2307,7 @@
       // health bar over his head
       const bw = 64, bx = cx - bw / 2, by = feet - (scav ? HERO_H : DRIP_BODY) * TILE - 18;
       ctx.fillStyle = 'rgba(0, 0, 0, 0.7)'; ctx.fillRect(bx - 2, by - 2, bw + 4, 12);
-      ctx.fillStyle = '#e5484d'; ctx.fillRect(bx, by, bw * drip.hp / T.hp, 8);
+      ctx.fillStyle = '#e5484d'; ctx.fillRect(bx, by, bw * drip.hp / drip.maxHp, 8);
     }
     // Tart: the hero stands stuck in a glossy oil puddle
     function drawTart(rx, ry) {
@@ -2337,9 +2350,9 @@
       ctx.textAlign = 'left'; ctx.textBaseline = 'middle'; ctx.fillStyle = '#fff'; ctx.font = '600 22px ' + MONO;
       ctx.fillText(T.name, tx, y + 20);
       ctx.fillStyle = '#3a1418'; ctx.fillRect(tx, y + 36, bw, 12);
-      ctx.fillStyle = '#e5484d'; ctx.fillRect(tx, y + 36, bw * drip.hp / T.hp, 12);
+      ctx.fillStyle = '#e5484d'; ctx.fillRect(tx, y + 36, bw * drip.hp / drip.maxHp, 12);
       ctx.fillStyle = '#fff'; ctx.font = '600 14px ' + MONO; ctx.textAlign = 'right';
-      ctx.fillText(`${drip.hp}/${T.hp}`, tx + bw, y + 20);
+      ctx.fillText(`${drip.hp}/${drip.maxHp}`, tx + bw, y + 20);
       const lvl = npcLevel();   // red when stronger than the hero, grey when weaker
       ctx.fillStyle = lvl > hero.level ? '#e5484d' : lvl < hero.level ? '#8a8a8a' : '#fff'; ctx.font = '600 16px ' + MONO;
       ctx.fillText(`lvl ${lvl}`, tx + bw, y + 62);
