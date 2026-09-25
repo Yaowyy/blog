@@ -611,7 +611,9 @@
     wallBroken:   'art/wallBroken.png',     // same wall, middle demolished and plugged with razor wire
     wallCorner:   'art/wallCorner.png',     // corner pillar with a camera, arms to the left and bottom
     wallEnd:      'art/wallEnd.png',        // wall broken off on the right (next to the city exit)
-    tar:          'art/tar.png',   // tar puddle flowing in from the right edge (mirrored for the left edge)
+    tar:          'art/tar.png',
+    passageForestB: 'art/passageForestB.png', passageSlums: 'art/passageSlums.png',
+    passageForest: 'art/passageForest.png', passageLake: 'art/passageLake.png', passageFactory: 'art/passageFactory.png',   // passage pictures (straight right edge on the map edge)   // tar puddle flowing in from the right edge (mirrored for the left edge)
     homedome:     'art/homedome.png',   // HomeDome apartments, front view (faces down)
     noodleBar:    'art/noodleBar.png',   // CaaCaanTeng noodle bar, front view, closed
     charging:     'art/charging.png',   // hover-car charging station, front view
@@ -1666,11 +1668,56 @@
     // tar puddle: its straight edge sits on the map edge, flowing in from outside; flat, walkable
     const TAR_H = 2.8;   // height in tiles (covers both exit rows with some spill above and below)
     // one puddle per passage, its straight edge on the map edge (the art's straight edge is on its right side)
+    // passage pictures between zones of the same kind (forest trail, lake boardwalk, factory doorway), else the tar puddle.
+    // Each lies flat with its straight right edge on the map edge; `along` = tiles along the edge.
+    // passage pictures, lying flat with the straight right edge on the map edge; along/depth in tiles.
+    const PASSAGE_ART = {
+      forest: { art: 'passageForest', along: 2, depth: 4 },        // long trail
+      forestSmall: { art: 'passageForestB', along: 2, depth: 1 },  // stepping stones
+      lake: { art: 'passageLake', along: 2, depth: 2 }, factory: { art: 'passageFactory', along: 2, depth: 1 },
+      slums: { art: 'passageSlums', along: 2, depth: 2 },
+    };
+    const PASSAGE_GROUP = id => ({ forest: 'forest', lake: 'lake', factory: 'factory', slums: 'slums', greaser: 'slums' })[ZONE_LIST[id]] || null;
+    const PASSAGE_OVERRIDE = { '-1:-2|-2:-2': 'forest', '1:-1|0:-1': 'lake' };   // mixed passages drawn with one kind on both sides
+    // Chosen once per passage (both sides use the same picture), fixed seed per passage:
+    // forest: the long trail or the stepping stones at random, but stepping stones wherever the long trail would overlap
+    // another passage's picture in either zone; slums (incl. greaser): the street piece or the tar puddle at random.
+    let passageChoice = null;
+    const pairKey = (a, b) => a < b ? `${a}|${b}` : `${b}|${a}`;
+    function passageRect(zone, to, st) {   // tile rectangle the picture covers in `zone`
+      const e = ZONE_EXITS[zone].find(x => x.to === to), [t0, t1] = e.tiles;
+      const mx = (t0[0] + t1[0] + 1) / 2, my = (t0[1] + t1[1] + 1) / 2, d = st ? st.depth : 2, h = (st ? st.along : TAR_H) / 2;
+      return { right: [COLS - d, my - h, COLS, my + h], left: [0, my - h, d, my + h], up: [mx - h, 0, mx + h, d], down: [mx - h, ROWS - d, mx + h, ROWS] }[e.dir];
+    }
+    const overlap = (r, q) => r[0] < q[2] && q[0] < r[2] && r[1] < q[3] && q[1] < r[3];
+    function choosePassages() {
+      passageChoice = {};
+      const hash = k => { let h = 2166136261; for (const c of k) h = Math.imul(h ^ c.charCodeAt(0), 16777619); return (h >>> 0) / 4294967296; };
+      for (const [A, B] of PASSAGES) {
+        const k = pairKey(A, B), o = PASSAGE_OVERRIDE[`${A}|${B}`] || PASSAGE_OVERRIDE[`${B}|${A}`];
+        const g = o || (PASSAGE_GROUP(A) && PASSAGE_GROUP(A) === PASSAGE_GROUP(B) ? PASSAGE_GROUP(A) : null);
+        passageChoice[k] = g === 'forest' ? (hash(k) < 0.5 ? 'forest' : 'forestSmall') : g === 'slums' ? (hash(k) < 0.5 ? 'slums' : null) : g;
+      }
+      // long forest trails that would overlap another passage's picture become stepping stones (repeat until stable)
+      for (let changed = true; changed;) {
+        changed = false;
+        for (const [A, B] of PASSAGES) {
+          const k = pairKey(A, B); if (passageChoice[k] !== 'forest') continue;
+          const hits = [[A, B], [B, A]].some(([z, to]) => ZONE_EXITS[z].some(e => e.to !== to &&
+            overlap(passageRect(z, to, PASSAGE_ART.forest), passageRect(z, e.to, PASSAGE_ART[passageChoice[pairKey(z, e.to)]] || null))));
+          if (hits) { passageChoice[k] = 'forestSmall'; changed = true; }
+        }
+      }
+    }
+    function passageStyle(a, b) {
+      if (!passageChoice) choosePassages();
+      return PASSAGE_ART[passageChoice[pairKey(a, b)]] || null;
+    }
     function drawTar(gx) {
-      const im = ART.tar;
-      if (!ready(im)) return;
-      const h = TAR_H * TILE, w = h * im.naturalWidth / im.naturalHeight;
       for (const e of AREAS[areaName].exits) {
+        const st = passageStyle(areaName, e.to), im = st ? ART[st.art] : ART.tar;
+        if (!ready(im)) continue;
+        const h = (st ? st.along : TAR_H) * TILE, w = h * im.naturalWidth / im.naturalHeight;
         const mx = (e.tiles[0][0] + e.tiles[1][0] + 1) / 2 * TILE, my = (e.tiles[0][1] + e.tiles[1][1] + 1) / 2 * TILE;
         gx.save();
         if (e.dir === 'right') { gx.translate(canvas.width, my); }
@@ -1755,7 +1802,7 @@
       ctx.fillRect(0, 0, canvas.width, canvas.height);
       const wantDecals = AREAS[areaName].decals && ready(ART.decals);
       const wantWire = !!AREAS[areaName].coils && ['wallStraight', 'wallBroken', 'wallCorner', 'wallEnd'].every(k => ready(ART[k]));
-      const wantTar = AREAS[areaName].exits.length > 0 && ready(ART.tar);
+      const wantTar = AREAS[areaName].exits.length > 0 && AREAS[areaName].exits.every(e => { const st = passageStyle(areaName, e.to); return ready(st ? ART[st.art] : ART.tar); });
       const wantLake = !!AREAS[areaName].lake && ready(ART[AREAS[areaName].lake.art]);
       if (!groundLayer || (wantDecals && !groundLayer.hasDecals) || (wantWire && !groundLayer.hasWire) || (wantTar && !groundLayer.hasTar) || (wantLake && !groundLayer.hasLake)) {
         groundLayer = buildGround();
