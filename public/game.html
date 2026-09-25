@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
 <meta charset="utf-8">
-<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <title>Little Game</title>
 <style>
   :root { color-scheme: dark; --bg: #000; --grid: #fff; --player: #808080; --muted: #8a8a8a;
@@ -85,6 +85,7 @@
   .stat.cha i { color: #b58cff; }
   .stat.gold i { color: #f5c542; }
 </style>
+
 </head>
 <body>
 <div id="stage"><canvas id="c" width="1680" height="1040" aria-label="Game grid, 21 by 13 tiles"></canvas>
@@ -274,7 +275,9 @@
   const expNeed = lvl => lvl >= MAX_LEVEL ? 0 : EXP_NEED[lvl - 1];   // exp to go from lvl to lvl + 1
   // each level up: +5% health cap, +1% mana cap, +10% energy cap (compounding, shown as whole numbers), +0.1% crit chance
   const LEVEL_GROWTH = { health: 0.05, mana: 0.01, energy: 0.10 }, LEVEL_CRIT = 0.001;
-  const LEVEL_EXP = { work: 1 };   // exp per work deal (enemies: `exp` in their rules)
+  const LEVEL_EXP = { work: 1 };   // exp per work deal. Discovering a zone: |a| + |b| of its coordinates (zoneSum).
+  // Killing an enemy: its base `exp` + (zone's |a| + |b|) / 2 (rounded down) + the enemy's level (zoneLevel).
+  // Enemy damage: base damage + (enemy level - hero level), never below 0 (npcDamage).
   const CAP_BASE = { ...CAPS };    // caps before the level bonus (Tar Orbs raise the mana base)
   const hero = { level: 1, exp: 0 };
   function recalcCaps() { for (const st in CAP_BASE) CAPS[st] = Math.round(CAP_BASE[st] * Math.pow(1 + LEVEL_GROWTH[st], hero.level - 1)); }
@@ -394,6 +397,10 @@
     ['-3:-2', '-4:-2', 0.16], ['-4:-2', '-4:-1', 0.49], ['-4:-1', '-4:0', 0.51], ['-4:-1', '-5:-1', 0.5],
   ];
   const coordOf = id => id.split(':').map(Number);
+  // zone numbers for levels and exp: negative coordinates count as positive (-3:-3 works like 3:3)
+  const zoneCoords = id => coordOf(id).map(Math.abs);
+  const zoneSum = id => zoneCoords(id)[0] + zoneCoords(id)[1];   // exp for discovering a zone: |a| + |b|
+  const zoneLevel = id => Math.max(...zoneCoords(id));           // level of every enemy living there: the bigger of |a|, |b|
   // a passage is 2 tiles wide on the shared edge; each side gets exit tiles (0-based) and a direction
   function buildExits() {
     const exits = {};
@@ -719,7 +726,9 @@
   // starts restoring mana (spawns with 0 of 3, +1 per 4 s). At 3 mana he casts Magic Tar at the hero (same spell as the hero's).
   // Beaten: his puddle can be looted for 30 s (face it, Space), then fades out over 2 s and is gone with any loot left.
   // He comes back 60–90 s after dying. All timers run on game time, which stops while a window is open.
-  const DRIP = { name: 'Drip', exp: 2, hp: 10, atk: [1, 2], mana: 3, manaRegenMs: 4000, aggro: 4, stepMs: 1000, attackMs: 1000,
+  // Damage scales with his level L: melee base = L + atk[0] … L + atk[1] (lvl 3: 3–4); his Magic Tar's base per second =
+  // round(tarPerLvl × L) (lvl 5: 4). Then + (L − hero level), at least 0 (npcDamage).
+  const DRIP = { name: 'Drip', exp: 2, hp: 10, atk: [0, 1], tarPerLvl: 0.8, mana: 3, manaRegenMs: 4000, aggro: 4, stepMs: 1000, attackMs: 1000,
                  windupMs: 400, spell: 'magic tar', respawnMs: [60000, 90000], lootMs: 30000, fadeMs: 2000,
                  loot: { money: [4, 8], tar: [0, 1], magicTarChance: 0.01 },   // rolled when he dies, taken with Space
                  spawns: [[{ x: 11, y: 7 }], [{ x: 8, y: 5 }, { x: 14, y: 9 }]] };   // spawn tiles (from 1) for 1 and for 2 Drips
@@ -737,7 +746,7 @@
   // toxic mist at where the hero stood: up to `sprayRange` tiles, `sprayHalfAngle` radians each side; the hero takes
   // `sprayDmg` every second he stays in it (step out of the cone to dodge). Doesn't melee. Same loot/fade/respawn timing as Drip.
   const SCAV = { name: 'Toxic Scav', exp: 4, hp: 26, aggro: 5, keep: 3, stepMs: 1000, sprayRange: 3.5, sprayHalfAngle: 0.5,
-                 sprayEveryMs: 3000, aimMs: 300, sprayMs: 1500, sprayTickMs: 500, sprayDmg: 1,   // 1 damage per 0.5 s in the cone = 2 per second
+                 sprayEveryMs: 3000, aimMs: 300, sprayMs: 1500, sprayTickMs: 500, sprayDmg: 1, sprayPerLvl: 0.8,   // base per hit = round(sprayDmg + sprayPerLvl × his level) (lvl 2: 2.6 → 3), then + (his level − hero level); 3 hits per spray (every 0.5 s)
                  respawnMs: [90000, 120000], lootMs: 30000, fadeMs: 2000,
                  loot: { money: [10, 18], tar: [0, 1], mutagenChance: 0.1 } };
   const ENEMY = { drip: DRIP, scav: SCAV };
@@ -1508,9 +1517,8 @@
           while (t >= s.nextTick && s.nextTick < s.end) {
             s.nextTick += S.sprayTickMs;
             if (inSpray(d, s) && stats.health > 0) {
-              stats.health = Math.max(0, stats.health - S.sprayDmg); heroHurtStart = t;
-              float(`-${S.sprayDmg}`, '#7fff3a', player.x + 0.5, player.y - 0.6); renderStats();
-              if (stats.health <= 0) { gameOver(); return; }
+              hurtHero(npcDamage(Math.round(S.sprayDmg + S.sprayPerLvl * npcLevel())), '#7fff3a');   // base 1 + 0.8 × lvl per hit, rounded
+              if (stats.health <= 0) return;
             }
           }
           return;
@@ -1542,10 +1550,18 @@
     // Drip's swing lands (after the wind-up) if the hero is still next to him
     function dripStrikes() {
       if (cheb(player.x, player.y, drip.x, drip.y) !== 1 || stats.health <= 0) return;
-      const dmg = rand(DRIP.atk[0], DRIP.atk[1]);
+      const L = npcLevel();   // base L + 0 … L + 1
+      hurtHero(npcDamage(rand(L + DRIP.atk[0], L + DRIP.atk[1])), '#e5484d');
+    }
+    // enemy levels: every enemy in a zone has that zone's level. Its damage = base + (enemy level - hero level), at least 0.
+    const npcLevel = () => zoneLevel(areaName);   // fights only happen in the hero's zone
+    const npcDamage = base => Math.max(0, base + npcLevel() - hero.level);
+    // an enemy's hit lands on the hero (0 damage: a grey "0", no blink)
+    function hurtHero(dmg, color) {
+      if (dmg <= 0) { float('0', '#8a8a8a', player.x + 0.5, player.y - 0.6); return; }
       stats.health = Math.max(0, stats.health - dmg);
       heroHurtStart = gameTime;
-      float(`-${dmg}`, '#e5484d', player.x + 0.5, player.y - 0.6);
+      float(`-${dmg}`, color, player.x + 0.5, player.y - 0.6);
       renderStats();
       if (stats.health <= 0) gameOver();
     }
@@ -1599,7 +1615,7 @@
         if (L.magicTarChance && Math.random() < L.magicTarChance) items.push({ name: 'magic tar', count: 1 });
         if (L.mutagenChance && Math.random() < L.mutagenChance) items.push({ name: 'MutaGen', count: 1 });
         drip.loot = { money: rand(L.money[0], L.money[1]), items };
-        gainExp(T.exp || 0);
+        gainExp((T.exp || 0) + Math.floor(zoneSum(areaName) / 2) + npcLevel());   // base + half the zone's coordinate sum + his level
         if (target === drip) retarget();   // next closest enemy, or no target
       }
     }
@@ -1695,11 +1711,8 @@
     // damage over time on the hero (enemy Magic Tar)
     function updateHeroDot() {
       while (heroDot && gameTime >= heroDot.next && stats.health > 0) {
-        const dmg = rand(heroDot.spell.dot[0], heroDot.spell.dot[1]);
-        stats.health = Math.max(0, stats.health - dmg); heroHurtStart = gameTime;
-        float(`-${dmg}`, '#ff2bd6', player.x + 0.5, player.y - 0.6);
-        renderStats();
-        if (stats.health <= 0) { heroDot = null; gameOver(); return; }
+        hurtHero(npcDamage(Math.round(DRIP.tarPerLvl * npcLevel())), '#ff2bd6');   // Drip's Magic Tar: round(0.8 × lvl) per second
+        if (stats.health <= 0) { heroDot = null; return; }
         if (--heroDot.left <= 0) heroDot = null; else heroDot.next += heroDot.spell.tickMs;
       }
     }
@@ -1870,6 +1883,7 @@
     let groundLayer = null;   // rebuilt when the area changes
     let areaFade = 0, areaBanner = 0;   // timestamps for the transition fade and the area name banner
     function enterArea(name, x, y, face, instant, faceY = 0) {
+      const firstVisit = !discovered.has(name);   // discovering a zone gives |a| + |b| exp (the city 0:0 gives none)
       areaName = name; WALLS = AREAS[name].walls; discovered.add(name);
       player.x = x; player.y = y; fromX = x; fromY = y;
       facing.x = face; facing.y = faceY; if (face) lookX = face; moving = false;
@@ -1877,6 +1891,7 @@
       rootedUntil = 0; heroDot = null; projectiles.length = 0; target = null;
       settleZoneDrips(name);
       if (!instant) { areaFade = performance.now(); areaBanner = areaFade; setTimeout(() => autosave(), 0); }
+      if (firstVisit) gainExp(zoneSum(name));
       renderStats();
     }
     const GROUND_REPEAT = 6;   // tiles per texture repeat
@@ -2325,6 +2340,9 @@
       ctx.fillStyle = '#e5484d'; ctx.fillRect(tx, y + 36, bw * drip.hp / T.hp, 12);
       ctx.fillStyle = '#fff'; ctx.font = '600 14px ' + MONO; ctx.textAlign = 'right';
       ctx.fillText(`${drip.hp}/${T.hp}`, tx + bw, y + 20);
+      const lvl = npcLevel();   // red when stronger than the hero, grey when weaker
+      ctx.fillStyle = lvl > hero.level ? '#e5484d' : lvl < hero.level ? '#8a8a8a' : '#fff'; ctx.font = '600 16px ' + MONO;
+      ctx.fillText(`lvl ${lvl}`, tx + bw, y + 62);
       ctx.fillStyle = '#4ea1ff'; ctx.font = '18px ' + MONO; ctx.textAlign = 'left';
       if (T.mana) ctx.fillText(ICON.mana.repeat(drip.mana) + '◇'.repeat(T.mana - drip.mana), tx, y + 62);
       else { ctx.fillStyle = '#7fff3a'; ctx.font = '16px ' + MONO; ctx.fillText(drip.spray ? 'spraying!' : 'toxic spray', tx, y + 62); }
