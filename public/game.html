@@ -75,6 +75,44 @@
   .touch.hero .t-stick { bottom: auto; top: 16%; left: auto; right: 3%; }   /* hero panel open (left): stick moves out of its way */
   .touch.hero.inv .t-stick { top: 16%; right: auto; left: 60%; }
   canvas { -webkit-touch-callout: none; -webkit-user-select: none; }
+  /* ---- phone view (touch controls on a phone-sized screen): the map fills the screen, the camera follows the hero,
+     the bottom HUD is replaced by a small hero HUD in the top-left. Works upright and sideways. */
+  .phud { display: none; }
+  html.phone, html.phone body { height: 100%; overflow: hidden; overscroll-behavior: none; }
+  html.phone body { padding: 0; display: block; }
+  html.phone .hud, html.phone .xpbar { display: none; }
+  html.phone #stage { position: fixed; inset: 0; width: 100vw; height: 100vh; height: 100dvh; aspect-ratio: auto; }
+  html.phone canvas { width: 100%; height: 100%; }
+  html.phone .touch { inset: env(safe-area-inset-top, 0) env(safe-area-inset-right, 0) env(safe-area-inset-bottom, 0) env(safe-area-inset-left, 0); }
+  html.phone .t-stick { width: calc(var(--u) * 30); left: 4%; bottom: 6%; }
+  html.phone .t-btns { width: calc(var(--u) * 46); right: 4%; bottom: 6%; }
+  html.phone .touch button { font-size: calc(var(--u) * 5); }
+  html.phone .t-act { font-size: calc(var(--u) * 8); }
+  html.phone .t-spell { font-size: calc(var(--u) * 4.6); }
+  html.phone .t-menu { left: auto; right: calc(var(--mini-w, 120px) + 10px); top: 8px; }
+  html.phone .t-menu button { width: calc(var(--u) * 10.5); font-size: calc(var(--u) * 4.2); }
+  html.phone .t-menu small { font-size: calc(var(--u) * 2); }
+  html.phone.portrait .t-menu { flex-direction: column; right: 8px; top: calc(var(--mini-h, 80px) + 16px); }
+  html.phone .touch.win .t-menu { display: none; }
+  html.phone .touch.hero .t-stick { top: auto; right: auto; left: 4%; bottom: 6%; }   /* phones: the hero panel sits mid-left, clear of the stick */   /* a window is open: it has its own ✕ */
+  html.phone .phud { display: flex; position: absolute; z-index: 3; gap: 8px; align-items: flex-start;
+                     left: calc(env(safe-area-inset-left, 0px) + 8px); top: calc(env(safe-area-inset-top, 0px) + 8px);
+                     padding: 6px 8px 6px 6px; background: rgba(5, 7, 12, 0.72); border: 1px solid rgba(255, 255, 255, 0.18); border-radius: 10px;
+                     font: 600 11px/1.2 ui-monospace, "SF Mono", Menlo, Consolas, monospace; color: #fff; pointer-events: none; }
+  html.phone .phud.away { display: none; }   /* a window or panel is open */
+  .ph-face { width: 46px; height: 46px; flex: none; padding: 0; border: 2px solid #00e5ff; border-radius: 8px; background: #1B2233 center / cover no-repeat;
+             pointer-events: auto; touch-action: none; cursor: pointer; -webkit-tap-highlight-color: transparent; }
+  .ph-bars { display: grid; gap: 3px; width: 132px; }
+  .ph-top { display: flex; justify-content: space-between; gap: 6px; }
+  .ph-top b { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .ph-top span { color: #ffe600; }
+  .ph-bar { position: relative; height: 11px; background: #141824; border: 1px solid #3a4257; overflow: hidden; }
+  .ph-bar i { position: absolute; inset: 0 auto 0 0; width: 0; }
+  .ph-bar.hp i { background: #e5484d; } .ph-bar.mana i { background: #4ea1ff; }
+  .ph-bar.xp { height: 5px; } .ph-bar.xp i { background: linear-gradient(90deg, #6a3fd0, #b58cff); }
+  .ph-bar span { position: absolute; inset: 0; font-size: 9px; line-height: 10px; text-align: center; text-shadow: 0 0 2px #000, 0 0 2px #000; }
+  .ph-res { display: flex; gap: 12px; font-size: 11px; }
+  .ph-res .nrg { color: #9dff5c; } .ph-res .gold { color: #f5c542; } .ph-res b { color: #fff; }
   /* naming screen, shown over the grid at the start of a game */
   .naming[hidden] { display: none; }
   .naming { position: absolute; inset: 0; z-index: 5; display: flex; align-items: center; justify-content: center; background: rgba(0, 0, 0, 0.6); }
@@ -168,6 +206,17 @@
 </style>
 
 </head><body><div id="stage"><canvas id="c" width="1680" height="1040" aria-label="Game grid, 21 by 13 tiles"></canvas>
+  <!-- phone HUD (phone view only): hero face (tap = hero panel), HP / mana / XP bars, energy and money -->
+  <div class="phud" id="phud">
+    <button type="button" class="ph-face" id="ph-face" data-code="KeyH" aria-label="Hero (H)"></button>
+    <div class="ph-bars">
+      <div class="ph-top"><b id="ph-name">Guest</b><span id="ph-lvl">lvl 1</span></div>
+      <div class="ph-bar hp"><i id="ph-hp"></i><span id="ph-hpt"></span></div>
+      <div class="ph-bar mana"><i id="ph-mana"></i><span id="ph-manat"></span></div>
+      <div class="ph-bar xp"><i id="ph-xp"></i></div>
+      <div class="ph-res"><span class="nrg">&#x26A1;&#xFE0E; <b id="ph-nrg">0</b></span><span class="gold">$ <b id="ph-money">0</b></span></div>
+    </div>
+  </div>
   <!-- phone controls over the map (touch screens; Settings → touch controls): joystick, action + spells, menu row -->
   <div class="touch" id="touch" hidden>
     <div class="t-menu">
@@ -257,6 +306,7 @@
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.117.1/dist/umd/supabase.js"></script>
 <script>
   const COLS = 21, ROWS = 13, TILE = 80;   // every zone is 21 x 13 tiles
+  const WORLD_W = COLS * TILE, WORLD_H = ROWS * TILE;   // a zone in canvas pixels (the canvas itself can be another size in phone view)
   // cheat menu (P) is locked behind a password; only its SHA-256 is kept here
   const CHEAT_HASH = '97c10efe01d5c9c88704a12d361d8429b3a6aa2412290a0773109d5d2d603d5e';
   // accounts + saves: Supabase (auth + a "saves" table, one row per player, protected by row-level security).
@@ -1718,7 +1768,7 @@
     function drawStates() {
       const list = heroStates(), size = 56, gap = 8;
       list.forEach((s, i) => {
-        const def = STATES[s.key], x = 16 + i * (size + gap), y = canvas.height - 16 - size, im = ART[def.icon];
+        const def = STATES[s.key], x = 16 + i * (size + gap), y = phoneView ? phudBottom() + 12 : canvas.height - 16 - size, im = ART[def.icon];
         ctx.save();
         if (ready(im)) { ctx.imageSmoothingQuality = 'high'; ctx.drawImage(im, x, y, size, size); }
         else {   // placeholder badge until the icon art exists
@@ -2292,7 +2342,7 @@
     function buildGround() {
       const im = ART[ZONE_TYPES[AREAS[areaName].type].floor];
       if (!ready(im)) return null;
-      const g = document.createElement('canvas'); g.width = canvas.width; g.height = canvas.height;
+      const g = document.createElement('canvas'); g.width = WORLD_W; g.height = WORLD_H;
       const gx = g.getContext('2d'); gx.imageSmoothingQuality = 'high';
       const B = GROUND_REPEAT * TILE;
       for (let y = 0; y < g.height; y += B) for (let x = 0; x < g.width; x += B) gx.drawImage(im, x, y, B, B);
@@ -2359,10 +2409,10 @@
         const h = (st ? st.along : TAR_H) * TILE, w = h * im.naturalWidth / im.naturalHeight;
         const mx = (e.tiles[0][0] + e.tiles[1][0] + 1) / 2 * TILE, my = (e.tiles[0][1] + e.tiles[1][1] + 1) / 2 * TILE;
         gx.save();
-        if (e.dir === 'right') { gx.translate(canvas.width, my); }
+        if (e.dir === 'right') { gx.translate(WORLD_W, my); }
         else if (e.dir === 'left') { gx.translate(0, my); gx.scale(-1, 1); }
         else if (e.dir === 'up') { gx.translate(mx, 0); gx.rotate(-Math.PI / 2); }
-        else { gx.translate(mx, canvas.height); gx.rotate(Math.PI / 2); }
+        else { gx.translate(mx, WORLD_H); gx.rotate(Math.PI / 2); }
         gx.drawImage(im, -w, -h / 2, w, h);
         gx.restore();
       }
@@ -2436,9 +2486,24 @@
       }
     }
 
+    // camera: on desktop the whole zone fills the canvas (zoom 1). In phone view the canvas has the screen's shape and the
+    // camera shows ~15 × 7 tiles sideways (~6 × 13 upright), following the hero but never past the zone's edges.
+    let cam = { z: 1, ox: 0, oy: 0 };
+    let phoneView = false;   // set by layoutView(): touch controls on a phone-sized screen
+    function worldCam(rx, ry) {
+      if (!phoneView) return { z: canvas.width / WORLD_W, ox: 0, oy: 0 };
+      const land = canvas.width >= canvas.height;
+      const z = Math.max(land ? canvas.height / (7 * TILE) : canvas.width / (7 * TILE), canvas.width / WORLD_W, canvas.height / WORLD_H);
+      const vw = canvas.width / z, vh = canvas.height / z, hx = (rx + 0.5) * TILE, hy = (ry + 0.5) * TILE;
+      const camX = Math.max(0, Math.min(WORLD_W - vw, hx - vw / 2)), camY = Math.max(0, Math.min(WORLD_H - vh, hy - vh / 2));
+      return { z, ox: -camX * z, oy: -camY * z };
+    }
     function draw(rx, ry) {
+      ctx.setTransform(1, 0, 0, 1, 0, 0);
       ctx.fillStyle = '#000';
       ctx.fillRect(0, 0, canvas.width, canvas.height);
+      cam = worldCam(rx, ry);
+      ctx.setTransform(cam.z, 0, 0, cam.z, cam.ox, cam.oy);   // world drawing below is in zone pixels
       const wantDecals = AREAS[areaName].decals && ready(ART.decals);
       const wantWire = !!AREAS[areaName].coils && ['wallStraight', 'wallBroken', 'wallCorner', 'wallEnd'].every(k => ready(ART[k]));
       const wantTar = AREAS[areaName].exits.length > 0 && AREAS[areaName].exits.every(e => { const st = passageStyle(areaName, e.to); return ready(st ? ART[st.art] : ART.tar); });
@@ -2454,8 +2519,8 @@
       ctx.strokeStyle = 'rgba(255, 255, 255, 0.12)';
       ctx.lineWidth = 2;
       ctx.beginPath();
-      for (let x = 0; x <= COLS; x++) { const px = Math.min(Math.max(x * TILE, 1), canvas.width - 1); ctx.moveTo(px, 0); ctx.lineTo(px, canvas.height); }
-      for (let y = 0; y <= ROWS; y++) { const py = Math.min(Math.max(y * TILE, 1), canvas.height - 1); ctx.moveTo(0, py); ctx.lineTo(canvas.width, py); }
+      for (let x = 0; x <= COLS; x++) { const px = Math.min(Math.max(x * TILE, 1), WORLD_W - 1); ctx.moveTo(px, 0); ctx.lineTo(px, WORLD_H); }
+      for (let y = 0; y <= ROWS; y++) { const py = Math.min(Math.max(y * TILE, 1), WORLD_H - 1); ctx.moveTo(0, py); ctx.lineTo(WORLD_W, py); }
       ctx.stroke();
       }
 
@@ -2495,19 +2560,19 @@
       drawMeleeFlash();
       drawProjectiles();
       drawFloaters();
-      // enemy panel: the Drip the hero faces, else the nearest one chasing him
-      const foe = meleeTargets()[0] || (hasTarget() ? target : null) ||
-        drips.filter(d => d.aggro && !d.dead).sort((a, b) => cheb(a.x, a.y, player.x, player.y) - cheb(b.x, b.y, player.x, player.y))[0];
-      if (foe) { drip = foe; drawFoePanel(); }
-
       // name of the tile the yellow highlight is on
       const looked = wallAt(Math.round(rx) + facing.x, Math.round(ry) + facing.y);
       if (looked && looked.label && !anyOpen()) {
         ctx.fillStyle = '#fff';
         ctx.font = '600 28px ' + MONO;
         ctx.textAlign = 'center'; ctx.textBaseline = 'bottom';
-        ctx.fillText(looked.label, footCX(looked) * TILE, Math.max(40, wallTop(looked) - 10));   // keep tall buildings' names on screen
+        ctx.fillText(looked.label, footCX(looked) * TILE, Math.max(40 - cam.oy / cam.z, wallTop(looked) - 10));   // keep tall buildings' names on screen
       }
+      ctx.setTransform(1, 0, 0, 1, 0, 0);   // screen space from here: panels, maps, windows
+      // enemy panel: the Drip the hero faces, else the nearest one chasing him
+      const foe = meleeTargets()[0] || (hasTarget() ? target : null) ||
+        drips.filter(d => d.aggro && !d.dead).sort((a, b) => cheb(a.x, a.y, player.x, player.y) - cheb(b.x, b.y, player.x, player.y))[0];
+      if (foe) { drip = foe; drawFoePanel(); }
 
       // area change: quick fade from black and the area's name
       const since = performance.now() - areaFade;
@@ -2522,7 +2587,7 @@
 
       rowRects = [];
       drawStates();
-      if (!(ui && ui.kind === 'map')) { drawMinimap(rx, ry); drawQuestButton(); }
+      if (!(ui && ui.kind === 'map')) { drawMinimap(rx, ry); if (!phoneView) drawQuestButton(); else questBtn = null; }
       drawPanels();
       if (!ui) drawItemMenu();
       if (ui) drawWindow();
@@ -2729,7 +2794,7 @@
     }
     // enemy panel at the top while fighting: portrait, name, health, mana
     function drawFoePanel() {
-      const w = 300, h = 80, x = (canvas.width - w) / 2, y = 12;
+      const w = 300, h = 80, x = (canvas.width - w) / 2, y = phoneView && canvas.height > canvas.width ? phudBottom() + 12 : 12;
       ctx.fillStyle = 'rgba(0, 0, 0, 0.75)'; ctx.fillRect(x, y, w, h);
       ctx.strokeStyle = 'rgba(255, 43, 214, 0.6)'; ctx.lineWidth = 2; ctx.strokeRect(x + 1, y + 1, w - 2, h - 2);
       const T = ET(drip), pic = ART[drip.kind === 'scav' ? 'scavPortrait' : 'dripPortrait'];
@@ -3050,6 +3115,7 @@
       ctx.fillRect(px, py, pw, ph);
       ctx.strokeStyle = '#fff'; ctx.lineWidth = 2;
       ctx.strokeRect(px + 1, py + 1, pw - 2, ph - 2);
+      if (!locked()) drawCloseX(px + pw - 62, py + 14, null);
 
       ctx.textBaseline = 'middle';
       ctx.fillStyle = '#fff';
@@ -3060,7 +3126,7 @@
         ctx.textAlign = 'right';
         ctx.font = '26px ' + MONO;
         ctx.fillStyle = '#8a8a8a';
-        ctx.fillText(`${ICON.energy} ${stats.energy}   ${stats.money}$`, px + pw - 40, py + 56);
+        ctx.fillText(`${ICON.energy} ${stats.energy}   ${stats.money}$`, px + pw - 84, py + 56);
       }
 
       ctx.font = '26px ' + MONO; ctx.fillStyle = '#cfcfcf'; ctx.textAlign = 'left';
@@ -3280,15 +3346,15 @@
       const aTop = Math.min(MAP_BOUNDS.aMax, Math.max(a + 1, MAP_BOUNDS.aMin + MINI.rows - 1));
       const w = MINI.cols * MINI.cw, h = MINI.rows * MINI.ch, x = canvas.width - w - 20, y = 20;
       // the hero (his whole sprite, head included) near the minimap: fade it down to 5% so the map under it stays visible
-      const hx = (rx + 0.5) * TILE, hTop = (ry + 1 - HERO_H) * TILE, hBot = (ry + 1) * TILE, m = TILE * 0.75;
+      const hx = (rx + 0.5) * TILE * cam.z + cam.ox, hTop = (ry + 1 - HERO_H) * TILE * cam.z + cam.oy, hBot = (ry + 1) * TILE * cam.z + cam.oy, m = TILE * 0.75;
       const near = hx > x - m && hx < x + w + m && hTop < y + h + 30 + m && hBot > y - m;
-      miniAlpha += ((near ? 0.05 : 0.3) - miniAlpha) * 0.15;   // smooth fade
+      miniAlpha += ((near ? 0.05 : phoneView ? 0.6 : 0.3) - miniAlpha) * 0.15;   // smooth fade (brighter on phones: it's small there)
       ctx.save(); ctx.globalAlpha = miniAlpha;
       ctx.fillStyle = '#000'; ctx.fillRect(x - 6, y - 6, w + 12, h + 12);
       ctx.strokeStyle = '#fff'; ctx.lineWidth = 2; ctx.strokeRect(x - 5, y - 5, w + 10, h + 10);
       drawMapGrid(x, y, MINI.cw, MINI.ch, aTop, aTop - MINI.rows + 1, bLeft, bLeft + MINI.cols - 1, false);
-      ctx.fillStyle = '#fff'; ctx.font = '600 14px ' + MONO; ctx.textAlign = 'right'; ctx.textBaseline = 'top';
-      ctx.fillText('M map', x + w, y + h + 10);
+      ctx.fillStyle = '#fff'; ctx.font = (phoneView ? '600 26px ' : '600 14px ') + MONO; ctx.textAlign = 'right'; ctx.textBaseline = 'top';
+      ctx.fillText(phoneView ? areaLabel(areaName).toUpperCase() : 'M map', x + w, y + h + 10);   // phones: the area name (no M key there)
       ctx.restore();
     }
     // big map (M): the whole world in the middle of the screen, fully opaque
@@ -3300,10 +3366,11 @@
       ctx.fillStyle = 'rgba(0, 0, 0, 0.6)'; ctx.fillRect(0, 0, canvas.width, canvas.height);
       ctx.fillStyle = '#000'; ctx.fillRect(x - 30, y - 90, w + 60, h + 150);
       ctx.strokeStyle = '#fff'; ctx.lineWidth = 2; ctx.strokeRect(x - 29, y - 89, w + 58, h + 148);
+      drawCloseX(x + w + 30 - 62, y - 90 + 12, null);
       ctx.fillStyle = '#fff'; ctx.font = '600 40px ' + MONO; ctx.textAlign = 'left'; ctx.textBaseline = 'middle';
       ctx.fillText('Map', x, y - 50);
       ctx.fillStyle = '#8a8a8a'; ctx.font = '22px ' + MONO; ctx.textAlign = 'right';
-      ctx.fillText(`${discovered.size}/${Object.keys(ZONE_LIST).length} zones discovered`, x + w, y - 50);
+      ctx.fillText(`${discovered.size}/${Object.keys(ZONE_LIST).length} zones discovered`, x + w - 60, y - 50);
       ctx.save(); ctx.beginPath(); ctx.rect(Math.round(x), Math.round(y), Math.round(w), Math.round(h)); ctx.clip();   // nothing spills past the 7 × 7 window
       drawMapGrid(x, y, cw, ch, ha + half, ha - half, hb - half, hb + half, true);
       ctx.restore();
@@ -3366,6 +3433,17 @@
       if (panels.hero) drawHeroPanel();
       if (panels.inventory) drawInventoryPanel();
     }
+    // ✕ in a window's or panel's top-right corner: closes it (panel: that panel only; window: the window and anything behind it)
+    function drawCloseX(x, y, panel) {
+      const s = 48;
+      ctx.save();
+      ctx.fillStyle = 'rgba(255, 255, 255, 0.06)'; ctx.fillRect(x, y, s, s);
+      ctx.strokeStyle = 'rgba(255, 255, 255, 0.5)'; ctx.lineWidth = 2; ctx.strokeRect(x + 1, y + 1, s - 2, s - 2);
+      ctx.strokeStyle = '#fff'; ctx.lineWidth = 4; ctx.lineCap = 'round'; ctx.beginPath();
+      ctx.moveTo(x + 15, y + 15); ctx.lineTo(x + s - 15, y + s - 15); ctx.moveTo(x + s - 15, y + 15); ctx.lineTo(x + 15, y + s - 15); ctx.stroke();
+      ctx.restore();
+      rowRects.push({ x: x - 8, y: y - 8, w: s + 16, h: s + 16, close: panel || 'window' });   // a slightly bigger target for fingers
+    }
     function panelFrame(x, y, w, h, title, on) {
       ctx.fillStyle = 'rgba(0, 0, 0, 0.9)'; ctx.fillRect(x, y, w, h);
       ctx.strokeStyle = on ? '#fff' : 'rgba(255, 255, 255, 0.35)'; ctx.lineWidth = 2; ctx.strokeRect(x + 1, y + 1, w - 2, h - 2);
@@ -3390,6 +3468,7 @@
       const pn = panels.inventory, on = focus === 'inventory', w = INV_PANEL.w, h = INV_PANEL.h;
       const x = canvas.width - w - 16, y = canvas.height - h - 16;
       panelFrame(x, y, w, h, 'Inventory', on);
+      if (!ui) drawCloseX(x + w - 54, y + 10, 'inventory');
       const slots = invSlots(), size = 96, gap = 16, total = Math.max(1, slots) * size + (Math.max(1, slots) - 1) * gap, x0 = x + (w - total) / 2, sy = y + 62;
       if (!slots) {   // no bag worn: nothing to carry things in
         ctx.fillStyle = '#8a8a8a'; ctx.font = '20px ' + MONO; ctx.textAlign = 'left'; ctx.textBaseline = 'middle';
@@ -3427,6 +3506,7 @@
       const pn = panels.hero, on = focus === 'hero', w = HERO_PANEL.w, h = HERO_PANEL.h;
       const x = 16, y = (canvas.height - h) / 2, top = y + 64;
       panelFrame(x, y, w, h, heroName || DEFAULT_NAME, on);
+      if (!ui) drawCloseX(x + w - 54, y + 10, 'hero');
       const bw = 180, bh = 320;
       ctx.fillStyle = '#1B2233'; ctx.fillRect(x + 24, top, bw, bh);
       const full = ART.heroFull;
@@ -3680,10 +3760,16 @@
         else itemMenu = null;
         return;
       }
+      const xHit = e.button === 0 && rowRects.find(b => b.close && cx >= b.x && cx <= b.x + b.w && cy >= b.y && cy <= b.y + b.h);
+      if (xHit && (xHit.close === 'window' ? ui : !ui)) {   // ✕ buttons
+        if (xHit.close === 'window') closeAll();
+        else { panels[xHit.close] = null; if (focus === xHit.close) focus = panels.inventory ? 'inventory' : panels.hero ? 'hero' : null; }
+        return;
+      }
       if (ui && ui.bossTalk) { ui.bossTalk = false; return; }   // a click closes the boss's message
       if (e.button === 2) { secondaryAt(cx, cy); return; }
       if (e.pointerType && e.pointerType !== 'mouse') armLongPress(e, cx, cy);   // touch: holding a finger = right-click
-      const hit = rowRects.find(b => (!ui || !b.panel) && cx >= b.x && cx <= b.x + b.w && cy >= b.y && cy <= b.y + b.h);
+      const hit = rowRects.find(b => !b.close && (!ui || !b.panel) && cx >= b.x && cx <= b.x + b.w && cy >= b.y && cy <= b.y + b.h);
       if (hit && hit.panel) { focus = hit.panel; panels[hit.panel].cursor = hit.i; panels[hit.panel].msg = ''; }   // click a panel slot: focus + select
       else if (hit && hit.tab !== undefined) switchShopTab(hit.tab);
       else if (hit && ui && WINDOW_TABS[ui.kind] && hit.i !== ui.cursor) { ui.cursor = hit.i; ui.msg = ''; }   // shop: first click selects, a click on the selected item buys
@@ -3701,11 +3787,44 @@
     };
     function updateTouch() {
       touchEl.hidden = !touchOn();
-      const sizeU = () => touchEl.style.setProperty('--u', (touchEl.clientHeight || canvas.clientHeight) / 100 + 'px');
-      sizeU();
+      layoutView();
     }
-    new ResizeObserver(() => touchEl.style.setProperty('--u', canvas.clientHeight / 100 + 'px')).observe(canvas);
-    touchEl.querySelectorAll('button[data-code]').forEach(b => {
+    // phone view: the canvas takes the screen's shape (sideways: 1040 px tall; upright: 1240 px wide, so every window still fits)
+    // and the camera zooms in on the hero (see worldCam). Desktop and tablets keep the 1680 × 1040 canvas with the whole zone.
+    const phudEl = $('phud');
+    function layoutView() {
+      const vw = window.innerWidth, vh = window.innerHeight;
+      phoneView = touchOn() && Math.min(vw, vh) <= 600;
+      document.documentElement.classList.toggle('phone', phoneView);
+      document.documentElement.classList.toggle('portrait', phoneView && vh > vw);
+      let W = WORLD_W, H = WORLD_H;
+      if (phoneView) { if (vw >= vh) { H = 1040; W = Math.round(1040 * vw / vh); } else { W = 1240; H = Math.round(1240 * vh / vw); } }
+      if (canvas.width !== W || canvas.height !== H) { canvas.width = W; canvas.height = H; }
+      requestAnimationFrame(() => {   // sizes that depend on the laid-out page
+        const k = canvas.clientWidth / canvas.width;   // CSS px per canvas px
+        touchEl.style.setProperty('--u', (phoneView ? Math.min(vw, vh) : canvas.clientHeight) / 100 + 'px');
+        touchEl.style.setProperty('--mini-w', (MINI.cols * MINI.cw + 30) * k + 'px');
+        document.documentElement.style.setProperty('--mini-h', (MINI.rows * MINI.ch + 60) * k + 'px');
+      });
+    }
+    // bottom of the phone HUD in canvas px (things drawn on the canvas below it: status icons, the enemy panel when upright)
+    function phudBottom() {
+      if (!phoneView || !phudEl.offsetHeight) return 12;
+      return (phudEl.offsetTop + phudEl.offsetHeight) * canvas.width / Math.max(1, canvas.clientWidth);
+    }
+    function renderPhud() {
+      if (!phoneView) return;
+      const pct = (a, b) => Math.max(0, Math.min(100, b ? a / b * 100 : 0)) + '%';
+      $('ph-name').textContent = heroName || DEFAULT_NAME; $('ph-lvl').textContent = `lvl ${hero.level}`;
+      $('ph-hp').style.width = pct(stats.health, CAPS.health); $('ph-hpt').textContent = `${stats.health}/${CAPS.health}`;
+      $('ph-mana').style.width = pct(stats.mana, CAPS.mana); $('ph-manat').textContent = `${stats.mana}/${CAPS.mana}`;
+      const need = expNeed(hero.level); $('ph-xp').style.width = need ? pct(hero.exp, need) : '100%';
+      $('ph-nrg').textContent = stats.energy; $('ph-money').textContent = stats.money;
+    }
+    $('ph-face').style.backgroundImage = `url(${ART_SRC.heroPortrait})`;
+    addEventListener('resize', layoutView); addEventListener('orientationchange', () => setTimeout(layoutView, 150));
+    new ResizeObserver(() => { if (!phoneView) touchEl.style.setProperty('--u', canvas.clientHeight / 100 + 'px'); }).observe(canvas);
+    [...touchEl.querySelectorAll('button[data-code]'), $('ph-face')].forEach(b => {
       b.addEventListener('pointerdown', e => { e.preventDefault(); b.classList.add('on'); sendKey(b.dataset.code); });
       const up = () => { b.classList.remove('on'); sendKey(b.dataset.code, 'keyup'); };
       b.addEventListener('pointerup', up); b.addEventListener('pointercancel', up); b.addEventListener('pointerleave', up);
@@ -3748,9 +3867,10 @@
     document.querySelectorAll('.ability').forEach((el, i) => el.addEventListener('click', () => { if (!naming() && !anyOpen()) castSpell(i); }));
     matchMedia('(pointer: coarse)').addEventListener?.('change', updateTouch);
     updateTouch();
-    setInterval(() => {   // controls step aside for open panels
+    setInterval(() => {   // controls step aside for open panels; the phone HUD follows the stats
       if (touchEl.hidden) return;
-      touchEl.classList.toggle('busy', anyOpen()); touchEl.classList.toggle('inv', !!panels.inventory && !ui); touchEl.classList.toggle('hero', !!panels.hero && !ui);
+      touchEl.classList.toggle('busy', anyOpen()); touchEl.classList.toggle('win', !!ui); touchEl.classList.toggle('inv', !!panels.inventory && !ui); touchEl.classList.toggle('hero', !!panels.hero && !ui);
+      phudEl.classList.toggle('away', anyOpen()); renderPhud();
     }, 150);
 
     spawnAllDrips();   // start of the game: every enemy in the world is spawned
