@@ -382,15 +382,16 @@
   // and +2 to max money, so risk keeps growing but each health point pays more
   const rand = (a, b) => a + Math.floor(Math.random() * (b - a + 1));
   // ---- TradeCorp deals: 3 rows, each rolled on its own (all reroll after one is taken) ----
-  // call: costs lvl…lvl+C energy, pays lvl×W…(lvl+C)×W money (energy and money rolled separately; C = charisma, W 1.2 / rare 1.6)
+  // call: costs lvl…lvl+C energy, pays lvl×W…(lvl+C)×W money (energy and money rolled separately; C = charisma, W 1.3 / rare 2)
   // sale: buy lvl pieces of a random item at full price (common: Tar, Scrap, Cheap noodles; rare: MutaGen or AI chip × lvl (max 32), or 1 Tar Orb)
   // delivery: adds a delivery quest (details come later)
   const DEAL_CHANCES = [['call', false, 0.941], ['call', true, 0.025], ['sale', false, 0.0245], ['sale', true, 0.005], ['delivery', false, 0.004], ['delivery', true, 0.0005]];
-  const DEAL_W = { common: 1.2, rare: 1.6 };
+  const DEAL_W = { common: 1.3, rare: 2 };
   const CALL_LINES = ['A client wants their contract checked.', 'Someone needs a loan explained. Slowly.', 'A shop owner is angry about a late order.',
                       'A tourist is lost and wants directions.', 'A gang boss wants to renegotiate. Politely.', 'A robot keeps calling to sell you insurance.'];
   const RARE_CALL_LINES = ['A corporate VIP asks for you by name.', 'A rich collector wants a private deal.'];
   const SALE_POOL = { common: ['Tar', 'Scrap', 'Cheap noodles'], rare: ['MutaGen', 'AI chip', 'Tar Orb'] };
+  const MAX_QUESTS = 3;   // active quests at the same time
   const pick = a => a[Math.floor(Math.random() * a.length)];
   function rollDeal(lvl, cha, foodPrice, force = null) {   // force: [type, rare] (cheat menu)
     let r = Math.random(), roll = DEAL_CHANCES[0];
@@ -424,6 +425,7 @@
     factory:    { name: 'abandoned factory', floor: 'groundFactory' },
     greaser:    { name: 'greaser', floor: 'groundSlums' },   // a slums district
     forest:     { name: 'forest', floor: 'groundLake' },     // dead forest: lake-shore mud with fallen leaves
+    deepForest: { name: 'deep forest', floor: 'groundLake' },   // same floor and passages as the forest, more leaves
   };
   const ZONE_LIST = {
     '0:0': 'city',
@@ -432,7 +434,10 @@
     '2:2': 'greaser',
     '1:-1': 'factoryIn', '1:-2': 'factory', '1:-3': 'factory', '2:-2': 'factory', '2:-3': 'factory',
     '0:-1': 'lake', '0:-2': 'lake', '-1:-1': 'lake', '-1:-2': 'lake',
-    '-2:-3': 'forest', '-2:-2': 'forest', '-3:-3': 'forest', '-3:-2': 'forest', '-4:-2': 'forest', '-4:-1': 'forest', '-4:0': 'forest', '-5:-1': 'forest',
+    '-2:-3': 'forest', '-2:-2': 'forest', '-3:-3': 'forest', '-3:-2': 'forest', '-4:-2': 'forest', '-4:-1': 'forest', '-4:0': 'forest', '-5:-1': 'forest', '-6:-1': 'forest',
+    '-7:-1': 'deepForest', '-7:0': 'deepForest', '-8:-2': 'deepForest', '-8:-1': 'deepForest', '-8:0': 'deepForest',
+    '-9:-2': 'deepForest', '-9:-1': 'deepForest', '-10:-2': 'deepForest', '-10:-1': 'deepForest',
+    '6:3': 'slums', '6:4': 'slums', '7:4': 'slums',
   };
   // passages between neighbouring zones: [zone, zone, where along the shared edge (0 = top/left end, 1 = bottom/right end)]
   const PASSAGES = [
@@ -447,6 +452,12 @@
     // forest (south of the toxic lake)
     ['-1:-2', '-2:-2', 0.09], ['-2:-3', '-3:-3', 0.15], ['-2:-2', '-3:-2', 0.89], ['-3:-3', '-3:-2', 0.73],
     ['-3:-2', '-4:-2', 0.16], ['-4:-2', '-4:-1', 0.49], ['-4:-1', '-4:0', 0.51], ['-4:-1', '-5:-1', 0.5],
+    ['-5:-1', '-6:-1', 0.51],
+    // deep forest (south of the forest)
+    ['-6:-1', '-7:-1', 0.12], ['-7:-1', '-7:0', 0.52], ['-7:0', '-8:0', 0.84], ['-8:-1', '-8:0', 0.49],
+    ['-8:-2', '-9:-2', 0.49], ['-8:-1', '-9:-1', 0.18], ['-9:-2', '-10:-2', 0.51], ['-9:-1', '-10:-1', 0.18], ['-10:-2', '-10:-1', 0.54],
+    // slums far north
+    ['6:3', '5:3', 0.47], ['6:3', '6:4', 0.9], ['7:4', '6:4', 0.49],
   ];
   const coordOf = id => id.split(':').map(Number);
   // zone numbers for levels and exp: negative coordinates count as positive (-3:-3 works like 3:3)
@@ -519,13 +530,14 @@
                          'puddle cyan': 1, 'puddle pink': 1, graffiti: 1, manhole: 0.5 } };
   // forest: lots of fallen leaves (decal 16), scattered off-centre, allowed next to each other; lake: a few leaves on the shore
   const FOREST_DECALS = { chance: 0.45, weights: { leaves: 1 }, cluster: true, jitter: 0.35 };
+  const DEEP_FOREST_DECALS = { ...FOREST_DECALS, chance: 0.6 };   // deep forest: even more leaves
   const LAKE_DECALS = { chance: 0.12, weights: { leaves: 1 }, cluster: true, jitter: 0.35 };
   const AREAS = {};
   for (const id in ZONE_LIST) {
     const type = ZONE_LIST[id], [a, b] = coordOf(id), seed = 7331 + (a + 5) * 97 + (b + 5) * 13;
     AREAS[id] = { id, type, name: ZONE_TYPES[type].name, walls: [], exits: ZONE_EXITS[id],
                   decals: type === 'slums' || type === 'greaser' ? { ...SLUMS_DECALS, seed }
-                        : type === 'forest' ? { ...FOREST_DECALS, seed } : type === 'lake' ? { ...LAKE_DECALS, seed } : false,   // factory: clean floor for now
+                        : type === 'forest' ? { ...FOREST_DECALS, seed } : type === 'deepForest' ? { ...DEEP_FOREST_DECALS, seed } : type === 'lake' ? { ...LAKE_DECALS, seed } : false,   // factory: clean floor for now
                   drips: type === 'slums' ? (Math.max(Math.abs(a), Math.abs(b)) >= 3 ? 2 : 1) : 0 };
     AREAS[id].foes = [];   // other enemies living here besides the Drips: { kind, spawn } (spawn tile counted from 1)
   }
@@ -739,7 +751,9 @@
   };
   for (const id in BIG) AREAS[id].big = BIG[id];
   // one Toxic Scav per toxic lake zone, on the shore away from the water and the passages
-  const SCAV_SPAWNS = { '0:-2': { x: 6, y: 4 }, '-1:-1': { x: 16, y: 10 } };   // 2 for the 4 lake zones (opposite corners)
+  const SCAV_SPAWNS = { '0:-2': { x: 6, y: 4 }, '-1:-1': { x: 16, y: 10 },   // 2 for the 4 lake zones (opposite corners)
+    // deep forest: 4 Scavs among its 9 zones, spread along the route (levels 7, 8, 10, 8)
+    '-7:0': { x: 11, y: 7 }, '-8:-1': { x: 8, y: 6 }, '-10:-1': { x: 14, y: 8 }, '-8:-2': { x: 11, y: 5 } };
   for (const id in SCAV_SPAWNS) AREAS[id].foes.push({ kind: 'scav', spawn: SCAV_SPAWNS[id] });
   // greaser 2:2: 4 Drips, one in each quarter of the zone
   for (const sp of [{ x: 6, y: 4 }, { x: 16, y: 4 }, { x: 6, y: 10 }, { x: 16, y: 10 }]) AREAS['2:2'].foes.push({ kind: 'drip', spawn: sp });
@@ -912,6 +926,7 @@
     const newDeals = () => [0, 1, 2].map(() => rollDeal(hero.level, stats.charisma, prices[FOOD]));
     let deals = null;   // rolled below, once prices exist (older saves' deals are replaced)
     let dealsDone = saved.dealsDone ?? 0;   // how many work deals the hero has taken this run
+    let promotion = saved.promotion ?? 0;   // TradeCorp promotions earned (0–3, see PROMOTIONS)
     let heroName = capName(saved.heroName ?? null);  // the account's name
     let account = null;                     // logged-in Supabase user { id, email }, or null (account screen shows)
     // save slots: 1 = autosave (only the game writes it), 2 and 3 = manual. Online per account, or in this browser when offline.
@@ -1028,10 +1043,15 @@
       if (ui.kind === 'work') {
         const tab = WINDOW_TABS.work[tabOf()].key;
         if (tab === 'office') return OFFICE_UPGRADES.map(u => ({ side: 'upgrade', data: u, left: u.name, right: '', act() { return 'Office upgrades come later.'; } }));
-        if (tab === 'boss') return PROMOTIONS.map(pr => ({ side: 'promo', data: pr, left: pr.name, right: '', act() { return 'Promotions come later.'; } }));
+        if (tab === 'boss') return PROMOTIONS.map((pr, i) => ({ side: 'promo', data: pr, idx: i, left: pr.name, right: '', act() { return earnPromotion(i); } }));
         return deals.map(d => ({ deal: d, left: '', right: '', act() { return takeDeal(d); } }));
       }
-      if (ui.kind === 'quests') return quests.map(q => ({ quest: q, left: q.name, right: '', act() { return q.desc; } }));
+      if (ui.kind === 'quests') return quests.map((q, i) => ({ quest: q, left: q.name, right: '', act() { const b = rowRects.find(r => !r.panel && r.i === i); openQuestMenu(i, b ? b.x + b.w - 320 : 700, b ? b.y + b.h - 10 : 400); } }));
+      if (ui.kind === 'cancelQuest') return [   // "are you sure?" for cancelling a quest (same as throwing an item away)
+        { left: 'Yes', right: '', act() { const q = quests[ui.questIdx], back = ui.back, name = ui.questName; if (q && q.name === name) quests.splice(ui.questIdx, 1);
+          openWindow('quests', Math.max(0, Math.min(back.cursor, quests.length - 1))); ui.msg = `Quest cancelled: ${name}.`; } },
+        { left: 'No', right: '', act() { goBack(); } },
+      ];
       if (ui.kind === 'menu') return [
         { left: 'continue', right: '', act() { ui = null; } },
         { left: 'restart', right: '', act() { openWindow('restart', 1, fromHere()); } },
@@ -1114,7 +1134,7 @@
       return [];
     }
     function newGame() {
-      Object.assign(stats, START_STATS); dealsDone = 0; Object.assign(prices, startPrices()); deals = newDeals();
+      Object.assign(stats, START_STATS); dealsDone = 0; promotion = 0; Object.assign(prices, startPrices()); deals = newDeals();
       discovered.clear();
       quests.length = 0;
       areaName = '0:0'; spawnAllDrips();
@@ -1127,7 +1147,7 @@
     // ---- saving -------------------------------------------------------------------
     // everything a run needs; drip/fights/timers restart when loaded
     function snapshot() {
-      return { x: player.x, y: player.y, fx: facing.x, fy: facing.y, stats: { ...stats }, deals, prices: { ...prices }, dealsDone, quests: quests.map(q => ({ ...q })),
+      return { x: player.x, y: player.y, fx: facing.x, fy: facing.y, stats: { ...stats }, deals, prices: { ...prices }, dealsDone, promotion, quests: quests.map(q => ({ ...q })),
                inventory: inventory.map(it => ({ ...it })), equipped: equipped.map(it => ({ ...it })), skills: [...skills],
                areaName, restReadyAt, levels: { ...levels }, manaCap: CAP_BASE.mana, energyCap: CAP_BASE.energy, level: hero.level, exp: hero.exp, strengthLevel: hero.level, bag, discovered: [...discovered], enemies: saveEnemies() };
     }
@@ -1137,7 +1157,7 @@
       hero.level = Math.min(MAX_LEVEL, s.level || 1); hero.exp = s.exp || 0; recalcCaps();
       Object.assign(stats, START_STATS, s.stats || {});
       if (s.strengthLevel === undefined) stats.strength += levelStrength(hero.level) - levelStrength(1);   // saves from before strength grew with level
-      deals = s.deals && s.deals.every(d => d && d.type) ? s.deals : null; dealsDone = s.dealsDone || 0;
+      deals = s.deals && s.deals.every(d => d && d.type) ? s.deals : null; dealsDone = s.dealsDone || 0; promotion = s.promotion || 0;
       quests.length = 0; quests.push(...(s.quests || []));
       for (const k in prices) delete prices[k]; for (const k in levels) delete levels[k];
       Object.assign(prices, startPrices(), renameKeys(s.prices)); Object.assign(levels, startLevels(), renameKeys(s.levels));
@@ -1237,6 +1257,7 @@
         row('mana cap', `+3 (now ${CAPS.mana})`, () => { CAP_BASE.mana += 3; recalcCaps(); stats.mana = CAPS.mana; return `Mana cap ${CAPS.mana}, mana full.`; }),
         row('exp', '+50', () => { gainExp(50); return `Level ${hero.level}, ${hero.exp}/${expNeed(hero.level)} exp.`; }),
         row('deal types', 'rare call, rare sale, delivery', () => { deals = [['call', true], ['sale', true], ['delivery', false]].map(f => rollDeal(hero.level, stats.charisma, prices[FOOD], f)); return 'TradeCorp now shows one of each rare deal.'; }),
+        row('promotion ready', 'deals + CHSM for the next one', () => { const pr = PROMOTIONS[promotion]; if (!pr) return 'All promotions earned.'; dealsDone = Math.max(dealsDone, pr.deals); stats.charisma = Math.max(stats.charisma, pr.charisma); deals = newDeals(); return `${pr.name} is ready at TradeCorp (My Boss).`; }),
         row('charisma', '+10 ✦', () => { stats.charisma += 10; deals = newDeals(); return `Charisma ${stats.charisma}.`; }),
         row('strength', '+5 ⚔', () => { stats.strength += 5; return `Strength ${stats.strength}.`; }),
         row('Magic tar', 'into inventory', () => give('Magic tar', 1)),
@@ -1287,11 +1308,12 @@
       return `Crafted ${r.count} ${r.make}.`;
     }
     const TITLES = { spelltech: 'MutaTech', shop: 'ATB-Market', work: 'TradeCorp', menu: 'Menu', controls: 'Controls', hero: 'Hero', inventory: 'Inventory', gameover: 'Game over', loot: 'Loot · Drip', rest: 'HomeDome', cheat: 'Cheats (testing)', scrap: 'Scrap Dealer',
-                     map: 'Map', settings: 'Settings', sound: 'Sound', restart: 'Restart', throw: 'Throw away', quests: 'Quests', save: 'Save', load: 'Load game', logout: 'Log out', guest: 'Playing as guest' };
+                     map: 'Map', settings: 'Settings', sound: 'Sound', restart: 'Restart', throw: 'Throw away', cancelQuest: 'Cancel quest', quests: 'Quests', save: 'Save', load: 'Load game', logout: 'Log out', guest: 'Playing as guest' };
     // windows with a paragraph above their options
     const WINDOW_TEXT = {
       restart: 'Are you sure?',
       quests: () => quests.length ? '' : 'No active quests yet. Take a Scheduled delivery at TradeCorp (Deals).',
+      cancelQuest: () => `Are you sure? ${ui.questName} will be gone forever.`,
       throw: () => `Are you sure? ${ui.throwN > 1 ? ui.throwN + ' × ' : ''}${ui.throwName} will be gone forever.`,
       sound: 'A / D (or ← →) to change, Space to step up. Each step is 20%.',
       guest: 'Guests can’t save. Create a free account to keep this run, or log in to continue a saved one.',
@@ -1327,35 +1349,63 @@
 
     // windows opened from another window remember it: Esc (or "no") goes back there instead of closing everything
     // windows with browser-like tabs (A/D or a click); start: the tab shown when the window opens
-    const WINDOW_TABS = { shop: SHOP_TABS, work: Object.assign([{ key: 'office', name: 'My Office' }, { key: 'deals', name: 'Deals' }, { key: 'boss', name: 'Boss' }], { start: 1 }) };
+    const WINDOW_TABS = { shop: SHOP_TABS, work: Object.assign([{ key: 'office', name: 'My Office' }, { key: 'deals', name: 'Deals' }, { key: 'boss', name: 'My Boss' }], { start: 1 }) };
     const tabOf = () => ui.tab ?? (WINDOW_TABS[ui.kind].start || 0);
-    function switchShopTab(i) { const n = WINDOW_TABS[ui.kind].length; ui.tab = (i + n) % n; ui.cursor = 0; ui.msg = ''; ui.scroll = 0; }
+    function switchShopTab(i) {
+      const n = WINDOW_TABS[ui.kind].length; ui.tab = (i + n) % n; ui.cursor = 0; ui.msg = ''; ui.scroll = 0; ui.bossTalk = false;
+      if (ui.kind === 'work' && WINDOW_TABS.work[ui.tab].key === 'boss' && promoReadyAny()) { ui.bossTalk = true; ui.cursor = promotion; }   // the boss has something to say
+    }
     // My Office upgrades and Boss promotions: placeholders for now (icon, name, description, price / deals needed)
     const OFFICE_UPGRADES = [1, 2, 3, 4, 5].map(n => ({ name: `Upgrade ${n}`, desc: 'Empty upgrade slot. Coming soon.', price: '—' }));
-    const PROMOTIONS = [1, 2, 3].map(n => ({ name: `Promotion ${n}`, desc: 'A new job title. Coming soon.', deals: '—' }));
+    // promotions at the Boss: earned in order; each needs deals made and charisma, and lowers what deals cost (energy for calls, money for sales).
+    // The highest one earned counts (they don't stack).
+    const PROMOTIONS = [
+      { name: 'Data Clerk',             deals: 200,  charisma: 20,  mult: 0.9 },
+      { name: 'Neurodiversity Manager', deals: 500,  charisma: 50,  mult: 0.8 },
+      { name: 'AI Overseer',            deals: 1000, charisma: 100, mult: 0.7 },
+    ].map(pr => ({ ...pr, desc: `Deals cost ×${pr.mult} (NRG and $).` }));
+    const dealMult = () => promotion ? PROMOTIONS[promotion - 1].mult : 1;
+    const dealCost = d => Math.max(1, Math.round((d.type === 'call' ? d.energy : d.price) * dealMult()));   // energy for calls, money for sales
+    const promoReady = i => i === promotion && i < PROMOTIONS.length && dealsDone >= PROMOTIONS[i].deals && stats.charisma >= PROMOTIONS[i].charisma;
+    const promoReadyAny = () => promoReady(promotion);
+    function earnPromotion(i) {
+      const pr = PROMOTIONS[i];
+      if (i < promotion) return `You are already past ${pr.name}.`;
+      if (i > promotion) return `Earn ${PROMOTIONS[promotion].name} first.`;
+      if (!promoReady(i)) return `${pr.name} needs ${pr.deals} deals (you: ${dealsDone}) and ${pr.charisma} CHSM (you: ${stats.charisma}).`;
+      promotion = i + 1; ui.cursor = Math.min(promotion, PROMOTIONS.length - 1);
+      return `Promoted to ${pr.name}! Deals now cost ×${pr.mult}.`;
+    }
+    // what the boss says when the My Boss tab opens with a promotion ready
+    const bossLine = () => { const pr = PROMOTIONS[promotion];
+      return `${heroName || DEFAULT_NAME}, ${dealsDone} deals. I've been watching your numbers. The ${pr.name} desk is yours if you want it: pick the glowing promotion and press Space.`; };
     // take a deal: calls cost energy and pay money, sales cost money and give items, deliveries add a quest. Then all 3 reroll.
     function takeDeal(d) {
       if (d.type === 'call') {
-        if (stats.energy < d.energy) return 'Not enough energy for that call. Eat something.';
-        stats.energy -= d.energy; stats.money += d.money;
+        if (stats.energy < dealCost(d)) return 'Not enough energy for that call. Eat something.';
+        stats.energy -= dealCost(d); stats.money += d.money;
         prices[FOOD] *= 1 + FOOD_INFLATION;
       } else if (d.type === 'sale') {
-        if (stats.money < d.price) return `Not enough money (${d.price}$).`;
+        if (stats.money < dealCost(d)) return `Not enough money (${dealCost(d)}$).`;
         const backup = inventory.map(it => ({ ...it }));
         if (addItem(d.item, d.count)) { inventory.length = 0; inventory.push(...backup); return fullMsg(); }
-        stats.money -= d.price;
-      } else quests.push({ name: d.name, desc: d.desc, rare: d.rare, from: 'TradeCorp' });
+        stats.money -= dealCost(d);
+      } else {
+        if (quests.length >= MAX_QUESTS) return `You already have ${MAX_QUESTS} active quests. Cancel one first (Q).`;
+        quests.push({ name: d.name, desc: d.desc, rare: d.rare, from: 'TradeCorp' });
+      }
       dealsDone++; gainExp(LEVEL_EXP.work);
       deals = newDeals();
-      return d.type === 'call' ? `Call done: -${d.energy} NRG, +${d.money}$. New deals.` : d.type === 'sale' ? `Bought ${d.count} ${d.item} for ${d.price}$. New deals.`
-        : `${d.name} added to your quests (Q). New deals.`;
+      const note = promoReadyAny() ? ' A promotion is ready (My Boss).' : '';
+      return (d.type === 'call' ? `Call done: -${dealCost(d)} NRG, +${d.money}$. New deals.` : d.type === 'sale' ? `Bought ${d.count} ${d.item} for ${dealCost(d)}$. New deals.`
+        : `${d.name} added to your quests (Q). New deals.`) + note;
     }
     function openWindow(kind, cursor = 0, back = null) {
       ui = { kind, cursor, msg: '', back };
       held.clear(); tapped.clear();
     }
     const locked = () => !!ui && ui.kind === 'gameover';   // only "new game" gets you out
-    function closeWindow() { if (!locked()) ui = null; }
+    function closeWindow() { if (!locked()) { ui = null; itemMenu = null; } }
 
     // side panels: inventory (bottom right) and hero (middle left) can be open at the same time.
     // Keys go to the focused one: the last one opened (H / I on an open but unfocused panel focuses it; a click too).
@@ -1374,6 +1424,7 @@
 
     function choose(i) {
       if (ui && ui.kind === 'gameover' && deathT() < DEATH.showAt) return;   // wait for the Game over screen to appear
+      if (ui && ui.bossTalk) { ui.bossTalk = false; return; }   // Space: close the boss's message, the promotion stays selected
       const list = rows();
       if (!ui || i < 0 || i >= list.length) return;
       ui.cursor = i;
@@ -1472,8 +1523,17 @@
       const n = it.count || 1;
       itemMenu = { idx, name: it.name, x, y, cursor: 0, opts: n > 1 ? [{ label: 'Throw away 1', n: 1 }, { label: `Throw away all (${n})`, n }] : [{ label: 'Throw away', n: 1 }] };
     }
+    function openQuestMenu(idx, x, y) {   // right-click (or Space) on a quest: cancel it
+      const q = quests[idx]; if (!q) { itemMenu = null; return; }
+      ui.cursor = idx; ui.msg = '';
+      itemMenu = { quest: true, idx, name: q.name, x, y, cursor: 0, opts: [{ label: 'Cancel quest', n: 1 }] };
+    }
     function pickItemMenu(i) {
       const m = itemMenu, o = m && m.opts[i]; itemMenu = null;
+      if (m && m.quest) {
+        if (!o || !quests[m.idx] || quests[m.idx].name !== m.name) return;
+        openWindow('cancelQuest', 1, { kind: 'quests', cursor: m.idx, back: null }); ui.questIdx = m.idx; ui.questName = m.name; return;   // cursor starts on "No"
+      }
       if (!o || !inventory[m.idx] || inventory[m.idx].name !== m.name) return;
       openWindow('throw', 1); ui.throwIdx = m.idx; ui.throwName = m.name; ui.throwN = o.n;   // cursor starts on "No"
     }
@@ -1502,6 +1562,7 @@
       if (locked()) return;
       if (itemMenu) { itemMenu = null; return; }
       if (ui && ui.kind === 'throw') { ui = null; return; }   // back to the inventory
+      if (ui && ui.bossTalk) { ui.bossTalk = false; return; }
       if (ui && ui.back) goBack();
       else if (anyOpen()) closeAll();
       else if (target) target = null;
@@ -2039,6 +2100,7 @@
       if (ui) {                              // inside a window W/S move the highlight
         const vr = ui.kind === 'sound' && rows()[ui.cursor];   // sound window: A/D turn the highlighted volume down/up
         if (vr && vr.vol && (keys.includes('a') || keys.includes('d'))) { stepVolume(vr.vol, keys.includes('d') ? 1 : -1, false); ui.msg = ''; return; }
+        if (ui.bossTalk) return;   // the boss is talking: Space (or a click) first
         if (WINDOW_TABS[ui.kind] && (keys.includes('a') || keys.includes('d'))) { switchShopTab(tabOf() + (keys.includes('d') ? 1 : -1)); return; }
         if (keys.includes('w')) moveCursor(-1);
         if (keys.includes('s')) moveCursor(1);
@@ -2131,7 +2193,7 @@
       lake: { art: 'passageLake', along: 2, depth: 2 }, factory: { art: 'passageFactory', along: 2, depth: 1 },
       slums: { art: 'passageSlums', along: 2, depth: 2 },
     };
-    const PASSAGE_GROUP = id => ({ forest: 'forest', lake: 'lake', factory: 'factory', slums: 'slums', greaser: 'slums' })[ZONE_LIST[id]] || null;
+    const PASSAGE_GROUP = id => ({ forest: 'forest', deepForest: 'forest', lake: 'lake', factory: 'factory', slums: 'slums', greaser: 'slums' })[ZONE_LIST[id]] || null;
     const PASSAGE_OVERRIDE = { '-1:-2|-2:-2': 'forest', '1:-1|0:-1': 'lake' };   // mixed passages drawn with one kind on both sides
     // Chosen once per passage (both sides use the same picture), fixed seed per passage:
     // forest: the long trail or the stepping stones at random, but stepping stones wherever the long trail would overlap
@@ -2341,6 +2403,7 @@
       drawPanels();
       if (!ui) drawItemMenu();
       if (ui) drawWindow();
+      if (ui && ui.kind === 'quests') drawItemMenu();   // quest cancel menu sits on top of the quest list
     }
 
     // big structure quarter, drawn in 1-tile columns; front = the columns whose base row is below the hero
@@ -2683,16 +2746,18 @@
       ctx.fillText(d.type === 'call' ? `${d.rare ? 'rare' : 'common'} call` : d.type === 'sale' ? `${d.rare ? 'rare' : 'common'} sale` : `${d.rare ? 'rare' : 'common'} quest`, nameX, sy + big - 12);
       const mx = nameX + nameW + 24, mw = priceX - 150 - mx;
       ctx.font = '600 24px ' + MONO;
-      const parts = d.type === 'call' ? [[`-${d.energy} NRG`, STAT_COLOR.energy], [`+${d.money}$`, '#f5c542']]
+      const parts = d.type === 'call' ? [[`-${dealCost(d)} NRG`, STAT_COLOR.energy], [`+${d.money}$`, '#f5c542']]
         : d.type === 'sale' ? [[`${d.count} × ${d.item}`, rarityColor(d.item)]] : [['Delivery quest', '#00e5ff']];
       drawParts(parts, mx, sy + 20, 22);
       const text = d.type === 'call' ? d.line : d.type === 'sale' ? `A supplier sells ${d.count} ${d.item} at full price.` : d.desc;
       ctx.font = '19px ' + MONO; ctx.fillStyle = '#cfcfcf';
       wrapText(text, mw).slice(0, 3).forEach((l, i) => ctx.fillText(l, mx, sy + 56 + i * 25));
       ctx.textAlign = 'right'; ctx.font = '700 32px ' + MONO;
-      if (d.type === 'call') { ctx.fillStyle = stats.energy >= d.energy ? '#9dff5c' : '#e5484d'; ctx.fillText(`${d.energy} NRG`, priceX, cy); }
-      else if (d.type === 'sale') { ctx.fillStyle = stats.money >= d.price ? '#f5c542' : '#e5484d'; ctx.fillText(`${d.price}$`, priceX, cy); }
+      if (d.type === 'call') { ctx.fillStyle = stats.energy >= dealCost(d) ? '#9dff5c' : '#e5484d'; ctx.fillText(`${dealCost(d)} NRG`, priceX, cy); }
+      else if (d.type === 'sale') { ctx.fillStyle = stats.money >= dealCost(d) ? '#f5c542' : '#e5484d'; ctx.fillText(`${dealCost(d)}$`, priceX, cy); }
+      else if (quests.length >= MAX_QUESTS) { ctx.fillStyle = '#e5484d'; ctx.fillText(`${MAX_QUESTS}/${MAX_QUESTS}`, priceX, cy); }
       else { ctx.fillStyle = '#00e5ff'; ctx.fillText('accept', priceX, cy); }
+      if (dealMult() < 1 && d.type !== 'delivery') { ctx.font = '600 16px ' + MONO; ctx.fillStyle = '#9dff5c'; ctx.fillText(`−${Math.round((1 - dealMult()) * 100)}% promotion`, priceX, cy + 30); }
     }
     // My Office / Boss: a picture on the left, a small scrolling list on the right
     function drawSideTab(list, x, y, w, h) {
@@ -2704,23 +2769,65 @@
         const i = ui.scroll + k, ry = y + k * rowH, sel = i === ui.cursor, d = r.data, sz = rowH - 24;
         rowRects.push({ x: lx, y: ry, w: lw, h: rowH - 8, i });
         ctx.fillStyle = sel ? 'rgba(255, 220, 0, 0.12)' : 'rgba(255, 255, 255, 0.03)'; ctx.fillRect(lx, ry, lw, rowH - 8);
-        glyphSlot(lx + 10, ry + 8, sz, null, r.side === 'upgrade' ? '⚙' : '★', '#6a6a6a');
+        if (r.side === 'promo') { drawPromoRow(r.idx, d, lx, ry, lw, rowH - 8, sel); return; }
+        glyphSlot(lx + 10, ry + 8, sz, null, '⚙', '#6a6a6a');
         ctx.textAlign = 'left'; ctx.textBaseline = 'middle'; ctx.fillStyle = sel ? '#fff' : '#cfcfcf'; ctx.font = (sel ? '700 ' : '600 ') + '22px ' + MONO;
         ctx.fillText(d.name, lx + sz + 24, ry + 24);
         ctx.font = '17px ' + MONO; ctx.fillStyle = '#8a8a8a'; ctx.fillText(d.desc, lx + sz + 24, ry + 52);
         ctx.textAlign = 'right'; ctx.font = '600 20px ' + MONO; ctx.fillStyle = '#f5c542';
-        ctx.fillText(r.side === 'upgrade' ? `${d.price}$` : `${d.deals} deals`, lx + lw - 14, ry + 24);
+        ctx.fillText(`${d.price}$`, lx + lw - 14, ry + 24);
       });
+      if (list[0].side === 'promo' && ui.bossTalk) drawBossTalk(x, y, w, h);
       if (list.length > visible) {   // scroll bar
         const bx = lx + lw - 4, bh = h - 8, th = bh * visible / list.length, ty = y + bh * ui.scroll / list.length;
         ctx.fillStyle = 'rgba(255, 255, 255, 0.12)'; ctx.fillRect(bx, y, 4, bh); ctx.fillStyle = 'rgba(255, 255, 255, 0.5)'; ctx.fillRect(bx, ty, 4, th);
       }
     }
+    // one promotion row: earned (green), ready (yellow glow), or locked with what it still needs
+    function drawPromoRow(i, pr, x, y, w, h, sel) {
+      const sz = h - 16, done = i < promotion, ready = promoReady(i);
+      if (ready) { ctx.save(); ctx.shadowColor = '#ffe600'; ctx.shadowBlur = 10 + 6 * Math.sin(performance.now() / 250); ctx.strokeStyle = '#ffe600'; ctx.lineWidth = 3; ctx.strokeRect(x + 1.5, y + 1.5, w - 3, h - 3); ctx.restore(); }
+      glyphSlot(x + 10, y + 8, sz, null, '★', done ? '#9dff5c' : ready ? '#ffe600' : '#6a6a6a');
+      const tx = x + sz + 24;
+      ctx.textAlign = 'left'; ctx.textBaseline = 'middle'; ctx.fillStyle = done ? '#9dff5c' : ready ? '#ffe600' : sel ? '#fff' : '#cfcfcf';
+      ctx.font = (sel ? '700 ' : '600 ') + '21px ' + MONO; ctx.fillText(pr.name, tx, y + 22);
+      ctx.font = '17px ' + MONO; ctx.fillStyle = '#8a8a8a'; ctx.fillText(pr.desc, tx, y + 50);
+      ctx.font = '600 17px ' + MONO;
+      drawParts([[`${Math.min(dealsDone, pr.deals)}/${pr.deals} deals`, done || dealsDone >= pr.deals ? '#9dff5c' : '#e5484d'],
+                 [`${Math.min(stats.charisma, pr.charisma)}/${pr.charisma} CHSM`, done || stats.charisma >= pr.charisma ? '#9dff5c' : '#e5484d']], tx, y + 76, 18);
+      ctx.textAlign = 'right'; ctx.font = '700 18px ' + MONO; ctx.textBaseline = 'middle';
+      ctx.fillStyle = done ? '#9dff5c' : ready ? '#ffe600' : '#6a6a6a';
+      ctx.fillText(done ? 'EARNED' : ready ? 'READY' : i > promotion ? 'LOCKED' : '', x + w - 14, y + 22);
+    }
+    // the boss's message box over the My Boss tab: her face on the left, the text on the right
+    function drawBossTalk(x, y, w, h) {
+      const bw = Math.min(w - 40, 900), bh = 190, bx = x + (w - bw) / 2, by = y + h - bh - 6, face = bh - 32;
+      ctx.fillStyle = 'rgba(0, 0, 0, 0.55)'; ctx.fillRect(x, y, w, h);
+      ctx.fillStyle = '#0b0d14'; ctx.fillRect(bx, by, bw, bh);
+      ctx.strokeStyle = '#ffe600'; ctx.lineWidth = 3; ctx.strokeRect(bx + 1.5, by + 1.5, bw - 3, bh - 3);
+      ctx.fillStyle = '#1b2233'; ctx.fillRect(bx + 16, by + 16, face, face);
+      const im = ART.boss;
+      if (ready(im)) {   // her face: the top part of the portrait, square
+        const side = im.naturalWidth * 0.8;
+        ctx.save(); ctx.beginPath(); ctx.rect(bx + 16, by + 16, face, face); ctx.clip();
+        ctx.drawImage(im, im.naturalWidth * 0.1, 0, side, side, bx + 16, by + 16, face, face); ctx.restore();
+      } else { ctx.fillStyle = '#3a4257'; ctx.beginPath(); ctx.arc(bx + 16 + face / 2, by + 16 + face * 0.45, face * 0.3, 0, Math.PI * 2); ctx.fill(); }
+      ctx.strokeStyle = '#00e5ff'; ctx.lineWidth = 2; ctx.strokeRect(bx + 16, by + 16, face, face);
+      const tx = bx + face + 36, tw = bw - face - 56;
+      ctx.textAlign = 'left'; ctx.textBaseline = 'middle'; ctx.fillStyle = '#ff2bd6'; ctx.font = '700 20px ' + MONO; ctx.fillText('Your boss', tx, by + 30);
+      ctx.fillStyle = '#f2f2f2'; ctx.font = '19px ' + MONO;
+      wrapText(bossLine(), tw).slice(0, 4).forEach((l, i) => ctx.fillText(l, tx, by + 62 + i * 25));
+      ctx.textAlign = 'right'; ctx.fillStyle = '#ffe600'; ctx.font = '600 17px ' + MONO; ctx.fillText('Space · continue', bx + bw - 16, by + bh - 18);
+    }
+    const OFFICE_SOCKETS = [0.303, 0.401, 0.500, 0.598, 0.696].map(fx => ({ x: fx, y: 0.524, size: 0.078 }));   // chip sockets in art/officePC.png
     function drawOfficePicture(x, y, w, h) {   // the office computer with 5 chip slots (drawn until art/officePC.png exists)
       ctx.fillStyle = '#0b0d14'; ctx.fillRect(x, y, w, h - 8);
       const im = ART.officePC;
-      if (ready(im)) { const s = Math.min(w / im.naturalWidth, (h - 8) / im.naturalHeight); ctx.drawImage(im, x + (w - im.naturalWidth * s) / 2, y, im.naturalWidth * s, im.naturalHeight * s); }
-      else {
+      if (ready(im)) {   // the art has its own 5 chip sockets (OFFICE_SOCKETS: their centres as fractions of the picture, for drawing chips later)
+        const s = Math.min(w / im.naturalWidth, (h - 16) / im.naturalHeight);
+        ctx.drawImage(im, x + (w - im.naturalWidth * s) / 2, y + 8, im.naturalWidth * s, im.naturalHeight * s);
+        return;
+      } else {
         const mw = w * 0.72, mh = h * 0.42, mx = x + (w - mw) / 2, my = y + 24;
         ctx.fillStyle = '#1b2233'; ctx.fillRect(mx, my, mw, mh); ctx.strokeStyle = '#3a4257'; ctx.lineWidth = 6; ctx.strokeRect(mx, my, mw, mh);
         ctx.fillStyle = '#062a33'; ctx.fillRect(mx + 14, my + 14, mw - 28, mh - 28);
@@ -2735,7 +2842,10 @@
     function drawBossPicture(x, y, w, h) {   // your boss (drawn until art/boss.png exists)
       ctx.fillStyle = '#0b0d14'; ctx.fillRect(x, y, w, h - 8);
       const im = ART.boss;
-      if (ready(im)) { const s = Math.min(w / im.naturalWidth, (h - 8) / im.naturalHeight); ctx.drawImage(im, x + (w - im.naturalWidth * s) / 2, y + (h - 8 - im.naturalHeight * s) / 2, im.naturalWidth * s, im.naturalHeight * s); return; }
+      if (ready(im)) {   // head and shoulders: sits on the bottom of the frame
+        const s = Math.min(w / im.naturalWidth, (h - 16) / im.naturalHeight), iw = im.naturalWidth * s, ih = im.naturalHeight * s;
+        ctx.drawImage(im, x + (w - iw) / 2, y + h - 8 - ih, iw, ih); return;
+      }
       const cx = x + w / 2;
       ctx.fillStyle = '#3a4257'; ctx.beginPath(); ctx.arc(cx, y + h * 0.3, h * 0.13, 0, Math.PI * 2); ctx.fill();
       ctx.beginPath(); ctx.moveTo(cx - w * 0.28, y + h - 30); ctx.quadraticCurveTo(cx, y + h * 0.42, cx + w * 0.28, y + h - 30); ctx.closePath(); ctx.fill();
@@ -2822,7 +2932,7 @@
       ctx.fillStyle = '#fff';
       ctx.textAlign = 'left';
       ctx.font = '600 40px ' + MONO;
-      ctx.fillText(hero ? (heroName || DEFAULT_NAME) : ui.kind === 'loot' && lootTarget ? `Loot · ${ET(lootTarget).name}` : TITLES[ui.kind], px + 40, py + 56);
+      ctx.fillText(hero ? (heroName || DEFAULT_NAME) : ui.kind === 'loot' && lootTarget ? `Loot · ${ET(lootTarget).name}` : ui.kind === 'quests' ? `Quests ${quests.length}/${MAX_QUESTS}` : TITLES[ui.kind], px + 40, py + 56);
       if (ui.kind === 'shop' || ui.kind === 'work' || ui.kind === 'scrap') {   // wallet in the corner
         ctx.textAlign = 'right';
         ctx.font = '26px ' + MONO;
@@ -2842,9 +2952,11 @@
           ctx.beginPath(); ctx.moveTo(tx, lineY); ctx.lineTo(tx, ty + 10); ctx.quadraticCurveTo(tx, ty, tx + 10, ty);
           ctx.lineTo(tx + tw - 10, ty); ctx.quadraticCurveTo(tx + tw, ty, tx + tw, ty + 10); ctx.lineTo(tx + tw, lineY);
           ctx.fillStyle = on ? '#1b2233' : '#0b0d14'; ctx.fill();
-          ctx.strokeStyle = on ? '#fff' : 'rgba(255, 255, 255, 0.3)'; ctx.stroke();
+          const glow = t.key === 'boss' && promoReadyAny();   // a promotion is ready: the My Boss tab pulses yellow
+          if (glow) { ctx.save(); ctx.shadowColor = '#ffe600'; ctx.shadowBlur = 12 + 8 * Math.sin(performance.now() / 250); ctx.strokeStyle = '#ffe600'; ctx.lineWidth = 3; ctx.stroke(); ctx.restore(); ctx.lineWidth = 2; }
+          else { ctx.strokeStyle = on ? '#fff' : 'rgba(255, 255, 255, 0.3)'; ctx.stroke(); }
           if (on) { ctx.fillStyle = '#1b2233'; ctx.fillRect(tx + 1, lineY - 1, tw - 2, 4); }   // open bottom: the tab flows into the page
-          ctx.fillStyle = on ? '#fff' : '#8a8a8a'; ctx.font = (on ? '600 ' : '') + '24px ' + MONO; ctx.textAlign = 'center';
+          ctx.fillStyle = glow ? '#ffe600' : on ? '#fff' : '#8a8a8a'; ctx.font = (on ? '600 ' : '') + '24px ' + MONO; ctx.textAlign = 'center';
           ctx.fillText(t.name, tx + tw / 2, ty + th / 2 + 1);
           rowRects.push({ x: tx, y: ty, w: tw, h: th, tab: i });
         });
@@ -2892,7 +3004,7 @@
       }
       ctx.fillStyle = '#8a8a8a';
       ctx.font = '22px ' + MONO;
-      ctx.fillText(hero ? 'H or Esc close' : ui.kind === 'gameover' ? 'Space start a new game' : inv ? 'A/D/W/S choose · Space equip/learn/unequip · I or Esc close' : ui.kind === 'loot' ? 'W/S choose · Space take · Esc close' : ui.kind === 'cheat' ? 'W/S choose · Space apply · P or Esc close' : ui.kind === 'scrap' ? 'W/S choose · Space buy / sell · Esc close' : ui.kind === 'work' ? 'A/D tab · W/S choose · Space accept · Esc close' : shop ? 'A/D tab · W/S choose · Space buy · Esc close' : ui.kind === 'quests' ? 'W/S choose · Q or Esc close' : ui.kind === 'spelltech' ? 'W/S choose · Space craft · Esc close' : ui.kind === 'rest' ? (restReadyAt > Date.now() ? (ui.back ? 'Esc back' : 'Esc close') : 'Space confirm · Esc close') : info ? (ui.back ? 'Esc back' : 'Esc close') : (ui.back ? 'W/S choose · Space select · Esc back' : 'W/S choose · Space select · Esc close'), px + 40, py + ph - 40);
+      ctx.fillText(hero ? 'H or Esc close' : ui.kind === 'gameover' ? 'Space start a new game' : inv ? 'A/D/W/S choose · Space equip/learn/unequip · I or Esc close' : ui.kind === 'loot' ? 'W/S choose · Space take · Esc close' : ui.kind === 'cheat' ? 'W/S choose · Space apply · P or Esc close' : ui.kind === 'scrap' ? 'W/S choose · Space buy / sell · Esc close' : ui.kind === 'work' ? 'A/D tab · W/S choose · Space accept · Esc close' : shop ? 'A/D tab · W/S choose · Space buy · Esc close' : ui.kind === 'quests' ? (quests.length ? 'W/S choose · Space or right-click cancel · Q/Esc close' : 'Q or Esc close') : ui.kind === 'spelltech' ? 'W/S choose · Space craft · Esc close' : ui.kind === 'rest' ? (restReadyAt > Date.now() ? (ui.back ? 'Esc back' : 'Esc close') : 'Space confirm · Esc close') : info ? (ui.back ? 'Esc back' : 'Esc close') : (ui.back ? 'W/S choose · Space select · Esc back' : 'W/S choose · Space select · Esc close'), px + 40, py + ph - 40);
     }
 
     // ---- game over ------------------------------------------------------------------------
@@ -2919,7 +3031,7 @@
     // Zone cells keep the zone's 21:13 shape. Undiscovered zones are fog (a drawn placeholder until fog art exists).
     const MAP_BOUNDS = (() => { const c = Object.keys(ZONE_LIST).map(coordOf);
       return { aMin: Math.min(...c.map(v => v[0])), aMax: Math.max(...c.map(v => v[0])), bMin: Math.min(...c.map(v => v[1])), bMax: Math.max(...c.map(v => v[1])) }; })();
-    const ZONE_COLORS = { city: '#8a93a6', slums: '#58617a', greaser: '#7a6d3e', lake: '#2f8a45', factoryIn: '#6a5a4a', factory: '#57493c', forest: '#4f7a3a' };
+    const ZONE_COLORS = { city: '#8a93a6', slums: '#58617a', greaser: '#7a6d3e', lake: '#2f8a45', factoryIn: '#6a5a4a', factory: '#57493c', forest: '#4f7a3a', deepForest: '#2f5a26' };
     const fogCache = new Map();
     function fogTile(w, h) {   // soft grey clouds, same pattern every time for a given size
       const key = `${w}x${h}`;
@@ -2975,7 +3087,8 @@
             const [ga, gb] = todo.pop(); group.push([ga, gb]);
             for (const [da, db] of [[1, 0], [-1, 0], [0, 1], [0, -1]]) {
               const n = `${ga + da}:${gb + db}`;
-              if (ZONE_LIST[n] && discovered.has(n) && !seen.has(n) && AREAS[n].name === name) { seen.add(n); todo.push([ga + da, gb + db]); }
+              const inView = ga + da <= aTop && ga + da >= aBottom && gb + db >= bLeft && gb + db <= bRight;   // label the visible part only
+              if (inView && ZONE_LIST[n] && discovered.has(n) && !seen.has(n) && AREAS[n].name === name) { seen.add(n); todo.push([ga + da, gb + db]); }
             }
           }
           const mx = group.reduce((t, g) => t + cellX(g[1]) + cw / 2, 0) / group.length, my = group.reduce((t, g) => t + cellY(g[0]) + ch / 2, 0) / group.length;
@@ -3056,9 +3169,10 @@
       ctx.restore();
     }
     // big map (M): the whole world in the middle of the screen, fully opaque
+    const BIG_MAP_N = 7;   // the big map shows 7 × 7 zones with the hero's zone in the middle; cells past the world's edge are fog
     function drawBigMap() {
-      const cols = MAP_BOUNDS.bMax - MAP_BOUNDS.bMin + 1, rowsN = MAP_BOUNDS.aMax - MAP_BOUNDS.aMin + 1;
-      const cw = Math.min(145, (canvas.width - 200) / cols, (canvas.height - 200) / rowsN * 21 / 13), ch = cw * 13 / 21;   // fits the whole world
+      const cols = BIG_MAP_N, rowsN = BIG_MAP_N, half = (BIG_MAP_N - 1) / 2, [ha, hb] = coordOf(areaName);
+      const cw = Math.min(145, (canvas.width - 200) / cols, (canvas.height - 200) / rowsN * 21 / 13), ch = cw * 13 / 21;
       const w = cols * cw, h = rowsN * ch, x = (canvas.width - w) / 2, y = (canvas.height - h) / 2 + 20;
       ctx.fillStyle = 'rgba(0, 0, 0, 0.6)'; ctx.fillRect(0, 0, canvas.width, canvas.height);
       ctx.fillStyle = '#000'; ctx.fillRect(x - 30, y - 90, w + 60, h + 150);
@@ -3067,7 +3181,9 @@
       ctx.fillText('Map', x, y - 50);
       ctx.fillStyle = '#8a8a8a'; ctx.font = '22px ' + MONO; ctx.textAlign = 'right';
       ctx.fillText(`${discovered.size}/${Object.keys(ZONE_LIST).length} zones discovered`, x + w, y - 50);
-      drawMapGrid(x, y, cw, ch, MAP_BOUNDS.aMax, MAP_BOUNDS.aMin, MAP_BOUNDS.bMin, MAP_BOUNDS.bMax, true);
+      ctx.save(); ctx.beginPath(); ctx.rect(Math.round(x), Math.round(y), Math.round(w), Math.round(h)); ctx.clip();   // nothing spills past the 7 × 7 window
+      drawMapGrid(x, y, cw, ch, ha + half, ha - half, hb - half, hb + half, true);
+      ctx.restore();
       ctx.strokeStyle = '#fff'; ctx.lineWidth = 2; ctx.strokeRect(Math.round(x) - 1, Math.round(y) - 1, Math.round(w) + 2, Math.round(h) + 2);   // frame around the map, like the window's
       ctx.fillStyle = '#8a8a8a'; ctx.font = '22px ' + MONO; ctx.textAlign = 'left';
       ctx.fillText('M or Esc close', x, y + h + 34);
@@ -3419,6 +3535,12 @@
         const b = itemMenu.box;
         if (b && e.button === 0 && cx >= b.x && cx <= b.x + b.w && cy >= b.y + 8 && cy < b.y + b.h - 8) pickItemMenu(Math.floor((cy - b.y - 8) / MENU.rowH));
         else itemMenu = null;
+        return;
+      }
+      if (ui && ui.bossTalk) { ui.bossTalk = false; return; }   // a click closes the boss's message
+      if (e.button === 2 && ui && ui.kind === 'quests') {   // right-click a quest: cancel menu
+        const row = rowRects.find(b => !b.panel && cx >= b.x && cx <= b.x + b.w && cy >= b.y && cy <= b.y + b.h);
+        if (row && quests[row.i]) openQuestMenu(row.i, cx, cy);
         return;
       }
       if (e.button === 2) {   // right-click an item in the bag: throw-away menu
