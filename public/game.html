@@ -137,6 +137,23 @@
   .naming-box a { color: #00e5ff; }
   /* account screen: covers the whole window (not just the map), the boss on the left, the form on the right.
      Scrolls if the screen is too small; on narrow screens the boss sits in a short strip above the form. */
+  .confirm[hidden] { display: none; }
+  .confirm { position: fixed; inset: 0; z-index: 30; display: flex; align-items: center; justify-content: center; padding: 16px;
+             background: rgba(0, 0, 0, 0.72); -webkit-backdrop-filter: blur(3px); backdrop-filter: blur(3px); }
+  .confirm-box { width: min(440px, 100%); box-sizing: border-box; padding: 26px 26px 22px; border-radius: 16px; background: #05070c;
+                 border: 2px solid #3a4257; box-shadow: 0 0 40px rgba(0, 229, 255, 0.15); display: grid; gap: 12px; text-align: center;
+                 font: 15px/1.5 ui-monospace, "SF Mono", Menlo, Consolas, monospace; color: #f2f2f2; }
+  .cf-icon { justify-self: center; width: 52px; height: 52px; border-radius: 50%; display: grid; place-items: center; font-size: 26px;
+             color: #00e5ff; background: rgba(0, 229, 255, 0.1); border: 2px solid rgba(0, 229, 255, 0.5); }
+  .confirm-box h2 { margin: 0; font-size: 22px; line-height: 1.2; }
+  .confirm-box p { margin: 0; color: #b8bfcc; overflow-wrap: anywhere; }
+  .confirm-box p b { color: #fff; }
+  .cf-btns { display: flex; gap: 10px; margin-top: 6px; }
+  .cf-btns button { flex: 1; min-height: 46px; border-radius: 10px; font: 600 16px ui-monospace, "SF Mono", Menlo, Consolas, monospace; cursor: pointer;
+                    border: 0; background: #00e5ff; color: #000; }
+  .cf-btns button.ghost { background: transparent; color: #cfcfcf; border: 1px solid #3a4257; }
+  .cf-btns button:focus-visible { outline: 2px solid #ffdc00; outline-offset: 2px; }
+  .cf-btns button[hidden] { display: none; }
   .account[hidden] { display: none; }
   .account { position: fixed; inset: 0; z-index: 20; overflow-y: auto; -webkit-overflow-scrolling: touch;
              display: flex; align-items: center; justify-content: center; padding: 16px; box-sizing: border-box;
@@ -241,6 +258,15 @@
   </div>
   <!-- account screen at the start: create an account (name, email, password) or log in. Accounts live in Supabase;
        a new account must be confirmed through the link Supabase emails before it can log in. -->
+  <!-- small dialog (one or two buttons), e.g. "you're already playing on another device" -->
+  <div class="confirm" id="confirm" hidden>
+    <div class="confirm-box" role="alertdialog" aria-labelledby="cf-title" aria-describedby="cf-text">
+      <div class="cf-icon" id="cf-icon" aria-hidden="true">&#x21C4;</div>
+      <h2 id="cf-title"></h2>
+      <p id="cf-text"></p>
+      <div class="cf-btns"><button type="button" class="ghost" id="cf-no"></button><button type="button" id="cf-yes"></button></div>
+    </div>
+  </div>
   <div class="account" id="account" hidden>
     <div class="acc-card">
     <div class="acc-art" aria-hidden="true">
@@ -919,6 +945,10 @@
     // deep forest: 4 Scavs among its 9 zones, spread along the route (levels 7, 8, 10, 8)
     '-7:0': { x: 11, y: 7 }, '-8:-1': { x: 8, y: 6 }, '-10:-1': { x: 14, y: 8 }, '-8:-2': { x: 11, y: 5 } };
   for (const id in SCAV_SPAWNS) AREAS[id].foes.push({ kind: 'scav', spawn: SCAV_SPAWNS[id] });
+  // Mav-1K drones: 2 in each abandoned factory zone, away from the corner the big factory stands on
+  const DRONE_SPAWNS = { '2:-3': [{ x: 5, y: 4 }, { x: 12, y: 4 }], '2:-2': [{ x: 10, y: 4 }, { x: 17, y: 4 }],
+                         '1:-3': [{ x: 5, y: 10 }, { x: 12, y: 10 }], '1:-2': [{ x: 10, y: 10 }, { x: 17, y: 10 }] };
+  for (const id in DRONE_SPAWNS) for (const sp of DRONE_SPAWNS[id]) AREAS[id].foes.push({ kind: 'drone', spawn: sp });
   // greaser 2:2: 4 Drips, one in each quarter of the zone
   for (const sp of [{ x: 6, y: 4 }, { x: 16, y: 4 }, { x: 6, y: 10 }, { x: 16, y: 10 }]) AREAS['2:2'].foes.push({ kind: 'drip', spawn: sp });
   AREAS['0:1'].walls = [
@@ -986,12 +1016,22 @@
                  sprayEveryMs: 2500, aimMs: 280, sprayMs: 1400, sprayTicks: [220, 690, 1180], sprayDmg: 1, sprayPerLvl: 0.8,   // aim 0.28 s, spray 1.4 s with damage checks at 0.22 / 0.69 / 1.18 s into it, next aim 2.5 s after this one started; base per hit = round(sprayDmg + sprayPerLvl × his level) (lvl 2: 2.6 → 3), then + (his level − hero level)
                  respawnMs: [90000, 120000], lootMs: 30000, fadeMs: 2000,
                  loot: { money: [10, 18], tar: [0, 1], mutagenChance: 0.1 } };
-  const ENEMY = { drip: DRIP, scav: SCAV };
+  // Mav-1K: a flying attack drone of the abandoned factory, 2 in each of its 4 zones. Flies over buildings and water (drawn above
+  // everything, with a small shadow on the ground). Patrols: 2 tiles one way, then back and forth over 3. Locks on within `aggro`
+  // tiles and rushes in; next to the hero it rises for 0.2 s (red beeping light), then rams: level + 1 damage (+ his level − hero
+  // level), 40% chance to slow the hero by 20% for 3 s. After the ram it stays low for 0.6 s: only then can melee reach it
+  // (spells always can). Cooldown 1.8 s. Gives up when the hero is 10+ tiles away and flies home.
+  // At exactly 3 health (once per life) it cloaks (2% visible, can't be targeted), flies 3 tiles away and repairs +3 per second for 3 s.
+  const DRONE = { name: 'Mav-1K', exp: [3, 4], hp: 14, aggro: 3, leash: 10, stepMs: 500, windupMs: 200, lowMs: 600, cooldownMs: 1800,
+                  slowChance: 0.4, slow: 0.2, slowMs: 3000, cloakHp: 3, cloakMs: 3000, cloakAlpha: 0.02, fleeDist: 3, repair: 3,
+                  respawnMs: [40000, 100000], lootMs: 30000, fadeMs: 2000, loot: { money: [4, 10], aiChipChance: 0.1 } };
+  const ENEMY = { drip: DRIP, scav: SCAV, drone: DRONE };
   // enemy max health: the hero's health curve with its own base and shape (hpShape); without hpShape it stays at `hp`.
   // Drip: round(10 + [1 + 0.2(L − 1)] × (L − 1)^0.7) → 10 at lvl 1, 23 at lvl 10, 48 at lvl 20.
   // Toxic Scav: round(26 + [1 + 0.3(L − 1)] × (L − 1)^0.8) → 26 at lvl 1, 47 at lvl 10, 97 at lvl 20.
   DRIP.hpShape = 0.7; DRIP.hpGrowth = 0.2;
   SCAV.hpShape = 0.8; SCAV.hpGrowth = 0.3;
+  DRONE.hpShape = 0.7; DRONE.hpGrowth = 0.2;   // Drip's curve from 14: 14 at lvl 1, 15 at lvl 2
   const enemyMaxHp = (kind, zoneId) => { const T = ENEMY[kind]; return T.hpShape ? levelHealth(T.hp, zoneLevel(zoneId), T.hpShape, T.hpGrowth) : T.hp; };
   const ET = d => ENEMY[d.kind || 'drip'];   // an enemy's type (rules)
   // Scav sheets are cut to the hero's scale (277 px tall ≈ HERO_H tiles): ax = feet centre, foot = px from the cell bottom to the soles
@@ -1004,6 +1044,7 @@
   // hero: smooth chibi art from ChatGPT, facing right; flipped for left. Feet sit on the bottom-centre of his tile.
   // art files are published next to this page in the art/ folder (not embedded), so the game file stays small
   const ART_SRC = {
+    droneFly: 'art/droneFly.png', droneAttack: 'art/droneAttack.png', droneHurt: 'art/droneHurt.png', dronePortrait: 'art/dronePortrait.png', statusSlowed: 'art/statusSlowed.png',   // Mav-1K sheets: 4 cells 300 × 300, faces left
     trophy: "data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Cpath d='M18 12H9v5a10 10 0 0 0 10 10M46 12h9v5a10 10 0 0 1-10 10' fill='none' stroke='%23FFE600' stroke-width='4'/%3E%3Cpath d='M18 7h28v14a14 14 0 0 1-28 0z' fill='%23FFE600' stroke='%2310131C' stroke-width='3'/%3E%3Cpath d='M26 13v8' stroke='%23fff8a0' stroke-width='3' stroke-linecap='round'/%3E%3Crect x='28' y='34' width='8' height='9' fill='%23FFE600' stroke='%2310131C' stroke-width='2'/%3E%3Crect x='18' y='43' width='28' height='9' rx='2' fill='%2300E5FF' stroke='%2310131C' stroke-width='3'/%3E%3C/svg%3E",   // leaderboard button (drawn, no file)
     heroSprite:   'art/heroSprite.png',
     heroFull:     'art/heroFull.png',
@@ -1319,7 +1360,7 @@
       areaName = '0:0'; spawnAllDrips();
       enterArea('0:0', START.x, START.y, 1, true);
       inventory.length = 0; equipped.length = 0; skills.length = 0; restReadyAt = 0; bag = null; Object.assign(levels, startLevels());
-      rootedUntil = 0; floaters.length = 0; Object.assign(CAP_BASE, BASE_CAPS); hero.level = 1; hero.exp = 0; recalcCaps();
+      rootedUntil = 0; slowUntil = 0; floaters.length = 0; Object.assign(CAP_BASE, BASE_CAPS); hero.level = 1; hero.exp = 0; recalcCaps();
       ui = null; closePanels(); applyLbBuffs();
     }
 
@@ -1397,7 +1438,7 @@
       equipped.length = 0; equipped.push(...renameItems(s.equipped));
       skills.length = 0; skills.push(...(s.skills || []).map(newName));
       if (!deals) deals = newDeals();
-      restReadyAt = s.restReadyAt || 0; rootedUntil = 0; floaters.length = 0; closePanels();
+      restReadyAt = s.restReadyAt || 0; rootedUntil = 0; slowUntil = 0; floaters.length = 0; closePanels();
       discovered.clear(); for (const id of s.discovered || ['0:0']) discovered.add(AREA_ALIAS[id] || id);
       const sa = AREA_ALIAS[s.areaName] || s.areaName, area = AREAS[sa] ? sa : '0:0';
       areaName = area; spawnAllDrips(); loadEnemies(s.enemies);   // enemies come back as saved (older saves: all spawned)
@@ -1431,6 +1472,7 @@
     async function writeSlot(n) {   // -> error text, or null when saved
       const state = { version: SAVE_VERSION, ...snapshot() }, at = new Date().toISOString();
       if (!account || !sb) return 'guests can’t save';
+      if (!(await sessionPulse())) return 'signed out: this account is playing in another tab';   // never save over the other device's game
       const { error } = await sb.from('saves').upsert({ user_id: account.id, slot: n, hero_name: heroName, state, updated_at: at }, { onConflict: 'user_id,slot' });
       if (error) { console.warn(error); return error.message; }
       slotInfo.slots[n] = { state, at, summary: summarize(state) };
@@ -1822,6 +1864,7 @@
     let lootTarget = null;   // the beaten Drip whose loot window is open
     const discovered = new Set(saved.discovered || ['0:0']);   // zones the hero has been to (the map shows the rest as fog)
     discovered.add(areaName);
+    let slowUntil = 0;    // "slowed" state (Mav-1K ram): walks 20% slower until this game time
     let rootedUntil = 0;   // "root" state: hero can't move until this game time (an enemy's Magic Tar applies it)
     let rootTotal = 2000;  // length of the current root (for the puddle's fade)
     let heroDot = null;    // damage over time on the hero: { spell, left, next }
@@ -1829,6 +1872,7 @@
     // root: can't move, for a set time. injured: health at or below 10% of max health → walks 40% slower.
     // icon: ART key (a drawn placeholder is used until the art exists); color: placeholder border / symbol
     const STATES = { root: { label: 'rooted', icon: 'statusRooted', color: '#ff2bd6', symbol: '⛓' },
+                     slowed: { label: 'slowed', icon: 'statusSlowed', color: '#4ea1ff', symbol: '≋' },
                      lb_exp: { label: 'Top 1 Exp', icon: 'buffTopExp', color: '#b58cff', symbol: '★' },
                      lb_deals: { label: 'Top 1 Dealer', icon: 'buffTopDeals', color: '#f5c542', symbol: '$' },
                      lb_kills: { label: 'Top 1 Slayer', icon: 'buffTopKills', color: '#e5484d', symbol: '⚔' },
@@ -1837,6 +1881,7 @@
       const s = [];
       if (gameTime < rootedUntil) s.push({ key: 'root', left: (rootedUntil - gameTime) / 1000 });
       if (stats.health > 0 && stats.health <= CAPS.health * STATES.injured.healthShare) s.push({ key: 'injured' });
+      if (gameTime < slowUntil) s.push({ key: 'slowed', left: (slowUntil - gameTime) / 1000 });
       for (const k in LB_BUFFS) if (lbActive[k]) s.push({ key: 'lb_' + k });   // leaderboard Top-1 buffs, while they last
       return s;
     };
@@ -1912,8 +1957,9 @@
     const takenByDrip = (x, y, self, list = drips) => list.some(o => o !== self && !o.dead && o.x === x && o.y === y);
     function makeDrip(spawn, zoneId = areaName, kind = 'drip') {
       const saveWalls = WALLS; WALLS = AREAS[zoneId].walls;   // free() checks the walls of the zone being filled
-      const list = zoneDrips[zoneId] || [], here = zoneId === areaName;
-      const blocked = (x, y) => !free(x, y) || takenByDrip(x, y, null, list) || (here && x === player.x && y === player.y);
+      const list = (zoneDrips[zoneId] || []).filter(o => o.spawn !== spawn), here = zoneId === areaName;   // not the old copy of this same enemy (it's being replaced)
+      const fly = kind === 'drone';   // flyers can hover over buildings and water
+      const blocked = (x, y) => (fly ? !inGrid(x, y) : !free(x, y)) || takenByDrip(x, y, null, list) || (here && x === player.x && y === player.y);
       let sx = spawn.x - 1, sy = spawn.y - 1;
       if (blocked(sx, sy)) {   // nearest free tile
         let best = null;
@@ -1925,8 +1971,10 @@
       }
       WALLS = saveWalls;
       // patrol: first 1 tile left or right (random), then back and forth 2 tiles between home − 1 and home + 1
-      const patrol = { home: sx, target: sx + (Math.random() < 0.5 ? -1 : 1) };
-      return { kind, patrol, x: sx, y: sy, fromX: sx, fromY: sy, stepStart: -1e9, hp: enemyMaxHp(kind, zoneId), maxHp: enemyMaxHp(kind, zoneId), mana: 0, manaT: 0, spawn, nextSpray: 0, spray: null,
+      const dir = Math.random() < 0.5 ? -1 : 1, clampX = x => Math.max(1, Math.min(COLS - 2, x));
+      const patrol = fly ? { a: clampX(sx + 2 * dir), b: clampX(sx - dir), target: clampX(sx + 2 * dir) }   // drone: 2 tiles one way, then 3-tile back and forth
+                         : { home: sx, target: sx + dir };
+      return { kind, patrol, home: { x: sx, y: sy }, lowUntil: 0, cloakUntil: 0, repairNext: 0, repaired: false, returning: false, flee: null, ramAt: -1e9, ramDir: null, x: sx, y: sy, fromX: sx, fromY: sy, stepStart: -1e9, hp: enemyMaxHp(kind, zoneId), maxHp: enemyMaxHp(kind, zoneId), mana: 0, manaT: 0, spawn, nextSpray: 0, spray: null,
                aggro: false, nextAttack: 0, attackStart: -1e9, hitAt: 0, hurtStart: -1e9, dead: false, deadAt: 0, lookX: -1 };
     }
 
@@ -1955,6 +2003,7 @@
         if (--drip.dot.left <= 0) drip.dot = null; else drip.dot.next += sp.tickMs;
       }
       if (drip.kind === 'scav') { updateScav(); return; }
+      if (drip.kind === 'drone') { updateDrone(); return; }
       const dist = cheb(player.x, player.y, drip.x, drip.y);
       if (!drip.aggro && dist <= DRIP.aggro) { drip.aggro = true; drip.manaT = t; }
       if (!drip.aggro) { patrolStep(drip); return; }
@@ -2054,6 +2103,90 @@
       d.fromX = d.x; d.fromY = d.y; d.x = best.nx; d.y = best.ny; d.stepStart = t;
     }
 
+    // ---- Mav-1K drone (see DRONE) ----
+    const cloaked = d => d.kind === 'drone' && d.cloakUntil > gameTime;
+    const droneLow = d => d.kind !== 'drone' || gameTime < d.lowUntil;   // melee can only reach a drone right after its ram
+    const droneFree = (x, y, d) => inGrid(x, y) && !exitAt(x, y) && !takenByDrip(x, y, d) && !(x === player.x && y === player.y);
+    function droneStep(d, tx, ty) {   // one step (8 directions, over walls and water) toward a tile; false if nothing gets closer
+      let best = null;
+      for (let dy = -1; dy <= 1; dy++) for (let dx = -1; dx <= 1; dx++) {
+        const nx = d.x + dx, ny = d.y + dy;
+        if ((!dx && !dy) || !droneFree(nx, ny, d)) continue;
+        const score = Math.hypot(nx - tx, ny - ty);
+        if (!best || score < best.score) best = { nx, ny, score };
+      }
+      if (!best || best.score >= Math.hypot(d.x - tx, d.y - ty) - 1e-9) return false;
+      d.fromX = d.x; d.fromY = d.y; d.x = best.nx; d.y = best.ny; d.stepStart = gameTime;
+      if (d.x !== d.fromX) d.lookX = d.x > d.fromX ? 1 : -1;
+      return true;
+    }
+    function dronePatrol(d) {
+      const p = d.patrol, t = gameTime;
+      if (t - d.stepStart < DRONE.stepMs || t < (d.stunUntil || 0)) return;
+      if (d.x === p.target) p.target = p.target === p.a ? p.b : p.a;
+      const dir = Math.sign(p.target - d.x);
+      if (!dir) return;
+      if (!droneFree(d.x + dir, d.y, d)) { p.target = p.target === p.a ? p.b : p.a; return; }
+      d.fromX = d.x; d.fromY = d.y; d.x += dir; d.stepStart = t; d.lookX = dir;
+    }
+    function updateDrone() {
+      const D = DRONE, d = drip, t = gameTime, dist = cheb(player.x, player.y, d.x, d.y);
+      if (d.cloakUntil) {   // cloaked: flies off 3 tiles and repairs +3 per second for 3 s
+        while (d.repairNext && t >= d.repairNext && d.repairNext <= d.cloakUntil) {
+          d.hp = Math.min(d.maxHp, d.hp + D.repair); d.repairNext += 1000;
+        }
+        if (t >= d.cloakUntil) { d.cloakUntil = 0; d.repairNext = 0; d.flee = null; d.aggro = true; }
+        else {
+          if (d.flee && t - d.stepStart >= D.stepMs && (!droneStep(d, d.flee.x, d.flee.y) || (d.x === d.flee.x && d.y === d.flee.y))) d.flee = null;
+          return;
+        }
+      }
+      if (d.aggro && Math.hypot(player.x - d.x, player.y - d.y) >= D.leash) { d.aggro = false; d.returning = true; d.hitAt = 0; }   // gives up
+      if (!d.aggro && dist <= D.aggro && stats.health > 0) { d.aggro = true; d.returning = false; }
+      if (d.returning) {   // back to its spawn spot, then patrols again
+        if (t - d.stepStart < D.stepMs || t < (d.stunUntil || 0)) return;
+        if ((d.x === d.home.x && d.y === d.home.y) || !droneStep(d, d.home.x, d.home.y)) {
+          d.returning = false; d.patrol.a = Math.max(1, Math.min(COLS - 2, d.x + 2 * (d.patrol.a > d.patrol.b ? 1 : -1)));
+          d.patrol.b = Math.max(1, Math.min(COLS - 2, d.x - (d.patrol.a > d.x ? 1 : -1))); d.patrol.target = d.patrol.a;
+        }
+        return;
+      }
+      if (!d.aggro) { dronePatrol(d); return; }
+      if (d.hitAt && t >= d.hitAt) { d.hitAt = 0; droneRams(d); }
+      if (d.hitAt || t < d.lowUntil) return;                        // rising for the ram, or low right after it
+      if (player.x !== d.x) d.lookX = player.x > d.x ? 1 : -1;
+      if (t - d.stepStart < D.stepMs || t < (d.stunUntil || 0)) return;
+      if (dist === 1) {                                              // next to the hero: rise (beep) and ram
+        if (t >= d.nextAttack && stats.health > 0) { d.attackStart = t; d.hitAt = t + D.windupMs; }
+        return;
+      }
+      droneStep(d, player.x, player.y);                              // rushes in
+    }
+    function droneRams(d) {
+      const D = DRONE, t = gameTime;
+      d.lowUntil = t + D.lowMs; d.nextAttack = t + D.cooldownMs; d.ramAt = t;
+      d.ramDir = { x: Math.sign(player.x - d.x), y: Math.sign(player.y - d.y) };
+      if (cheb(player.x, player.y, d.x, d.y) !== 1 || stats.health <= 0) return;   // the hero stepped away: missed
+      hurtHero(npcDamage(npcLevel() + 1), '#00e5ff');
+      if (stats.health > 0 && Math.random() < D.slowChance) {
+        slowUntil = t + D.slowMs;   // refreshes, doesn't stack
+        float('slowed!', '#4ea1ff', player.x + 0.5, player.y - 1.1);
+      }
+    }
+    function droneCloak(d) {   // exactly 3 health, once per life: vanish, fly 3 tiles away from the hero, repair
+      const D = DRONE, t = gameTime;
+      d.repaired = true; d.cloakUntil = t + D.cloakMs; d.repairNext = t + 1000; d.hitAt = 0; d.lowUntil = 0; d.aggro = false; d.returning = false;
+      let best = null;
+      for (let y = 0; y < ROWS; y++) for (let x = 0; x < COLS; x++) {
+        if (!droneFree(x, y, d) || Math.abs(cheb(x, y, d.x, d.y) - D.fleeDist) > 0) continue;
+        const away = Math.hypot(x - player.x, y - player.y);
+        if (!best || away > best.away) best = { x, y, away };
+      }
+      d.flee = best;
+      float('cloaked!', '#00e5ff', d.x + 0.5, d.y - 1.4);
+      if (target === d) target = null;
+    }
+
     // Drip's swing lands (after the wind-up) if the hero is still next to him
     function dripStrikes() {
       if (cheb(player.x, player.y, drip.x, drip.y) !== 1 || stats.health <= 0) return;
@@ -2093,7 +2226,7 @@
     function meleeTargets() {
       const a = meleeArea(), keep = drip;
       const hits = drips.filter(d => {
-        if (d.dead) return false;
+        if (d.dead || cloaked(d) || !droneLow(d)) return false;   // a flying drone is out of reach except right after its ram
         drip = d; const q = dripPos(), ex = q.x + 0.5 - a.ox, ey = q.y + 0.5 - a.oy;
         return Math.hypot(ex, ey) <= a.r + MELEE.bodyR && ex * a.dx + ey * a.dy >= -MELEE.bodyR;   // inside the circle and on the front side
       });
@@ -2111,10 +2244,22 @@
 
     function damageDrip(dmg, text, color) {
       drip.hp = Math.max(0, drip.hp - dmg);
-      drip.hurtStart = gameTime; drip.aggro = true;
+      drip.hurtStart = gameTime; drip.aggro = true; drip.returning = false;
       float(text, color, drip.x + 0.5, drip.y - 0.9);
+      if (drip.kind === 'drone' && drip.hp === DRONE.cloakHp && !drip.repaired) droneCloak(drip);
       if (drip.hp <= 0) {   // nothing is given yet: the loot waits on his puddle
         drip.dead = true; drip.deadAt = gameTime; drip.hitAt = 0; drip.dot = null; drip.stunUntil = 0; kills++;
+        if (drip.kind === 'drone') {   // falls: the wreck lands on the nearest walkable tile (it may have been over a building)
+          drip.cloakUntil = 0; drip.fromX = drip.x; drip.fromY = drip.y;
+          if (!free(drip.x, drip.y)) {
+            let best = null;
+            for (let y = 0; y < ROWS; y++) for (let x = 0; x < COLS; x++) {
+              if (!free(x, y) || takenByDrip(x, y, drip) || exitAt(x, y) || (x === player.x && y === player.y)) continue;
+              const dd = Math.hypot(x - drip.x, y - drip.y); if (!best || dd < best.dd) best = { x, y, dd };
+            }
+            if (best) { drip.x = drip.fromX = best.x; drip.y = drip.fromY = best.y; }
+          }
+        }
         const T = ET(drip); drip.spray = null;
         drip.respawnAt = gameTime + rand(T.respawnMs[0], T.respawnMs[1]);   // respawn timer starts now
         const L = T.loot, items = [];
@@ -2122,8 +2267,9 @@
         if (tars) items.push({ name: 'Tar', count: tars });
         if (L.magicTarChance && Math.random() < L.magicTarChance) items.push({ name: 'Magic tar', count: 1 });
         if (L.mutagenChance && Math.random() < L.mutagenChance) items.push({ name: 'MutaGen', count: 1 });
+        if (L.aiChipChance && Math.random() < L.aiChipChance) items.push({ name: 'AI chip', count: 1 });
         drip.loot = { money: rand(L.money[0], L.money[1]), items };
-        gainExp(Math.max(0, (T.exp || 0) * (npcLevel() * 2 - hero.level) + Math.floor(zoneSum(areaName) / 2)));   // base × (2 × his level − hero level) + half the zone's coordinate sum, at least 0
+        gainExp(Math.max(0, (Array.isArray(T.exp) ? rand(T.exp[0], T.exp[1]) : T.exp || 0) * (npcLevel() * 2 - hero.level) + Math.floor(zoneSum(areaName) / 2)));   // base × (2 × his level − hero level) + half the zone's coordinate sum, at least 0
         if (target === drip) retarget();   // next closest enemy, or no target
       }
     }
@@ -2161,7 +2307,7 @@
     // Tab picks a living enemy in this zone: the closest first, then the next closest on each press (wrapping).
     // Esc drops it. Spells fly at the target. When the target dies, the closest other enemy is picked (or none).
     let target = null;
-    const livingByDistance = () => drips.filter(d => !d.dead)
+    const livingByDistance = () => drips.filter(d => !d.dead && !cloaked(d))
       .sort((a, b) => Math.hypot(a.x - player.x, a.y - player.y) - Math.hypot(b.x - player.x, b.y - player.y));
     const hasTarget = () => !!target && !target.dead && drips.includes(target);
     function cycleTarget() {
@@ -2202,7 +2348,7 @@
           gone = true;
         }
         for (const e of (pr.enemy ? [] : drips)) {   // hit check first, so a target right at the end of the range still counts
-          if (gone || e.dead) continue;
+          if (gone || e.dead || cloaked(e)) continue;
           drip = e;
           const d = dripPos();
           if (Math.hypot(d.x + 0.5 - pr.x, d.y + 0.5 - pr.y) < 0.55) {   // hit: root + damage over time (refreshes if already on)
@@ -2304,7 +2450,7 @@
     const COMBO_MS = 60;         // short wait so W+D pressed together counts as one diagonal step
     const MOVE_MS = 180;         // time to glide from one tile to the next (steady speed)
     let stepMs = MOVE_MS;        // this step's duration: longer while injured
-    const currentStepMs = () => (hasState('injured') ? MOVE_MS / STATES.injured.speed : MOVE_MS) / (1 + lbSpeed());   // Top-1 buffs: +10% speed each
+    const currentStepMs = () => (hasState('injured') ? MOVE_MS / STATES.injured.speed : MOVE_MS) / (1 + lbSpeed()) / (gameTime < slowUntil ? 1 - DRONE.slow : 1);   // Top-1 buffs: +10% speed each
     let comboTimer = null;
     // glide state: player.x/y is the tile we are on or heading to; from* is where the glide started
     let moving = false, fromX = player.x, fromY = player.y, moveStart = 0;
@@ -2622,6 +2768,7 @@
         ctx.strokeStyle = 'rgba(0, 229, 255, 0.55)'; ctx.lineWidth = 4; ctx.beginPath();
         ctx.moveTo(-8, -12); ctx.lineTo(8, 0); ctx.lineTo(-8, 12); ctx.stroke(); ctx.restore();
       }
+      for (const e of drips) if (e.kind === 'drone' && !e.dead) { drip = e; drawDroneShadow(e); }   // drones' shadows on the ground, under buildings
 
       // depth sort: things higher on screen first, so whatever is lower is drawn in front
       // buildings: split around the hero by their bottom row; among buildings, "front" ones are drawn last
@@ -2631,10 +2778,11 @@
       if (gameTime < rootedUntil) drawTart(rx, ry);
       // hero and enemies: lower on screen is drawn in front; a beaten enemy lies flat under everyone
       const actors = [{ y: ry, draw: () => drawHeroSprite(rx, ry) }];
-      for (const e of drips) { drip = e; const d = dripPos(); actors.push({ y: e.dead ? -1e9 : d.y, draw: () => { drip = e; drawDrip(d); } }); }
+      for (const e of drips) { if (e.kind === 'drone' && !e.dead) continue; drip = e; const d = dripPos(); actors.push({ y: e.dead ? -1e9 : d.y, draw: () => { drip = e; drawDrip(d); } }); }
       actors.sort((a, b) => a.y - b.y).forEach(a => a.draw());
       WALLS.filter(w => w.y - 1 > ry).sort(order).forEach(drawWall);
       drawBig(true, ry);    // columns that cover the hero (he is behind them)
+      for (const e of drips) if (e.kind === 'drone' && !e.dead) { drip = e; drawDrone(e); }   // flying: above everything
       drawMeleeFlash();
       drawProjectiles();
       drawFloaters();
@@ -2649,7 +2797,7 @@
       ctx.setTransform(1, 0, 0, 1, 0, 0);   // screen space from here: panels, maps, windows
       // enemy panel: the Drip the hero faces, else the nearest one chasing him
       const foe = meleeTargets()[0] || (hasTarget() ? target : null) ||
-        drips.filter(d => d.aggro && !d.dead).sort((a, b) => cheb(a.x, a.y, player.x, player.y) - cheb(b.x, b.y, player.x, player.y))[0];
+        drips.filter(d => d.aggro && !d.dead && !cloaked(d)).sort((a, b) => cheb(a.x, a.y, player.x, player.y) - cheb(b.x, b.y, player.x, player.y))[0];
       if (foe) { drip = foe; drawFoePanel(); }
 
       // area change: quick fade from black and the area's name
@@ -2807,7 +2955,8 @@
         if (since >= T.lootMs + T.fadeMs) return;   // body gone
         ctx.save(); if (since > T.lootMs) ctx.globalAlpha = 1 - (since - T.lootMs) / T.fadeMs;   // 2 s fade-out
         const lootNeon = drip.loot && lootable() === drip && !anyOpen() ? NEON.building : null;
-        if (scav) { if (ready(ART.scavHurt)) drawScavCell(ART.scavHurt, SCAV_ART.hurt, 1, cx, feet, lootNeon); }
+        if (drip.kind === 'drone') drawDroneWreck(cx, feet, lootNeon);
+        else if (scav) { if (ready(ART.scavHurt)) drawScavCell(ART.scavHurt, SCAV_ART.hurt, 1, cx, feet, lootNeon); }
         else if (ready(ART.dripHurt)) drawDripCell(ART.dripHurt, DRIP_ART.hurt, 1, cx, feet, 1, lootNeon);
         if (drip.loot) {   // loot waiting: a pulsing gold glint over the puddle, "loot" when faced
           const k = 0.5 + 0.5 * Math.sin(performance.now() / 250), gy = feet - 52;
@@ -2839,6 +2988,100 @@
       const bw = 64, bx = cx - bw / 2, by = feet - (scav ? HERO_H : DRIP_BODY) * TILE - 18;
       ctx.fillStyle = 'rgba(0, 0, 0, 0.7)'; ctx.fillRect(bx - 2, by - 2, bw + 4, 12);
       ctx.fillStyle = '#e5484d'; ctx.fillRect(bx, by, bw * drip.hp / drip.maxHp, 8);
+    }
+    // ---- Mav-1K drawing (vector placeholder until its art exists; art keys droneFly / droneAttack / droneHurt / dronePortrait) ----
+    function droneLift(d, t) {   // height above the ground (px) and ram offset: cruising 0.95 tile, +0.25 while rising, 0.3 right after the ram
+      let h = 0.95 * TILE + 5 * Math.sin(t / 260 + d.spawn.x), ox = 0, oy = 0;
+      if (d.hitAt && t >= d.attackStart) h += 0.25 * TILE * Math.min(1, (t - d.attackStart) / DRONE.windupMs);
+      else if (t < d.lowUntil) {
+        const k = (t - d.ramAt) / DRONE.lowMs;   // 0 → 1 over the low window
+        h = 0.3 * TILE + 0.65 * TILE * Math.max(0, k - 0.75) * 4;
+        const push = Math.max(0, 1 - k * 3) * 0.35 * TILE;   // lunge toward where the hero was
+        if (d.ramDir) { ox = d.ramDir.x * push; oy = d.ramDir.y * push; }
+      }
+      return { h, ox, oy };
+    }
+    function drawDroneShadow(d) {
+      const t = gameTime, q = dripPos(), L = droneLift(d, t), cx = (q.x + 0.5) * TILE + L.ox, gy = (q.y + 1) * TILE - 14 + L.oy;
+      const k = Math.max(0.45, 1 - L.h / (2.2 * TILE));
+      ctx.save(); ctx.globalAlpha = (cloaked(d) ? DRONE.cloakAlpha : 0.35) * k; ctx.fillStyle = '#000';
+      ctx.beginPath(); ctx.ellipse(cx, gy, 26 * k, 9 * k, 0, 0, Math.PI * 2); ctx.fill(); ctx.restore();
+    }
+    function drawDroneBody(cx, cy, tilt, t, beep, look) {
+      ctx.save(); ctx.translate(cx, cy); ctx.rotate(tilt); ctx.scale(look > 0 ? -1 : 1, 1);
+      ctx.lineWidth = 3; ctx.strokeStyle = '#10131C';
+      for (const sx of [-30, 30]) {   // arms and rotors
+        ctx.fillStyle = '#3A4257'; ctx.fillRect(sx > 0 ? 8 : sx + 4, -4, 18, 6);
+        ctx.fillStyle = '#1B2233'; ctx.beginPath(); ctx.arc(sx, -8, 5, 0, Math.PI * 2); ctx.fill(); ctx.stroke();
+        const spin = Math.abs(Math.sin(t / 30 + sx));   // blurred rotor disc
+        ctx.save(); ctx.globalAlpha = 0.55; ctx.fillStyle = '#9fb3c8';
+        ctx.beginPath(); ctx.ellipse(sx, -12, 16, 3 + 2 * spin, 0, 0, Math.PI * 2); ctx.fill(); ctx.restore();
+      }
+      ctx.fillStyle = '#2a3142'; ctx.beginPath(); ctx.roundRect ? ctx.roundRect(-20, -8, 40, 18, 7) : ctx.rect(-20, -8, 40, 18); ctx.fill(); ctx.stroke();
+      ctx.fillStyle = '#00e5ff'; ctx.fillRect(-14, 2, 28, 2);   // cyan stripe
+      ctx.fillStyle = '#10131C'; ctx.beginPath(); ctx.arc(-12, 4, 6, 0, Math.PI * 2); ctx.fill();   // camera eye, facing left
+      ctx.fillStyle = beep ? '#ff2b2b' : '#00e5ff'; ctx.beginPath(); ctx.arc(-12, 4, 3, 0, Math.PI * 2); ctx.fill();
+      if (beep) { ctx.save(); ctx.globalAlpha = 0.5; ctx.fillStyle = '#ff2b2b'; ctx.beginPath(); ctx.arc(0, -10, 10, 0, Math.PI * 2); ctx.fill(); ctx.restore(); }
+      ctx.fillStyle = beep ? '#ff2b2b' : (Math.floor(t / 600) % 2 ? '#ff2bd6' : '#3a1418'); ctx.beginPath(); ctx.arc(0, -10, 3.5, 0, Math.PI * 2); ctx.fill();   // top light
+      ctx.restore();
+    }
+    // Mav-1K sheets: 4 cells of 300 × 300, the drone's body centre at (150, 158), its rotors ~265 px across → 1.25 tiles
+    const DRONE_ART = { cell: 300, cx: 150, cy: 158, span: 265, tiles: 1.25, wreckBottom: 248 };
+    function drawDroneSprite(im, frame, x, y, tilt, look, ay = DRONE_ART.cy) {
+      const A = DRONE_ART, k = A.tiles * TILE / A.span;
+      ctx.save(); ctx.translate(x, y); ctx.rotate(tilt); if (look > 0) ctx.scale(-1, 1);   // art faces left
+      ctx.imageSmoothingQuality = 'high';
+      ctx.drawImage(im, frame * A.cell, 0, A.cell, A.cell, -A.cx * k, -ay * k, A.cell * k, A.cell * k);
+      ctx.restore();
+    }
+    function drawDrone(d) {
+      const t = gameTime, q = dripPos(), L = droneLift(d, t), cx = (q.x + 0.5) * TILE + L.ox, ground = (q.y + 1) * TILE - 14 + L.oy, cy = ground - L.h;
+      const moving = t - d.stepStart < DRONE.stepMs && (d.x !== d.fromX || d.y !== d.fromY);
+      const tilt = t < d.lowUntil && d.ramDir ? d.ramDir.x * 0.35 : moving ? Math.sign(d.x - d.fromX) * 0.18 : 0.04 * Math.sin(t / 400);   // leans into its flight
+      const beep = !!d.hitAt && Math.floor((t - d.attackStart) / 50) % 2 === 0;   // fast red beeping while it rises for the ram
+      ctx.save();
+      if (cloaked(d)) ctx.globalAlpha = DRONE.cloakAlpha;
+      if (t - d.hurtStart < 150) ctx.filter = 'brightness(2.2)';
+      if (d === target || facingEnemy()) {   // outline ring: white = target, red = in melee reach
+        ctx.save(); ctx.strokeStyle = d === target ? '#ffffff' : '#ff3b3b'; ctx.globalAlpha *= 0.8; ctx.lineWidth = 3;
+        ctx.beginPath(); ctx.ellipse(cx, cy - 2, 44, 24, 0, 0, Math.PI * 2); ctx.stroke(); ctx.restore();
+      }
+      if (ready(ART.droneFly) && ready(ART.droneAttack) && ready(ART.droneHurt)) {
+        const since = t - d.ramAt;
+        if (d.hitAt) drawDroneSprite(ART.droneAttack, Math.floor((t - d.attackStart) / 50) % 2, cx, cy, 0, d.lookX);   // red beeping: frames 1-2 flicker
+        else if (t < d.lowUntil) drawDroneSprite(ART.droneAttack, since < 170 ? 2 : 3, cx, cy, 0, d.lookX);           // the ram, then low
+        else if (t - d.hurtStart < 250) drawDroneSprite(ART.droneHurt, 0, cx, cy, tilt, d.lookX);
+        else drawDroneSprite(ART.droneFly, Math.floor(t / 110) % 4, cx, cy, tilt, d.lookX);
+      } else drawDroneBody(cx, cy, tilt, t, beep, d.lookX);
+      ctx.filter = 'none';
+      if (!cloaked(d)) {   // health bar
+        const bw = 56, bx = cx - bw / 2, by = cy - 40;
+        ctx.fillStyle = 'rgba(0, 0, 0, 0.7)'; ctx.fillRect(bx - 2, by - 2, bw + 4, 12);
+        ctx.fillStyle = '#e5484d'; ctx.fillRect(bx, by, bw * d.hp / d.maxHp, 8);
+      }
+      if (t < (d.stunUntil || 0)) {
+        ctx.strokeStyle = '#ff2bd6'; ctx.lineWidth = 3; ctx.globalAlpha *= 0.6 + 0.4 * Math.sin(t / 120);
+        ctx.beginPath(); ctx.ellipse(cx, cy + 8, 36, 12, 0, 0, Math.PI * 2); ctx.stroke();
+      }
+      ctx.restore();
+    }
+    function drawDroneWreck(cx, feet, neon) {   // fallen drone: tipped over on the ground, a broken rotor, a few sparks
+      if (ready(ART.droneHurt)) {   // falls (frames 2-3) from flight height, then lies as a wreck (frame 4)
+        const since = gameTime - drip.deadAt;
+        if (neon) { ctx.save(); ctx.globalAlpha = neon.alpha; ctx.strokeStyle = neon.color; ctx.lineWidth = 4; ctx.beginPath(); ctx.ellipse(cx, feet - 16, 48, 18, 0, 0, Math.PI * 2); ctx.stroke(); ctx.restore(); }
+        if (since < 350) { const k = since / 350, y = feet - 14 - 0.95 * TILE * (1 - k * k); drawDroneSprite(ART.droneHurt, since < 170 ? 1 : 2, cx, y, 0, drip.lookX); }
+        else drawDroneSprite(ART.droneHurt, 3, cx, feet - 4, 0, drip.lookX, DRONE_ART.wreckBottom);
+        return;
+      }
+      ctx.save();
+      if (neon) { ctx.save(); ctx.globalAlpha = neon.alpha; ctx.strokeStyle = neon.color; ctx.lineWidth = 4; ctx.beginPath(); ctx.ellipse(cx, feet - 16, 44, 18, 0, 0, Math.PI * 2); ctx.stroke(); ctx.restore(); }
+      ctx.fillStyle = 'rgba(0, 0, 0, 0.35)'; ctx.beginPath(); ctx.ellipse(cx, feet - 8, 34, 9, 0, 0, Math.PI * 2); ctx.fill();
+      ctx.translate(cx, feet - 20); ctx.rotate(0.5);
+      ctx.fillStyle = '#2a3142'; ctx.strokeStyle = '#10131C'; ctx.lineWidth = 3; ctx.fillRect(-20, -8, 40, 16); ctx.strokeRect(-20, -8, 40, 16);
+      ctx.fillStyle = '#3A4257'; ctx.fillRect(20, -3, 14, 5); ctx.fillRect(-30, 2, 10, 5);
+      ctx.fillStyle = '#10131C'; ctx.beginPath(); ctx.arc(-10, 0, 5, 0, Math.PI * 2); ctx.fill();
+      if (Math.floor(performance.now() / 180) % 3 === 0) { ctx.fillStyle = '#ffe600'; ctx.fillRect(6, -14, 3, 3); ctx.fillRect(12, -10, 2, 2); }
+      ctx.restore();
     }
     // Tart: the hero stands stuck in a glossy oil puddle
     function drawTart(rx, ry) {
@@ -2875,8 +3118,9 @@
       const w = 300, h = 80, x = (canvas.width - w) / 2, y = phoneView && canvas.height > canvas.width ? phudBottom() + 12 : 12;
       ctx.fillStyle = 'rgba(0, 0, 0, 0.75)'; rr(x, y, w, h, 12); ctx.fill();
       ctx.strokeStyle = 'rgba(255, 43, 214, 0.6)'; ctx.lineWidth = 2; rr(x + 1, y + 1, w - 2, h - 2, 11); ctx.stroke();
-      const T = ET(drip), pic = ART[drip.kind === 'scav' ? 'scavPortrait' : 'dripPortrait'];
+      const T = ET(drip), pic = ART[drip.kind === 'scav' ? 'scavPortrait' : drip.kind === 'drone' ? 'dronePortrait' : 'dripPortrait'];
       if (ready(pic)) { ctx.imageSmoothingQuality = 'high'; ctx.drawImage(pic, x + 8, y + 8, 64, 64); }
+      else if (drip.kind === 'drone') { ctx.fillStyle = '#1B2233'; ctx.fillRect(x + 8, y + 8, 64, 64); drawDroneBody(x + 40, y + 44, 0, gameTime, !!drip.hitAt, -1); }
       const tx = x + 84, bw = w - 84 - 14;
       ctx.textAlign = 'left'; ctx.textBaseline = 'middle'; ctx.fillStyle = '#fff'; ctx.font = '600 22px ' + MONO;
       ctx.fillText(T.name, tx, y + 20);
@@ -2889,6 +3133,7 @@
       ctx.fillText(`lvl ${lvl}`, tx + bw, y + 62);
       ctx.fillStyle = '#4ea1ff'; ctx.font = '18px ' + MONO; ctx.textAlign = 'left';
       if (T.mana) ctx.fillText(ICON.mana.repeat(drip.mana) + '◇'.repeat(T.mana - drip.mana), tx, y + 62);
+      else if (drip.kind === 'drone') { ctx.fillStyle = '#00e5ff'; ctx.font = '16px ' + MONO; ctx.fillText(drip.hitAt ? 'ramming!' : gameTime < drip.lowUntil ? 'low: hit it!' : 'dive ram', tx, y + 62); }
       else { ctx.fillStyle = '#7fff3a'; ctx.font = '16px ' + MONO; ctx.fillText(drip.spray ? 'spraying!' : 'toxic spray', tx, y + 62); }
     }
 
@@ -3672,7 +3917,7 @@
 
     // ---- account screen + cheat password -------------------------------------------
     const accEl = document.getElementById('account'), lockEl = document.getElementById('cheat-lock');
-    const naming = () => !accEl.hidden || !lockEl.hidden;   // an overlay with text fields is open: the game ignores keys
+    const naming = () => !accEl.hidden || !lockEl.hidden || !$('confirm').hidden;   // an overlay with text fields is open: the game ignores keys
     const $ = id => document.getElementById(id);
     let accMode = 'create';
     const accMsg = (m, ok) => { $('acc-err').textContent = m; $('acc-err').classList.toggle('ok', !!ok); };
@@ -3756,7 +4001,68 @@
       } finally { $('acc-submit').disabled = false; }
     });
     // logged in (or offline with user = null): start a new run, then continue from the online save if there is one
+    // ---- small dialog: askConfirm({ title, text (HTML), yes, no }) → Promise<boolean>; no = '' shows only one button ----
+    function askConfirm({ title, text, yes = 'OK', no = 'Cancel', icon = '⇄' }) {
+      return new Promise(done => {
+        const box = $('confirm'), yesB = $('cf-yes'), noB = $('cf-no');
+        $('cf-title').textContent = title; $('cf-text').innerHTML = text; $('cf-icon').textContent = icon;
+        yesB.textContent = yes; noB.textContent = no; noB.hidden = !no;
+        box.hidden = false; held.clear(); tapped.clear(); setTimeout(() => yesB.focus(), 0);
+        const finish = v => { box.hidden = true; yesB.onclick = noB.onclick = null; removeEventListener('keydown', onKey, true); document.activeElement?.blur(); done(v); };
+        const onKey = e => { if (e.key === 'Escape' && no) { e.preventDefault(); e.stopPropagation(); finish(false); } };
+        yesB.onclick = () => finish(true); noB.onclick = () => finish(false);
+        addEventListener('keydown', onKey, true);
+      });
+    }
+    // ---- one device at a time ----
+    // Supabase "active_sessions" (one row per account): which browser tab is playing. Logging in while another tab/device
+    // was active in the last 90 s asks first; saying yes takes over, and the other one notices within 30 s (or at its next
+    // save) and is signed out without saving over the new game. No table on the server → these checks are skipped.
+    const TAB_ID = (() => { try { let id = sessionStorage.getItem('littlegame.tab'); if (!id) { id = crypto.randomUUID ? crypto.randomUUID() : String(Math.random()).slice(2) + Date.now(); sessionStorage.setItem('littlegame.tab', id); } return id; } catch { return String(Math.random()).slice(2) + Date.now(); } })();
+    const DEVICE_NAME = (() => { const u = navigator.userAgent;
+      const dev = /iPhone/.test(u) ? 'iPhone' : /iPad|Macintosh.*Mobile/.test(u) || (/Macintosh/.test(u) && navigator.maxTouchPoints > 1) ? 'iPad' : /Android/.test(u) ? (/Mobile/.test(u) ? 'Android phone' : 'Android tablet')
+        : /Mac/.test(u) ? 'Mac' : /Windows/.test(u) ? 'Windows PC' : /Linux|CrOS/.test(u) ? 'computer' : 'device';
+      const br = /Edg\//.test(u) ? 'Edge' : /OPR\//.test(u) ? 'Opera' : /Firefox|FxiOS/.test(u) ? 'Firefox' : /Chrome|CriOS/.test(u) ? 'Chrome' : /Safari/.test(u) ? 'Safari' : '';
+      return br ? `${dev} (${br})` : dev; })();
+    let sessionHeld = false, sessionTimer = null;
+    async function sessionCall(fn, args) { try { const { data, error } = await sb.rpc(fn, args); return error ? { skip: true } : { data }; } catch { return { skip: true }; } }
+    async function takeSession() {   // false = the player chose to stay on the other device
+      if (!sb) return true;
+      const chk = await sessionCall('session_check', { p_session: TAB_ID });
+      if (!chk.skip && chk.data && chk.data.other) {
+        const where = chk.data.device ? ` (on your ${String(chk.data.device).replace(/[<>&]/g, '')})` : '';
+        const ok = await askConfirm({ title: 'Already playing in another tab',
+          text: `<b>${(heroName || 'Your hero').replace(/[<>&]/g, '')}</b> is already in a game in another tab${where}. Play here instead? The other tab will be signed out, and anything it hasn't saved yet will stay behind.`,
+          yes: 'Play here', no: 'Stay there' });
+        if (!ok) return false;
+      }
+      await sessionCall('session_claim', { p_session: TAB_ID, p_device: DEVICE_NAME });
+      sessionHeld = true;
+      clearInterval(sessionTimer); sessionTimer = setInterval(sessionPulse, 30000);
+      return true;
+    }
+    async function sessionPulse() {   // → false when another device has taken over (then this one is signed out)
+      if (!sb || !account || !sessionHeld) return true;
+      const r = await sessionCall('session_heartbeat', { p_session: TAB_ID });
+      if (r.skip || r.data !== false) return true;
+      sessionHeld = false; clearInterval(sessionTimer);
+      const name = heroName;
+      account = null; ui = null; closePanels(); cheatsUnlocked = false;   // no more saving from here
+      try { await sb.auth.signOut({ scope: 'local' }); } catch {}
+      heroName = null; slotInfo = { state: 'loading', slots: {} }; stopMusic(); newGame(); renderStats();
+      await askConfirm({ title: 'Playing in another tab', icon: '⏻',
+        text: `<b>${(name || 'Your hero').replace(/[<>&]/g, '')}</b> just logged in from another tab, so this one was signed out. Your progress is safe in the other tab. Log in again to continue here.`,
+        yes: 'Got it', no: '' });
+      showAccount('login');
+      return false;
+    }
     async function enterGame(user) {
+      if (user) heroName = capName((user.user_metadata?.hero_name || user.email.split('@')[0]).slice(0, 10));
+      if (user && !(await takeSession())) {   // stay on the other device: sign this one out again
+        try { await sb.auth.signOut({ scope: 'local' }); } catch {}
+        showAccount('login', 'No problem, your game keeps going in the other tab.', true);
+        return;
+      }
       account = user ? { id: user.id, email: user.email } : null;
       heroName = capName(user ? (user.user_metadata?.hero_name || user.email.split('@')[0]).slice(0, 10) : 'guest');
       accEl.hidden = true; document.activeElement?.blur();
@@ -3778,7 +4084,8 @@
     async function logOut() {
       ui = null; closePanels(); cheatsUnlocked = false;
       if (account) await writeSlot(1);   // autosave before leaving
-      if (sb && account) await sb.auth.signOut();
+      if (sb && account && sessionHeld) { await sessionCall('session_release', { p_session: TAB_ID }); sessionHeld = false; clearInterval(sessionTimer); }
+      if (sb && account) await sb.auth.signOut({ scope: 'local' });   // only this device (other devices keep their own login)
       account = null; heroName = null; slotInfo = { state: 'loading', slots: {} };
       stopMusic();
       newGame(); renderStats(); showAccount('login');
