@@ -538,10 +538,17 @@
 
   // price here is the starting price. Patches (patch: true): each purchase installs the next level (shown as "lvl N"
   // in the shop, starting at lvl 0) and raises that patch's price by 15%, rounded up.
-  // Food: never rises on purchase; instead it inflates by FOOD_INFLATION after every work shift (shown rounded up).
+  // Food: never rises on purchase. Instead every 100 deals at TradeCorp adds FOOD_CLIMB[name] to its price (shown rounded up):
+  // price = start + climb × floor(deals / 100). Starts 1 : 4 : 12 : 24, ratios drift to about 1 : 3 : 6.75 : 10 by 10 000 deals.
   const SHOP_ITEMS = [
     { name: 'Cheap noodles', tab: 'food', class: 'food', stack: 16, price: 1,   gain: { energy: 10, health: 1 }, art: 'food', rarity: 'common',
-      desc: 'A steaming bowl of street noodles. Refills energy and patches you up a little. Gets pricier with every work shift.' },
+      desc: 'A steaming bowl of street noodles. Refills energy and patches you up a little. +1$ every 100 deals.' },
+    { name: 'Beef brisket', tab: 'food', class: 'food', stack: 16, price: 4, gain: { energy: 18, health: 2 }, art: 'beefBrisket', rarity: 'common',
+      desc: 'Slow-smoked brisket from a rooftop grill. A proper meal: more energy and a bit more healing. +3$ every 100 deals.' },
+    { name: 'Dumplings', tab: 'food', class: 'food', stack: 16, price: 12, gain: { energy: 33, health: 4 }, art: 'dumplings', rarity: 'common',
+      desc: 'A steamer basket of fat dumplings. Keeps you going through a long shift. +6.7$ every 100 deals.' },
+    { name: 'Energy Drink', tab: 'food', class: 'food', stack: 16, price: 24, gain: { energy: 50 }, art: 'energyDrink', rarity: 'common',
+      desc: 'Neon-blue fizz in a can. A huge energy kick, no healing at all. +10$ every 100 deals.' },
     { name: 'Smile',   tab: 'patches', class: 'patch', price: 30,  gain: { charisma: 1 }, patch: true, art: 'smilePatch', rarity: 'common',
       desc: 'Cheap social firmware. Every install makes you a little more likeable. +15% price per install.' },
     { name: 'Social',  tab: 'patches', class: 'patch', minLevel: 2, price: 90,  gain: { charisma: 2 }, patch: true, art: 'socialPatch', rarity: 'common',
@@ -618,8 +625,8 @@
   const cleanName = v => v.replace(/[^\p{L}]/gu, '').slice(0, 10);   // letters only (any alphabet), up to 10
   const startPrices = () => Object.fromEntries([...SHOP_ITEMS, ...LOOT_ITEMS.filter(it => it.class === 'bag')].map(it => [it.name, it.price]));   // bags are sold too
   const raisePrice = p => Math.ceil(p * 115 / 100);   // integer maths avoids float drift (60 * 1.15 = 68.999…)
-  const FOOD_INFLATION = 0.0062;   // +0.62% food price per work shift → average run ≈ 1000 turns (see design notes)
-  const shown = (name, p) => name === FOOD ? Math.ceil(p - 1e-9) : p;   // food keeps a fractional price internally
+  const FOOD_CLIMB = { 'Cheap noodles': 1, 'Beef brisket': 3, 'Dumplings': 6.7, 'Energy Drink': 10 };   // $ added every 100 deals
+  const foodCostAt = (name, done) => itemDef(name).price + FOOD_CLIMB[name] * Math.floor(done / 100);   // exact (can be fractional)
 
   // work: trade health for money, 3 random deals, all reroll after one is taken
   // charisma 1 → 1-4 health for 2-5 money; each extra charisma point adds +1 to max health risk
@@ -1190,9 +1197,11 @@
     const facing = { x: saved.fx ?? 1, y: saved.fy ?? 0 };
     const stats = { ...START_STATS, ...(saved.stats || {}) };
     for (const st in CAPS) stats[st] = capped(st, stats[st]);   // older saves may be over the current caps
-    const newDeals = () => [0, 1, 2].map(() => rollDeal(hero.level, stats.charisma, prices[FOOD]));
+    const newDeals = () => [0, 1, 2].map(() => rollDeal(hero.level, stats.charisma, foodCost(FOOD)));
     let deals = null;   // rolled below, once prices exist (older saves' deals are replaced)
     let dealsDone = saved.dealsDone ?? 0;   // how many work deals the hero has taken this run
+    const foodCost = name => foodCostAt(name, dealsDone);
+    const shown = (name, p) => name in FOOD_CLIMB ? Math.ceil(foodCost(name) - 1e-9) : p;   // food: from the deals count, rounded up
     let promotion = saved.promotion ?? 0;
     let kills = saved.kills ?? 0;              // enemies slain this run (leaderboard: Top Slayers)
     let runCheated = !!saved.cheated;         // the cheat menu was used in this run: it's never sent to the leaderboard   // TradeCorp promotions earned (0–3, see PROMOTIONS)
@@ -1304,9 +1313,9 @@
             }
             for (const [st, n] of gains) stats[st] = capped(st, stats[st] + n);
             if (it.gain.charisma) deals = newDeals();
-            if (it.name !== FOOD) prices[it.name] = raisePrice(price);
+            if (it.class !== 'food') prices[it.name] = raisePrice(price);
             if (it.patch) { levels[it.name]++; return `Installed ${it.name} lvl ${levels[it.name]}. Next: ${prices[it.name]}$.`; }
-            return it.name === FOOD ? `Bought ${it.name}.` : `Bought ${it.name}. Now ${prices[it.name]}$.`;
+            return it.class === 'food' ? `Bought ${it.name}.` : `Bought ${it.name}. Now ${prices[it.name]}$.`;
           },
         };
       });
@@ -1583,7 +1592,7 @@
         row('refill', 'full ♥ ⚡ ◆', () => { for (const st in CAPS) stats[st] = CAPS[st]; return 'Health, energy and mana refilled.'; }),
         row('mana cap', `+3 (now ${CAPS.mana})`, () => { CAP_BASE.mana += 3; recalcCaps(); stats.mana = CAPS.mana; return `Mana cap ${CAPS.mana}, mana full.`; }),
         row('exp', '+50', () => { gainExp(50); return `Level ${hero.level}, ${hero.exp}/${expNeed(hero.level)} exp.`; }),
-        row('deal types', 'rare call, rare sale, delivery', () => { deals = [['call', true], ['sale', true], ['delivery', false]].map(f => rollDeal(hero.level, stats.charisma, prices[FOOD], f)); return 'TradeCorp now shows one of each rare deal.'; }),
+        row('deal types', 'rare call, rare sale, delivery', () => { deals = [['call', true], ['sale', true], ['delivery', false]].map(f => rollDeal(hero.level, stats.charisma, foodCost(FOOD), f)); return 'TradeCorp now shows one of each rare deal.'; }),
         row('promotion ready', 'deals + CHSM for the next one', () => { const pr = PROMOTIONS[promotion]; if (!pr) return 'All promotions earned.'; dealsDone = Math.max(dealsDone, pr.deals); stats.charisma = Math.max(stats.charisma, pr.charisma); deals = newDeals(); return `${pr.name} is ready at TradeCorp (My Boss).`; }),
         row('charisma', '+10 ✦', () => { stats.charisma += 10; deals = newDeals(); return `Charisma ${stats.charisma}.`; }),
         row('strength', '+5 ⚔', () => { stats.strength += 5; return `Strength ${stats.strength}.`; }),
@@ -1726,7 +1735,6 @@
       if (d.type === 'call') {
         if (stats.energy < dealCost(d)) return 'Not enough energy for that call. Eat something.';
         stats.energy -= dealCost(d); stats.money += d.money;
-        prices[FOOD] *= 1 + FOOD_INFLATION;
       } else if (d.type === 'sale') {
         if (stats.money < dealCost(d)) return `Not enough money (${dealCost(d)}$).`;
         const backup = inventory.map(it => ({ ...it }));
