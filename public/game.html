@@ -260,7 +260,7 @@
         <p><a href="#" id="acc-switch">Already have an account? Log in</a></p>
         <p><a href="#" id="acc-guest">Play as guest (no saving)</a></p>
       </div>
-      <p id="acc-hint">Name: letters only, up to 10 · password: 6+ characters. You'll get an email to confirm it's yours.</p>
+      <p id="acc-hint">Name: letters only, up to 10, not used by another player · password: 6+ characters. You'll get an email to confirm it's yours.</p>
     </form>
     </div>
   </div>
@@ -1356,7 +1356,7 @@
         LB_TABS.forEach((t, i) => LB.rows[t.key] = res[i].data || []);
         LB.state = 'ready'; LB.at = Date.now(); LB.error = '';
       } catch (e) {
-        LB.state = 'error'; LB.error = /does not exist|schema cache/.test(e.message || '') ? 'The leaderboard isn’t set up on the server yet.' : (e.message || String(e));
+        LB.state = 'error'; LB.error = /does not exist|schema cache/.test(e.message || '') ? 'The leaderboard isn’t set up on the server yet.' : /permission denied/.test(e.message || '') ? 'the server doesn’t allow reading it yet (run leaderboard-fix.sql in Supabase).' : (e.message || String(e));
       }
       applyLbBuffs();
     }
@@ -3253,7 +3253,8 @@
         });
         ctx.textAlign = 'left';
         if (!list.length) { ctx.fillStyle = '#8a8a8a'; ctx.font = '24px ' + MONO;
-          ctx.fillText(ui.kind !== 'leaderboard' ? 'Nothing for sale here yet.' : LB.state === 'loading' ? 'Loading…' : LB.state === 'error' ? `Can't load the leaderboard: ${LB.error}` : 'Nobody here yet. Be the first!', px + 40, top + 40); }
+          const t = ui.kind !== 'leaderboard' ? 'Nothing for sale here yet.' : LB.state === 'loading' ? 'Loading…' : LB.state === 'error' ? `Can't load the leaderboard: ${LB.error}` : 'Nobody here yet. Be the first!';
+          wrapText(t, pw - 80).forEach((l, i) => ctx.fillText(l, px + 40, top + 40 + i * 32)); }   // long server errors wrap inside the window
         if (list.length && list[0].side) drawSideTab(list, px + 24, top, pw - 48, listN * rowH - 8);
       }
       let gapY = 0;
@@ -3729,8 +3730,12 @@
         if (accMode === 'create') {
           const name = cleanName($('acc-name').value);
           if (!name) return accMsg('Enter a hero name (letters only).');
+          // hero names are unique (any upper/lower case). Ask first for a friendly message; the server also refuses a taken name on sign-up.
+          const taken = `The hero name "${name}" is already taken. Try another one.`;
+          const { data: free, error: nameErr } = await sb.rpc('name_available', { p_name: name });
+          if (!nameErr && free === false) { $('acc-name').focus(); $('acc-name').select(); return accMsg(taken); }
           const { data, error } = await sb.auth.signUp({ email, password: pass, options: { data: { hero_name: name }, emailRedirectTo: RETURN_URL } });
-          if (error) return accMsg(error.message);
+          if (error) return accMsg(/saving new user|hero_name|duplicate|unique/i.test(error.message) ? taken : error.message);   // the database refused the name (someone took it a moment ago)
           // Supabase answers an already-registered email with a user that has no identities (so it doesn't reveal who is signed up)
           if (data.user && Array.isArray(data.user.identities) && data.user.identities.length === 0)
             return accMsg('This email already has an account. Log in instead.');
