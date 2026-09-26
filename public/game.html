@@ -71,6 +71,7 @@
   .t-menu button { width: clamp(36px, calc(var(--u) * 13), 56px); aspect-ratio: 1; display: grid; place-items: center; align-content: center; gap: 0;
                    background: rgba(5, 7, 12, 0.7); border: 1px solid rgba(255, 255, 255, 0.35); border-radius: 8px; opacity: 0.8;
                    font-size: clamp(15px, calc(var(--u) * 5.5), 24px); line-height: 1; }
+  .t-menu img { width: 62%; height: auto; aspect-ratio: 1; object-fit: contain; pointer-events: none; }
   .t-menu small { font-size: clamp(8px, calc(var(--u) * 2.4), 11px); font-weight: 600; color: #8a8a8a; margin-top: 2px; }
   .touch.busy .t-spell { display: none; }   /* a window or panel is open: spells can't be cast anyway */
   .touch.inv .t-btns { bottom: 33%; }        /* inventory open: lift the buttons above it */
@@ -223,10 +224,10 @@
   <!-- phone controls over the map (touch screens; Settings → touch controls): joystick, action + spells, menu row -->
   <div class="touch" id="touch" hidden>
     <div class="t-menu">
-      <button type="button" data-code="KeyI" aria-label="Inventory">&#x1F392;&#xFE0E;<small>bag</small></button>
-      <button type="button" data-code="KeyH" aria-label="Hero">&#x263A;&#xFE0E;<small>hero</small></button>
+      <button type="button" data-code="KeyI" aria-label="Inventory"><img id="t-bag-img" alt=""><small>bag</small></button>
       <button type="button" data-code="KeyM" aria-label="Map">&#x25A6;<small>map</small></button>
-      <button type="button" data-code="KeyQ" aria-label="Quests">!<small>quests</small></button>
+      <button type="button" data-code="KeyQ" aria-label="Quests"><img id="t-quest-img" alt=""><small>quests</small></button>
+      <button type="button" data-code="KeyL" aria-label="Leaderboard"><img id="t-lb-img" alt=""><small>top</small></button>
       <button type="button" data-code="Escape" aria-label="Menu or back">&#x2630;<small>menu</small></button>
       <button type="button" id="t-fs" aria-label="Full screen" hidden>&#x26F6;&#xFE0E;<small>full</small></button>
     </div>
@@ -1003,6 +1004,7 @@
   // hero: smooth chibi art from ChatGPT, facing right; flipped for left. Feet sit on the bottom-centre of his tile.
   // art files are published next to this page in the art/ folder (not embedded), so the game file stays small
   const ART_SRC = {
+    trophy: "data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Cpath d='M18 12H9v5a10 10 0 0 0 10 10M46 12h9v5a10 10 0 0 1-10 10' fill='none' stroke='%23FFE600' stroke-width='4'/%3E%3Cpath d='M18 7h28v14a14 14 0 0 1-28 0z' fill='%23FFE600' stroke='%2310131C' stroke-width='3'/%3E%3Cpath d='M26 13v8' stroke='%23fff8a0' stroke-width='3' stroke-linecap='round'/%3E%3Crect x='28' y='34' width='8' height='9' fill='%23FFE600' stroke='%2310131C' stroke-width='2'/%3E%3Crect x='18' y='43' width='28' height='9' rx='2' fill='%2300E5FF' stroke='%2310131C' stroke-width='3'/%3E%3C/svg%3E",   // leaderboard button (drawn, no file)
     heroSprite:   'art/heroSprite.png',
     heroFull:     'art/heroFull.png',
     mapFog: 'art/mapFog.jpg',   // seamless fog texture for undiscovered zones on the maps
@@ -1096,7 +1098,9 @@
     const newDeals = () => [0, 1, 2].map(() => rollDeal(hero.level, stats.charisma, prices[FOOD]));
     let deals = null;   // rolled below, once prices exist (older saves' deals are replaced)
     let dealsDone = saved.dealsDone ?? 0;   // how many work deals the hero has taken this run
-    let promotion = saved.promotion ?? 0;   // TradeCorp promotions earned (0–3, see PROMOTIONS)
+    let promotion = saved.promotion ?? 0;
+    let kills = saved.kills ?? 0;              // enemies slain this run (leaderboard: Top Slayers)
+    let runCheated = !!saved.cheated;         // the cheat menu was used in this run: it's never sent to the leaderboard   // TradeCorp promotions earned (0–3, see PROMOTIONS)
     let heroName = capName(saved.heroName ?? null);  // the account's name
     let account = null;                     // logged-in Supabase user { id, email }, or null (account screen shows)
     // save slots: 1 = autosave (only the game writes it), 2 and 3 = manual. Online per account, or in this browser when offline.
@@ -1132,6 +1136,7 @@
     function renderBagTile() {
       const el = document.getElementById('inv-btn'), def = bag && itemDef(bag), noBagArt = ready(ART.noBag);
       const pic = def ? ART_SRC[def.art] : noBagArt ? ART_SRC.noBag : ART_SRC.invIcon;
+      const tb = document.getElementById('t-bag-img'); if (tb && tb.getAttribute('src') !== pic) tb.src = pic;   // phone menu: the worn bag, or the crossed-out bag
       el.style.backgroundImage = `url(${pic}), url(${ART_SRC.slot})`;
       el.classList.toggle('no-bag', !def && !noBagArt);   // drawn cross until the empty-bag icon exists
       el.title = def ? `${bag} · ${def.slots} slots · Inventory (I)` : 'No bag · Inventory (I)';
@@ -1303,24 +1308,76 @@
       }];
       }
       if (ui.kind === 'gameover') return [{ left: 'new game', right: '', act() { newGame(); } }];
-      if (ui.kind === 'controls') return CONTROLS.map(([key, what]) => ({ left: key, right: what, act() {} }));
+      if (ui.kind === 'controls') return (phoneView ? PHONE_CONTROLS : CONTROLS).map(([key, what]) => ({ left: key, right: what, act() {} }));
+      if (ui.kind === 'leaderboard') return (LB.rows[LB_TABS[tabOf()].key] || []).map((e, i) => ({ lb: e, rank: i + 1, tab: LB_TABS[tabOf()], left: e.hero_name, right: '', act() { return ''; } }));
       return [];
     }
     function newGame() {
-      Object.assign(stats, START_STATS); dealsDone = 0; promotion = 0; Object.assign(prices, startPrices()); deals = newDeals();
+      clearLbBuffs(); Object.assign(stats, START_STATS); dealsDone = 0; promotion = 0; kills = 0; runCheated = false; Object.assign(prices, startPrices()); deals = newDeals();
       discovered.clear();
       quests.length = 0;
       areaName = '0:0'; spawnAllDrips();
       enterArea('0:0', START.x, START.y, 1, true);
       inventory.length = 0; equipped.length = 0; skills.length = 0; restReadyAt = 0; bag = null; Object.assign(levels, startLevels());
       rootedUntil = 0; floaters.length = 0; Object.assign(CAP_BASE, BASE_CAPS); hero.level = 1; hero.exp = 0; recalcCaps();
-      ui = null; closePanels();
+      ui = null; closePanels(); applyLbBuffs();
+    }
+
+    // ---- leaderboard ----------------------------------------------------------------
+    // Supabase table "leaderboard": one row per account with the best exp / deals / kills it ever reached (the server keeps the
+    // maximum, so overwriting or restarting a save never lowers it). Sent after every save, never from a run that used cheats.
+    // The #1 of each list gets a buff while they hold the spot (checked when the list is loaded: on login, every 3 minutes, on open).
+    const LB_TABS = [{ key: 'exp', name: 'Top Exp', col: 'exp_total', unit: 'exp' }, { key: 'deals', name: 'Top Dealers', col: 'deals', unit: 'deals' },
+                     { key: 'kills', name: 'Top Slayers', col: 'kills', unit: 'slain' }];
+    const LB_BUFFS = { exp: { gain: { charisma: 1, strength: 1 }, speed: 0 }, deals: { gain: { strength: 1 }, speed: 0.1 }, kills: { gain: { charisma: 1 }, speed: 0.1 } };
+    const LB = { rows: { exp: [], deals: [], kills: [] }, state: 'idle', error: '', at: 0 };
+    const lbActive = {};   // buff key → true while applied to stats
+    const lbSpeed = () => Object.keys(LB_BUFFS).reduce((t, k) => t + (lbActive[k] ? LB_BUFFS[k].speed : 0), 0);
+    const buffText = k => [...Object.entries(LB_BUFFS[k].gain).map(([st, n]) => `+${n} ${STAT_SHORT[st] || st}`), ...(LB_BUFFS[k].speed ? [`+${LB_BUFFS[k].speed * 100}% SPD`] : [])].join(' ');
+    const totalExp = () => EXP_NEED.slice(0, hero.level - 1).reduce((a, b) => a + b, 0) + hero.exp;
+    function setLbBuff(k, on) {
+      if (!!lbActive[k] === on) return;
+      for (const [st, n] of Object.entries(LB_BUFFS[k].gain)) stats[st] += on ? n : -n;
+      lbActive[k] = on;
+    }
+    function clearLbBuffs() { for (const k in lbActive) if (lbActive[k]) setLbBuff(k, false); }
+    function applyLbBuffs() {
+      for (const k in LB_BUFFS) setLbBuff(k, !!(account && LB.rows[k][0] && LB.rows[k][0].user_id === account.id));
+      renderStats();
+    }
+    const statsNoBuffs = () => { const s = { ...stats }; for (const k in lbActive) if (lbActive[k]) for (const [st, n] of Object.entries(LB_BUFFS[k].gain)) s[st] -= n; return s; };
+    async function refreshLeaderboard() {
+      if (!sb) { LB.state = 'error'; LB.error = 'offline'; return; }
+      if (!LB.at) LB.state = 'loading';
+      try {
+        const res = await Promise.all(LB_TABS.map(t => sb.from('leaderboard').select('user_id, hero_name, picture, level, exp_total, deals, kills')
+          .gt(t.col, 0).order(t.col, { ascending: false }).order('updated_at', { ascending: true }).limit(5)));
+        const bad = res.find(r => r.error); if (bad) throw bad.error;
+        LB_TABS.forEach((t, i) => LB.rows[t.key] = res[i].data || []);
+        LB.state = 'ready'; LB.at = Date.now(); LB.error = '';
+      } catch (e) {
+        LB.state = 'error'; LB.error = /does not exist|schema cache/.test(e.message || '') ? 'The leaderboard isn’t set up on the server yet.' : (e.message || String(e));
+      }
+      applyLbBuffs();
+    }
+    let lastSubmit = 0;
+    async function submitScore() {
+      if (!sb || !account || !heroName || runCheated) return;
+      lastSubmit = Date.now();
+      const { error } = await sb.rpc('submit_score', { p_name: heroName, p_level: hero.level, p_exp: totalExp(), p_deals: dealsDone, p_kills: kills, p_picture: 'heroPortrait' });
+      if (error) console.warn('leaderboard:', error.message); else refreshLeaderboard();
+    }
+    setInterval(() => { if (account) refreshLeaderboard(); }, 3 * 60 * 1000);
+    function openLeaderboard() {
+      if (locked()) return;
+      openWindow('leaderboard'); ui.tab = 0; refreshLeaderboard();
+      ui.msg = !account ? 'Guests aren’t listed: create an account to compete.' : runCheated ? 'This run used cheats, so it isn’t sent to the leaderboard.' : '';
     }
 
     // ---- saving -------------------------------------------------------------------
     // everything a run needs; drip/fights/timers restart when loaded
     function snapshot() {
-      return { x: player.x, y: player.y, fx: facing.x, fy: facing.y, stats: { ...stats }, deals, prices: { ...prices }, dealsDone, promotion, quests: quests.map(q => ({ ...q })),
+      return { x: player.x, y: player.y, fx: facing.x, fy: facing.y, stats: statsNoBuffs(), deals, prices: { ...prices }, dealsDone, promotion, kills, cheated: runCheated, quests: quests.map(q => ({ ...q })),
                inventory: inventory.map(it => ({ ...it })), equipped: equipped.map(it => ({ ...it })), skills: [...skills],
                areaName, restReadyAt, levels: { ...levels }, manaCap: CAP_BASE.mana, energyCap: CAP_BASE.energy, level: hero.level, exp: hero.exp, strengthLevel: hero.level, bag, discovered: [...discovered], enemies: saveEnemies() };
     }
@@ -1328,9 +1385,9 @@
       Object.assign(CAP_BASE, BASE_CAPS, s.manaCap !== undefined ? { mana: s.manaCap } : {});
       if (s.energyCap !== undefined) CAP_BASE.energy = s.energyCap;   // bought at TradeCorp
       hero.level = Math.min(MAX_LEVEL, s.level || 1); hero.exp = s.exp || 0; recalcCaps();
-      Object.assign(stats, START_STATS, s.stats || {});
+      clearLbBuffs(); Object.assign(stats, START_STATS, s.stats || {});
       if (s.strengthLevel === undefined) stats.strength += levelStrength(hero.level) - levelStrength(1);   // saves from before strength grew with level
-      deals = s.deals && s.deals.every(d => d && d.type) ? s.deals : null; dealsDone = s.dealsDone || 0; promotion = s.promotion || 0;
+      deals = s.deals && s.deals.every(d => d && d.type) ? s.deals : null; dealsDone = s.dealsDone || 0; promotion = s.promotion || 0; kills = s.kills || 0; runCheated = !!s.cheated;
       quests.length = 0; quests.push(...(s.quests || []));
       for (const k in prices) delete prices[k]; for (const k in levels) delete levels[k];
       Object.assign(prices, startPrices(), renameKeys(s.prices)); Object.assign(levels, startLevels(), renameKeys(s.levels));
@@ -1347,7 +1404,7 @@
       enterArea(area, s.x ?? START.x, s.y ?? START.y, s.fx || 1, true);
       facing.x = s.fx ?? 1; facing.y = s.fy ?? 0;
       if (!free(player.x, player.y)) { player.x = START.x; player.y = START.y; fromX = player.x; fromY = player.y; }
-      renderStats();
+      applyLbBuffs(); renderStats();
     }
     // ---- save slots -----------------------------------------------------------------
     // online: one row per (player, slot) in the "saves" table. Offline: localStorage.
@@ -1377,6 +1434,7 @@
       const { error } = await sb.from('saves').upsert({ user_id: account.id, slot: n, hero_name: heroName, state, updated_at: at }, { onConflict: 'user_id,slot' });
       if (error) { console.warn(error); return error.message; }
       slotInfo.slots[n] = { state, at, summary: summarize(state) };
+      submitScore();
       return null;
     }
     // autosave into slot 1: every 2 minutes of play, and when changing area (at most once per 5 s)
@@ -1422,7 +1480,7 @@
 
     // ---- cheat menu (P) — FOR TESTING ONLY, remove before release -----------------------
     function cheatRows() {
-      const row = (left, right, act) => ({ left, right, act() { const m = act(); renderStats(); return m; } });
+      const row = (left, right, act) => ({ left, right, act() { runCheated = true; applyLbBuffs(); const m = act(); renderStats(); return m; } });   // any cheat marks the run
       const give = (name, n) => { const left = addItem(name, n); return left ? `Inventory full: ${n - left} of ${n} ${name} added.` : `Added ${n} ${name}.`; };
       return [
         row('money', '+500$', () => { stats.money += 500; return '+500$.'; }),
@@ -1481,7 +1539,7 @@
       return `Crafted ${r.count} ${r.make}.`;
     }
     const TITLES = { spelltech: 'MutaTech', shop: 'ATB-Market', work: 'TradeCorp', menu: 'Menu', controls: 'Controls', hero: 'Hero', inventory: 'Inventory', gameover: 'Game over', loot: 'Loot · Drip', rest: 'HomeDome', cheat: 'Cheats (testing)', scrap: 'Scrap Dealer',
-                     map: 'Map', settings: 'Settings', sound: 'Sound', restart: 'Restart', throw: 'Throw away', cancelQuest: 'Cancel quest', quests: 'Quests', save: 'Save', load: 'Load game', logout: 'Log out', guest: 'Playing as guest' };
+                     map: 'Map', settings: 'Settings', sound: 'Sound', restart: 'Restart', throw: 'Throw away', cancelQuest: 'Cancel quest', quests: 'Quests', leaderboard: 'Leaderboard', save: 'Save', load: 'Load game', logout: 'Log out', guest: 'Playing as guest' };
     // windows with a paragraph above their options
     const WINDOW_TEXT = {
       restart: 'Are you sure?',
@@ -1492,6 +1550,15 @@
       guest: 'Guests can’t save. Create a free account to keep this run, or log in to continue a saved one.',
       logout: 'Log out? Sure. Leave your hero alone in a neon city crawling with gangs, killer drones, and things lurking in dark alleys. Without you, they’ll be robbed, hunted, and probably found face-down in a puddle under a flickering noodle sign. But hey, I’m sure you have VERY important things to do.',
     };
+    const PHONE_CONTROLS = [   // phones: the short version
+      ['joystick', 'walk · in windows: choose'],
+      ['A', 'attack · open · pick up · confirm'],
+      ['1 2 3', 'cast your spells'],
+      ['tap the hero', 'hero stats and equipment'],
+      ['top buttons', 'bag, quests, top, map, menu'],
+      ['hold an item / quest', 'throw away / cancel'],
+      ['✕', 'close a window'],
+    ];
     const CONTROLS = [
       ['W A S D / arrows', 'move (any keyboard layout)'],
       ['two keys, e.g. W+D', 'move diagonally'],
@@ -1516,6 +1583,8 @@
       ['1 2 3', 'pick a row (window) / cast spell'],
       ['Tab', 'next target (closest first)'],
       ['Q (or the quest icon)', 'active quests'],
+      ['L (or the trophy)', 'leaderboard: Top Exp, Top Dealers, Top Slayers'],
+      ['click the hero', 'hero stats'],
       ['A / D (TradeCorp)', 'switch tab: My Office, Deals, Boss'],
       ['Esc (target selected)', 'deselect target'],
       ['phone: joystick', 'move (in a window: choose)'],
@@ -1526,7 +1595,7 @@
 
     // windows opened from another window remember it: Esc (or "no") goes back there instead of closing everything
     // windows with browser-like tabs (A/D or a click); start: the tab shown when the window opens
-    const WINDOW_TABS = { shop: SHOP_TABS, work: Object.assign([{ key: 'office', name: 'My Office' }, { key: 'deals', name: 'Deals' }, { key: 'boss', name: 'My Boss' }], { start: 1 }) };
+    const WINDOW_TABS = { leaderboard: LB_TABS, shop: SHOP_TABS, work: Object.assign([{ key: 'office', name: 'My Office' }, { key: 'deals', name: 'Deals' }, { key: 'boss', name: 'My Boss' }], { start: 1 }) };
     const tabOf = () => ui.tab ?? (WINDOW_TABS[ui.kind].start || 0);
     function switchShopTab(i) {
       const n = WINDOW_TABS[ui.kind].length; ui.tab = (i + n) % n; ui.cursor = 0; ui.msg = ''; ui.scroll = 0; ui.bossTalk = false;
@@ -1726,8 +1795,8 @@
       const m = itemMenu; if (!m) return;
       const h = m.opts.length * MENU.rowH + 16, x = Math.min(m.x, canvas.width - MENU.w - 8), y = Math.min(m.y, canvas.height - h - 8);
       m.box = { x, y, w: MENU.w, h };
-      ctx.fillStyle = 'rgba(0, 0, 0, 0.95)'; ctx.fillRect(x, y, MENU.w, h);
-      ctx.strokeStyle = '#fff'; ctx.lineWidth = 2; ctx.strokeRect(x + 1, y + 1, MENU.w - 2, h - 2);
+      ctx.fillStyle = 'rgba(0, 0, 0, 0.95)'; rr(x, y, MENU.w, h, 12); ctx.fill();
+      ctx.strokeStyle = '#fff'; ctx.lineWidth = 2; rr(x + 1, y + 1, MENU.w - 2, h - 2, 11); ctx.stroke();
       ctx.font = '22px ' + MONO; ctx.textAlign = 'left'; ctx.textBaseline = 'middle';
       m.opts.forEach((o, i) => {
         const ry = y + 8 + i * MENU.rowH;
@@ -1760,11 +1829,15 @@
     // root: can't move, for a set time. injured: health at or below 10% of max health → walks 40% slower.
     // icon: ART key (a drawn placeholder is used until the art exists); color: placeholder border / symbol
     const STATES = { root: { label: 'rooted', icon: 'statusRooted', color: '#ff2bd6', symbol: '⛓' },
+                     lb_exp: { label: 'Top 1 Exp', icon: 'buffTopExp', color: '#b58cff', symbol: '★' },
+                     lb_deals: { label: 'Top 1 Dealer', icon: 'buffTopDeals', color: '#f5c542', symbol: '$' },
+                     lb_kills: { label: 'Top 1 Slayer', icon: 'buffTopKills', color: '#e5484d', symbol: '⚔' },
                      injured: { label: 'injured', icon: 'statusInjured', color: '#e5484d', symbol: '♥', healthShare: 0.1, speed: 0.6 } };
     const heroStates = () => {
       const s = [];
       if (gameTime < rootedUntil) s.push({ key: 'root', left: (rootedUntil - gameTime) / 1000 });
       if (stats.health > 0 && stats.health <= CAPS.health * STATES.injured.healthShare) s.push({ key: 'injured' });
+      for (const k in LB_BUFFS) if (lbActive[k]) s.push({ key: 'lb_' + k });   // leaderboard Top-1 buffs, while they last
       return s;
     };
     const hasState = key => heroStates().some(s => s.key === key);
@@ -2041,7 +2114,7 @@
       drip.hurtStart = gameTime; drip.aggro = true;
       float(text, color, drip.x + 0.5, drip.y - 0.9);
       if (drip.hp <= 0) {   // nothing is given yet: the loot waits on his puddle
-        drip.dead = true; drip.deadAt = gameTime; drip.hitAt = 0; drip.dot = null; drip.stunUntil = 0;
+        drip.dead = true; drip.deadAt = gameTime; drip.hitAt = 0; drip.dot = null; drip.stunUntil = 0; kills++;
         const T = ET(drip); drip.spray = null;
         drip.respawnAt = gameTime + rand(T.respawnMs[0], T.respawnMs[1]);   // respawn timer starts now
         const L = T.loot, items = [];
@@ -2231,7 +2304,7 @@
     const COMBO_MS = 60;         // short wait so W+D pressed together counts as one diagonal step
     const MOVE_MS = 180;         // time to glide from one tile to the next (steady speed)
     let stepMs = MOVE_MS;        // this step's duration: longer while injured
-    const currentStepMs = () => hasState('injured') ? MOVE_MS / STATES.injured.speed : MOVE_MS;
+    const currentStepMs = () => (hasState('injured') ? MOVE_MS / STATES.injured.speed : MOVE_MS) / (1 + lbSpeed());   // Top-1 buffs: +10% speed each
     let comboTimer = null;
     // glide state: player.x/y is the tile we are on or heading to; from* is where the glide started
     let moving = false, fromX = player.x, fromY = player.y, moveStart = 0;
@@ -2592,7 +2665,7 @@
 
       rowRects = [];
       drawStates();
-      if (!(ui && ui.kind === 'map')) { drawMinimap(rx, ry); if (!phoneView) drawQuestButton(); else questBtn = null; }
+      if (!(ui && ui.kind === 'map')) { drawMinimap(rx, ry); if (!phoneView) { drawQuestButton(); drawLbButton(); } else questBtn = lbBtn = null; }
       drawPanels();
       if (!ui) drawItemMenu();
       if (ui) drawWindow();
@@ -2800,8 +2873,8 @@
     // enemy panel at the top while fighting: portrait, name, health, mana
     function drawFoePanel() {
       const w = 300, h = 80, x = (canvas.width - w) / 2, y = phoneView && canvas.height > canvas.width ? phudBottom() + 12 : 12;
-      ctx.fillStyle = 'rgba(0, 0, 0, 0.75)'; ctx.fillRect(x, y, w, h);
-      ctx.strokeStyle = 'rgba(255, 43, 214, 0.6)'; ctx.lineWidth = 2; ctx.strokeRect(x + 1, y + 1, w - 2, h - 2);
+      ctx.fillStyle = 'rgba(0, 0, 0, 0.75)'; rr(x, y, w, h, 12); ctx.fill();
+      ctx.strokeStyle = 'rgba(255, 43, 214, 0.6)'; ctx.lineWidth = 2; rr(x + 1, y + 1, w - 2, h - 2, 11); ctx.stroke();
       const T = ET(drip), pic = ART[drip.kind === 'scav' ? 'scavPortrait' : 'dripPortrait'];
       if (ready(pic)) { ctx.imageSmoothingQuality = 'high'; ctx.drawImage(pic, x + 8, y + 8, 64, 64); }
       const tx = x + 84, bw = w - 84 - 14;
@@ -3044,6 +3117,22 @@
       ctx.beginPath(); ctx.moveTo(cx - w * 0.28, y + h - 30); ctx.quadraticCurveTo(cx, y + h * 0.42, cx + w * 0.28, y + h - 30); ctx.closePath(); ctx.fill();
       ctx.fillStyle = '#8a8a8a'; ctx.font = '600 20px ' + MONO; ctx.textAlign = 'center'; ctx.textBaseline = 'middle'; ctx.fillText('Your boss', cx, y + h - 16);
     }
+    // one leaderboard place: rank, picture, name, level, the list's stat; #1 also shows its buff
+    function drawLbRow(r, x, y, w, h) {
+      const e = r.lb, me = account && e.user_id === account.id, sz = h - 16, medal = ['#ffd700', '#c0c7d1', '#cd7f32'][r.rank - 1] || '#8a8a8a';
+      if (me) { ctx.fillStyle = 'rgba(0, 229, 255, 0.08)'; ctx.fillRect(x, y, w, h); }
+      ctx.textAlign = 'center'; ctx.textBaseline = 'middle'; ctx.fillStyle = medal; ctx.font = '700 34px ' + MONO; ctx.fillText(String(r.rank), x + 34, y + h / 2);
+      const pic = ART[e.picture] || ART.heroPortrait;
+      ctx.fillStyle = '#1B2233'; ctx.fillRect(x + 64, y + 8, sz, sz);
+      if (ready(pic)) ctx.drawImage(pic, x + 64, y + 8, sz, sz);
+      ctx.strokeStyle = medal; ctx.lineWidth = 2; ctx.strokeRect(x + 65, y + 9, sz - 2, sz - 2);
+      const tx = x + 64 + sz + 18;
+      ctx.textAlign = 'left'; ctx.fillStyle = me ? '#00e5ff' : '#fff'; ctx.font = '600 26px ' + MONO; ctx.fillText(e.hero_name || '?', tx, y + 30);
+      ctx.fillStyle = '#ffe600'; ctx.font = '600 18px ' + MONO; ctx.fillText(`lvl ${e.level}`, tx, y + 62);
+      if (r.rank === 1) { ctx.fillStyle = '#9dff5c'; ctx.font = '16px ' + MONO; ctx.fillText(`#1 bonus: ${buffText(r.tab.key)}`, tx + 90, y + 62); }
+      ctx.textAlign = 'right'; ctx.fillStyle = '#fff'; ctx.font = '700 28px ' + MONO;
+      ctx.fillText(`${Number(e[r.tab.col]).toLocaleString('en')} ${r.tab.unit}`, x + w - 20, y + h / 2);
+    }
     function drawQuestRow(q, x, y, w, h) {
       glyphSlot(x + 12, y + 8, h - 16, 'questIcon', '!', q.rare ? RARITY.rare : '#ffe600');
       ctx.textAlign = 'left'; ctx.textBaseline = 'middle'; ctx.fillStyle = q.rare ? RARITY.rare : '#fff'; ctx.font = '600 24px ' + MONO;
@@ -3053,7 +3142,15 @@
       ctx.textAlign = 'right'; ctx.fillStyle = '#8a8a8a'; ctx.font = '16px ' + MONO; ctx.fillText(q.from || '', x + w - 14, y + 24);
     }
     // quest button under the minimap (click or Q opens the quest list); a badge shows how many quests are active
-    let questBtn = null;
+    let questBtn = null, lbBtn = null;
+    function drawLbButton() {   // desktop: top, left of the minimap
+      const size = 64, x = canvas.width - 20 - MINI.cols * MINI.cw - 26 - size, y = 20;
+      lbBtn = { x, y, w: size, h: size };
+      ctx.save(); ctx.globalAlpha = 0.85;
+      glyphSlot(x, y, size, 'trophy', '♛', '#ffe600');
+      ctx.fillStyle = '#fff'; ctx.font = '600 14px ' + MONO; ctx.textAlign = 'right'; ctx.textBaseline = 'top'; ctx.fillText('L top', x + size, y + size + 6);
+      ctx.restore();
+    }
     function drawQuestButton() {
       const size = 64, x = canvas.width - 20 - size, y = 20 + MINI.rows * MINI.ch + 40;
       questBtn = { x, y, w: size, h: size };
@@ -3100,16 +3197,16 @@
       if (ui.kind === 'gameover') { drawGameOver(); return; }
       const list = rows();
       const info = ui.kind === 'controls';          // read-only list, nothing to select
-      const rowH = info ? 38 : ui.kind === 'shop' || ui.kind === 'work' ? 150 : ui.kind === 'quests' ? 96 : ui.kind === 'loot' || ui.kind === 'scrap' ? 88 : ui.kind === 'cheat' ? 50 : ui.kind === 'spelltech' ? 262 : 64;   // shop and loot rows are taller for the item pictures
+      const rowH = info ? 38 : ui.kind === 'shop' || ui.kind === 'work' ? 150 : ui.kind === 'quests' || ui.kind === 'leaderboard' ? 96 : ui.kind === 'loot' || ui.kind === 'scrap' ? 88 : ui.kind === 'cheat' ? 50 : ui.kind === 'spelltech' ? 262 : 64;   // shop and loot rows are taller for the item pictures
       const hero = ui.kind === 'hero', inv = ui.kind === 'inventory';
-      const wide = hero || inv || ['quests', 'shop', 'scrap', 'save', 'load', 'logout', 'guest', 'sound', 'spelltech'].includes(ui.kind);
+      const wide = hero || inv || ['leaderboard', 'quests', 'shop', 'scrap', 'save', 'load', 'logout', 'guest', 'sound', 'spelltech'].includes(ui.kind);
       const pw = (ui.kind === 'spelltech' || ui.kind === 'shop' || ui.kind === 'work' ? 15 : wide ? 11 : 9) * TILE;
       ctx.font = '26px ' + MONO;
       const wtext = typeof WINDOW_TEXT[ui.kind] === 'function' ? WINDOW_TEXT[ui.kind]() : WINDOW_TEXT[ui.kind];
       const textLines = wtext ? wrapText(wtext, pw - 80) : [];
       const msgLines = ui.msg ? wrapText(ui.msg, pw - 80) : [];
       const tabs = WINDOW_TABS[ui.kind], shop = !!tabs, tabsH = tabs ? 70 : 0;   // tabbed windows: row of tabs under the title, fixed height
-      const listN = ui.kind === 'shop' ? Math.max(...SHOP_TABS.map(t => [...SHOP_ITEMS, ...BAG_ITEMS()].filter(it => it.tab === t.key).length)) : ui.kind === 'work' ? 3 : list.length;
+      const listN = ui.kind === 'shop' ? Math.max(...SHOP_TABS.map(t => [...SHOP_ITEMS, ...BAG_ITEMS()].filter(it => it.tab === t.key).length)) : ui.kind === 'work' ? 3 : ui.kind === 'leaderboard' ? 5 : list.length;
       const textH = (textLines.length ? textLines.length * 34 + 24 : 0) + tabsH, gaps = list.filter(r => r.gapBefore).length * 24;
       const ph = hero || inv ? 7 * TILE : ui.kind === 'rest' ? 5 * TILE
         : Math.min(canvas.height - 20, Math.max(6 * TILE, 110 + textH + listN * rowH + gaps + Math.max(1, msgLines.length) * 32 + 100));
@@ -3117,9 +3214,9 @@
       ctx.fillStyle = 'rgba(0, 0, 0, 0.6)';
       ctx.fillRect(0, 0, canvas.width, canvas.height);
       ctx.fillStyle = '#000';
-      ctx.fillRect(px, py, pw, ph);
+      rr(px, py, pw, ph, UI_R); ctx.fill();
       ctx.strokeStyle = '#fff'; ctx.lineWidth = 2;
-      ctx.strokeRect(px + 1, py + 1, pw - 2, ph - 2);
+      rr(px + 1, py + 1, pw - 2, ph - 2, UI_R - 1); ctx.stroke();
       if (!locked()) drawCloseX(px + pw - 62, py + 14, null);
 
       ctx.textBaseline = 'middle';
@@ -3155,7 +3252,8 @@
           rowRects.push({ x: tx, y: ty, w: tw, h: th, tab: i });
         });
         ctx.textAlign = 'left';
-        if (!list.length) { ctx.fillStyle = '#8a8a8a'; ctx.font = '24px ' + MONO; ctx.fillText('Nothing for sale here yet.', px + 40, top + 40); }
+        if (!list.length) { ctx.fillStyle = '#8a8a8a'; ctx.font = '24px ' + MONO;
+          ctx.fillText(ui.kind !== 'leaderboard' ? 'Nothing for sale here yet.' : LB.state === 'loading' ? 'Loading…' : LB.state === 'error' ? `Can't load the leaderboard: ${LB.error}` : 'Nobody here yet. Be the first!', px + 40, top + 40); }
         if (list.length && list[0].side) drawSideTab(list, px + 24, top, pw - 48, listN * rowH - 8);
       }
       let gapY = 0;
@@ -3168,6 +3266,7 @@
         if (r.shopItem) { drawShopRow(r.shopItem, px + 24, y, pw - 48, rowH - 8, sel); return; }
         if (r.deal) { drawDealRow(r.deal, px + 24, y, pw - 48, rowH - 8, sel); return; }
         if (r.quest) { drawQuestRow(r.quest, px + 24, y, pw - 48, rowH - 8); return; }
+        if (r.lb) { drawLbRow(r, px + 24, y, pw - 48, rowH - 8); return; }
         ctx.fillStyle = r.dim ? '#6a6a6a' : r.item && rarityOf(r.item.name) !== 'common' ? rarityColor(r.item.name) : sel || info ? '#fff' : '#cfcfcf';
         ctx.font = (sel ? '600 ' : '') + (info ? '22px ' : ui.kind === 'cheat' ? '26px ' : '30px ') + MONO;
         ctx.textAlign = 'left';
@@ -3198,7 +3297,7 @@
       }
       ctx.fillStyle = '#8a8a8a';
       ctx.font = '22px ' + MONO;
-      ctx.fillText(hero ? 'H or Esc close' : ui.kind === 'gameover' ? 'Space start a new game' : inv ? 'A/D/W/S choose · Space equip/learn/unequip · I or Esc close' : ui.kind === 'loot' ? 'W/S choose · Space take · Esc close' : ui.kind === 'cheat' ? 'W/S choose · Space apply · P or Esc close' : ui.kind === 'scrap' ? 'W/S choose · Space buy / sell · Esc close' : ui.kind === 'work' ? 'A/D tab · W/S choose · Space accept · Esc close' : shop ? 'A/D tab · W/S choose · Space buy · Esc close' : ui.kind === 'quests' ? (quests.length ? 'W/S choose · Space or right-click cancel · Q/Esc close' : 'Q or Esc close') : ui.kind === 'spelltech' ? 'W/S choose · Space craft · Esc close' : ui.kind === 'rest' ? (restReadyAt > Date.now() ? (ui.back ? 'Esc back' : 'Esc close') : 'Space confirm · Esc close') : info ? (ui.back ? 'Esc back' : 'Esc close') : (ui.back ? 'W/S choose · Space select · Esc back' : 'W/S choose · Space select · Esc close'), px + 40, py + ph - 40);
+      ctx.fillText(hero ? 'H or Esc close' : ui.kind === 'gameover' ? 'Space start a new game' : inv ? 'A/D/W/S choose · Space equip/learn/unequip · I or Esc close' : ui.kind === 'loot' ? 'W/S choose · Space take · Esc close' : ui.kind === 'cheat' ? 'W/S choose · Space apply · P or Esc close' : ui.kind === 'scrap' ? 'W/S choose · Space buy / sell · Esc close' : ui.kind === 'work' ? 'A/D tab · W/S choose · Space accept · Esc close' : ui.kind === 'leaderboard' ? (phoneView ? 'A/D tab · ✕ close' : 'A/D tab · L or Esc close') : shop ? 'A/D tab · W/S choose · Space buy · Esc close' : ui.kind === 'quests' ? (quests.length ? 'W/S choose · Space or right-click cancel · Q/Esc close' : 'Q or Esc close') : ui.kind === 'spelltech' ? 'W/S choose · Space craft · Esc close' : ui.kind === 'rest' ? (restReadyAt > Date.now() ? (ui.back ? 'Esc back' : 'Esc close') : 'Space confirm · Esc close') : info ? (ui.back ? 'Esc back' : 'Esc close') : (ui.back ? 'W/S choose · Space select · Esc back' : 'W/S choose · Space select · Esc close'), px + 40, py + ph - 40);
     }
 
     // ---- game over ------------------------------------------------------------------------
@@ -3355,9 +3454,11 @@
       const near = hx > x - m && hx < x + w + m && hTop < y + h + 30 + m && hBot > y - m;
       miniAlpha += ((near ? 0.05 : phoneView ? 0.6 : 0.3) - miniAlpha) * 0.15;   // smooth fade (brighter on phones: it's small there)
       ctx.save(); ctx.globalAlpha = miniAlpha;
-      ctx.fillStyle = '#000'; ctx.fillRect(x - 6, y - 6, w + 12, h + 12);
-      ctx.strokeStyle = '#fff'; ctx.lineWidth = 2; ctx.strokeRect(x - 5, y - 5, w + 10, h + 10);
+      ctx.fillStyle = '#000'; rr(x - 6, y - 6, w + 12, h + 12, 14); ctx.fill();
+      ctx.save(); rr(x, y, w, h, 10); ctx.clip();   // rounded minimap
       drawMapGrid(x, y, MINI.cw, MINI.ch, aTop, aTop - MINI.rows + 1, bLeft, bLeft + MINI.cols - 1, false);
+      ctx.restore();
+      ctx.strokeStyle = '#fff'; ctx.lineWidth = 2; rr(x - 5, y - 5, w + 10, h + 10, 13); ctx.stroke();
       ctx.fillStyle = '#fff'; ctx.font = (phoneView ? '600 26px ' : '600 14px ') + MONO; ctx.textAlign = 'right'; ctx.textBaseline = 'top';
       ctx.fillText(phoneView ? areaLabel(areaName).toUpperCase() : 'M map', x + w, y + h + 10);   // phones: the area name (no M key there)
       ctx.restore();
@@ -3369,17 +3470,17 @@
       const cw = Math.min(145, (canvas.width - 200) / cols, (canvas.height - 200) / rowsN * 21 / 13), ch = cw * 13 / 21;
       const w = cols * cw, h = rowsN * ch, x = (canvas.width - w) / 2, y = (canvas.height - h) / 2 + 20;
       ctx.fillStyle = 'rgba(0, 0, 0, 0.6)'; ctx.fillRect(0, 0, canvas.width, canvas.height);
-      ctx.fillStyle = '#000'; ctx.fillRect(x - 30, y - 90, w + 60, h + 150);
-      ctx.strokeStyle = '#fff'; ctx.lineWidth = 2; ctx.strokeRect(x - 29, y - 89, w + 58, h + 148);
+      ctx.fillStyle = '#000'; rr(x - 30, y - 90, w + 60, h + 150, UI_R); ctx.fill();
+      ctx.strokeStyle = '#fff'; ctx.lineWidth = 2; rr(x - 29, y - 89, w + 58, h + 148, UI_R - 1); ctx.stroke();
       drawCloseX(x + w + 30 - 62, y - 90 + 12, null);
       ctx.fillStyle = '#fff'; ctx.font = '600 40px ' + MONO; ctx.textAlign = 'left'; ctx.textBaseline = 'middle';
       ctx.fillText('Map', x, y - 50);
       ctx.fillStyle = '#8a8a8a'; ctx.font = '22px ' + MONO; ctx.textAlign = 'right';
       ctx.fillText(`${discovered.size}/${Object.keys(ZONE_LIST).length} zones discovered`, x + w - 60, y - 50);
-      ctx.save(); ctx.beginPath(); ctx.rect(Math.round(x), Math.round(y), Math.round(w), Math.round(h)); ctx.clip();   // nothing spills past the 7 × 7 window
+      ctx.save(); rr(Math.round(x), Math.round(y), Math.round(w), Math.round(h), 12); ctx.clip();   // nothing spills past the 7 × 7 window
       drawMapGrid(x, y, cw, ch, ha + half, ha - half, hb - half, hb + half, true);
       ctx.restore();
-      ctx.strokeStyle = '#fff'; ctx.lineWidth = 2; ctx.strokeRect(Math.round(x) - 1, Math.round(y) - 1, Math.round(w) + 2, Math.round(h) + 2);   // frame around the map, like the window's
+      ctx.strokeStyle = '#fff'; ctx.lineWidth = 2; rr(Math.round(x) - 1, Math.round(y) - 1, Math.round(w) + 2, Math.round(h) + 2, 13); ctx.stroke();   // frame around the map, like the window's
       ctx.fillStyle = '#8a8a8a'; ctx.font = '22px ' + MONO; ctx.textAlign = 'left';
       ctx.fillText('M or Esc close', x, y + h + 34);
     }
@@ -3439,6 +3540,12 @@
       if (panels.inventory) drawInventoryPanel();
     }
     // ✕ in a window's or panel's top-right corner: closes it (panel: that panel only; window: the window and anything behind it)
+    function rr(x, y, w, h, r) {   // rounded-rectangle path (windows, panels, maps)
+      ctx.beginPath();
+      if (ctx.roundRect) { ctx.roundRect(x, y, w, h, r); return; }
+      ctx.moveTo(x + r, y); ctx.arcTo(x + w, y, x + w, y + h, r); ctx.arcTo(x + w, y + h, x, y + h, r); ctx.arcTo(x, y + h, x, y, r); ctx.arcTo(x, y, x + w, y, r); ctx.closePath();
+    }
+    const UI_R = 18;   // corner radius of windows and panels
     function drawCloseX(x, y, panel) {
       const s = 48;
       ctx.save();
@@ -3450,8 +3557,8 @@
       rowRects.push({ x: x - 8, y: y - 8, w: s + 16, h: s + 16, close: panel || 'window' });   // a slightly bigger target for fingers
     }
     function panelFrame(x, y, w, h, title, on) {
-      ctx.fillStyle = 'rgba(0, 0, 0, 0.9)'; ctx.fillRect(x, y, w, h);
-      ctx.strokeStyle = on ? '#fff' : 'rgba(255, 255, 255, 0.35)'; ctx.lineWidth = 2; ctx.strokeRect(x + 1, y + 1, w - 2, h - 2);
+      ctx.fillStyle = 'rgba(0, 0, 0, 0.9)'; rr(x, y, w, h, UI_R); ctx.fill();
+      ctx.strokeStyle = on ? '#fff' : 'rgba(255, 255, 255, 0.35)'; ctx.lineWidth = 2; rr(x + 1, y + 1, w - 2, h - 2, UI_R - 1); ctx.stroke();
       ctx.fillStyle = on ? '#fff' : '#8a8a8a'; ctx.font = '600 28px ' + MONO; ctx.textAlign = 'left'; ctx.textBaseline = 'middle';
       ctx.fillText(title, x + 24, y + 34);
     }
@@ -3661,6 +3768,7 @@
         float('guest run saved', '#3ddc84', player.x + 0.5, player.y - 0.8);
       } else if (latest) { applySave(latest.state); float('welcome back', '#3ddc84', player.x + 0.5, player.y - 0.8); }
       lastAutosave = Date.now();
+      refreshLeaderboard();
     }
     async function logOut() {
       ui = null; closePanels(); cheatsUnlocked = false;
@@ -3701,7 +3809,7 @@
     // keys are read by their physical position (e.code), so WASD, H, I, P and 1-3 work on any keyboard layout
     // (Cyrillic, AZERTY, Greek…). Arrow keys also move, and the number pad works for numbers.
     const CODE_KEYS = { KeyW: 'w', KeyA: 'a', KeyS: 's', KeyD: 'd', ArrowUp: 'w', ArrowLeft: 'a', ArrowDown: 's', ArrowRight: 'd',
-                        KeyH: 'h', KeyI: 'i', KeyP: 'p', KeyM: 'm', KeyQ: 'q' };
+                        KeyH: 'h', KeyI: 'i', KeyP: 'p', KeyM: 'm', KeyQ: 'q', KeyL: 'l' };
     const keyOf = e => CODE_KEYS[e.code] || (/^(Digit|Numpad)[0-9]$/.test(e.code) ? e.code.slice(-1) : (e.key || '').toLowerCase());   // e.key can be missing (e.g. Chrome autofill fires a keydown without it)
     addEventListener('keydown', e => {
       if (naming() || e.metaKey || e.ctrlKey || e.altKey) return;
@@ -3714,6 +3822,7 @@
       if (k === 'm') { e.preventDefault(); if (!e.repeat && !locked()) { if (ui && ui.kind === 'map') closeWindow(); else if (!ui) openWindow('map'); } return; }
       if (k === 'h') { e.preventDefault(); if (!e.repeat && !ui) togglePanel('hero'); return; }
       if (e.key === 'Escape') { e.preventDefault(); if (!e.repeat) escPressed(); return; }
+      if (k === 'l') { e.preventDefault(); if (!e.repeat && !locked()) { if (ui && ui.kind === 'leaderboard') closeWindow(); else if (!ui) openLeaderboard(); } return; }
       if (k === 'q') { e.preventDefault(); if (!e.repeat && !locked()) { if (ui && ui.kind === 'quests') closeWindow(); else if (!ui) openWindow('quests'); } return; }
       if (e.code === 'Tab') { e.preventDefault(); if (!e.repeat && !anyOpen()) cycleTarget(); return; }
       if (ui && /^[1-9]$/.test(k)) { choose(+k - 1); return; }
@@ -3731,6 +3840,10 @@
 
     // tap/click a row in a window to pick it
     canvas.addEventListener('contextmenu', e => e.preventDefault());   // right-click is the game's item menu, not the browser's
+    function tapOnHero(cx, cy) {   // canvas point → is it on the hero's sprite (his tile and the head above it)?
+      const wx = (cx - cam.ox) / cam.z / TILE, wy = (cy - cam.oy) / cam.z / TILE;
+      return wx >= player.x - 0.15 && wx <= player.x + 1.15 && wy >= player.y + 1 - HERO_H && wy <= player.y + 1;
+    }
     // right-click (or a long press on a touch screen): quest → cancel menu, bag item → throw-away menu
     function secondaryAt(cx, cy) {
       if (!anyOpen() || naming()) return;
@@ -3757,6 +3870,8 @@
       const s = Math.min(r.width / canvas.width, r.height / canvas.height);   // object-fit: contain
       const ox = (r.width - canvas.width * s) / 2, oy = (r.height - canvas.height * s) / 2;
       const cx = (e.clientX - r.left - ox) / s, cy = (e.clientY - r.top - oy) / s;
+      if (!ui && !locked() && lbBtn && e.button === 0 && cx >= lbBtn.x && cx <= lbBtn.x + lbBtn.w && cy >= lbBtn.y && cy <= lbBtn.y + lbBtn.h) { openLeaderboard(); return; }
+      if (!ui && !anyOpen() && e.button === 0 && tapOnHero(cx, cy)) { togglePanel('hero'); return; }   // tap / click the hero: stats
       if (!ui && !locked() && questBtn && e.button === 0 && cx >= questBtn.x && cx <= questBtn.x + questBtn.w && cy >= questBtn.y && cy <= questBtn.y + questBtn.h) { openWindow('quests'); return; }
       if (!anyOpen()) return;
       if (itemMenu) {   // menu open: a click on an option picks it, anywhere else closes the menu
@@ -3836,6 +3951,7 @@
       $('ph-nrg').textContent = stats.energy; $('ph-money').textContent = stats.money;
     }
     $('ph-face').style.backgroundImage = `url(${ART_SRC.heroPortrait})`;
+    $('t-quest-img').src = ART_SRC.questIcon; $('t-lb-img').src = ART_SRC.trophy; renderBagTile();
     addEventListener('resize', layoutView); addEventListener('orientationchange', () => setTimeout(layoutView, 150));
     new ResizeObserver(() => { if (!phoneView) touchEl.style.setProperty('--u', canvas.clientHeight / 100 + 'px'); }).observe(canvas);
     [...touchEl.querySelectorAll('button[data-code]'), $('ph-face')].forEach(b => {
