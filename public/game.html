@@ -39,16 +39,44 @@
   .ability { position: relative;
              width: calc(var(--w) / 21); aspect-ratio: 1; box-sizing: border-box; background: center / 100% no-repeat;
              display: grid; place-items: center; padding: 8%; text-align: center; font-size: 0.42em; font-weight: 600; line-height: 1.05; color: #ff2bd6; }   /* learned skill's name until it has art */
-  @media (max-width: 760px) {
+  @media (max-width: 900px) {   /* narrow screens (phones, small tablets): the HUD wraps so it never overflows */
     .hud { display: flex; flex-wrap: wrap; justify-content: space-between; font-size: 16px; gap: 8px 12px; }
     .abilities { order: 3; width: 100%; justify-content: center; }
     .hud-left, .hud-right, .stats, .right-row { gap: 10px; }
     .abilities { gap: 4px; }
     .inv-btn { margin-left: 12px; }
   }
+  /* phone controls: a layer over the map; only the controls themselves catch touches. --u = 1% of the map's height */
+  .touch[hidden] { display: none; }
+  .touch { position: absolute; inset: 0; pointer-events: none; z-index: 2; --u: 2.2px;
+           -webkit-user-select: none; user-select: none; -webkit-touch-callout: none; }
+  .touch button, .t-stick { pointer-events: auto; touch-action: none; -webkit-tap-highlight-color: transparent; }
+  .touch button { font: 700 calc(var(--u) * 7) ui-monospace, "SF Mono", Menlo, Consolas, monospace; color: #fff; padding: 0; cursor: pointer; }
+  .t-stick { position: absolute; left: 3%; bottom: 5%; width: clamp(92px, calc(var(--u) * 40), 170px); aspect-ratio: 1; border-radius: 50%;
+             background: radial-gradient(circle, rgba(0, 229, 255, 0.10) 0 55%, rgba(0, 229, 255, 0.04) 56%);
+             border: 2px solid rgba(0, 229, 255, 0.45); box-sizing: border-box; opacity: 0.7; }
+  .t-knob { position: absolute; left: 50%; top: 50%; width: 42%; aspect-ratio: 1; border-radius: 50%; transform: translate(-50%, -50%);
+            background: rgba(0, 229, 255, 0.35); border: 2px solid #00e5ff; box-sizing: border-box; box-shadow: 0 0 12px rgba(0, 229, 255, 0.5); }
+  .t-stick.on { opacity: 0.95; }
+  .t-btns { position: absolute; right: 3%; bottom: 5%; width: clamp(150px, calc(var(--u) * 62), 250px); aspect-ratio: 1; }
+  .t-act, .t-spell { position: absolute; border-radius: 50%; box-sizing: border-box; opacity: 0.75; }
+  .t-act { right: 0; bottom: 0; width: 50%; aspect-ratio: 1; background: rgba(255, 230, 0, 0.22); border: 3px solid #ffe600; color: #ffe600; font-size: clamp(22px, calc(var(--u) * 11), 40px); }
+  .t-spell { width: 28%; aspect-ratio: 1; background: rgba(155, 92, 255, 0.22); border: 2px solid #b58cff; color: #e0ccff; font-size: clamp(14px, calc(var(--u) * 6), 22px); }
+  .t-spell.s1 { right: 58%; bottom: 0; } .t-spell.s2 { right: 52%; bottom: 40%; } .t-spell.s3 { right: 11%; bottom: 58%; }
+  .touch button:active, .touch button.on { opacity: 1; filter: brightness(1.4); }
+  .t-menu { position: absolute; left: 1.5%; top: 2%; display: flex; gap: clamp(4px, var(--u), 8px); }
+  .t-menu button { width: clamp(36px, calc(var(--u) * 13), 56px); aspect-ratio: 1; display: grid; place-items: center; align-content: center; gap: 0;
+                   background: rgba(5, 7, 12, 0.7); border: 1px solid rgba(255, 255, 255, 0.35); border-radius: 8px; opacity: 0.8;
+                   font-size: clamp(15px, calc(var(--u) * 5.5), 24px); line-height: 1; }
+  .t-menu small { font-size: clamp(8px, calc(var(--u) * 2.4), 11px); font-weight: 600; color: #8a8a8a; margin-top: 2px; }
+  .touch.busy .t-spell { display: none; }   /* a window or panel is open: spells can't be cast anyway */
+  .touch.inv .t-btns { bottom: 33%; }        /* inventory open: lift the buttons above it */
+  .touch.hero .t-stick { bottom: auto; top: 16%; left: auto; right: 3%; }   /* hero panel open (left): stick moves out of its way */
+  .touch.hero.inv .t-stick { top: 16%; right: auto; left: 60%; }
+  canvas { -webkit-touch-callout: none; -webkit-user-select: none; }
   /* naming screen, shown over the grid at the start of a game */
   .naming[hidden] { display: none; }
-  .naming { position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; background: rgba(0, 0, 0, 0.6); }
+  .naming { position: absolute; inset: 0; z-index: 5; display: flex; align-items: center; justify-content: center; background: rgba(0, 0, 0, 0.6); }
   .naming-box { background: #000; border: 2px solid var(--grid); padding: 28px 32px; display: grid; gap: 16px; max-width: calc(100% - 32px); box-sizing: border-box; }
   .naming-box h2 { margin: 0; font-size: 28px; }
   .naming-box input { font: 600 28px ui-monospace, "SF Mono", Menlo, Consolas, monospace; color: var(--grid); background: transparent;
@@ -64,6 +92,60 @@
   .naming-box button { font: 600 20px ui-monospace, "SF Mono", Menlo, Consolas, monospace; color: #000; background: var(--grid); border: 0; padding: 10px 16px; cursor: pointer; justify-self: start; }
   .naming-box button:focus-visible { outline: 2px solid #ffdc00; outline-offset: 2px; }
   .naming-box a { color: #00e5ff; }
+  /* account screen: covers the whole window (not just the map), the boss on the left, the form on the right.
+     Scrolls if the screen is too small; on narrow screens the boss sits in a short strip above the form. */
+  .account[hidden] { display: none; }
+  .account { position: fixed; inset: 0; z-index: 20; overflow-y: auto; -webkit-overflow-scrolling: touch;
+             display: flex; align-items: center; justify-content: center; padding: 16px; box-sizing: border-box;
+             background: radial-gradient(120% 90% at 20% 10%, #1b2233 0%, #07090f 55%, #000 100%); user-select: text; -webkit-user-select: text; }
+  .acc-card { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1.05fr); width: min(940px, 100%); margin: auto;
+              background: #05070c; border: 2px solid #3a4257; box-shadow: 0 0 0 1px #000, 0 0 40px rgba(0, 229, 255, 0.12); }
+  .acc-art { position: relative; min-height: 420px; overflow: hidden; border-right: 2px solid #3a4257;
+             background: linear-gradient(180deg, #0b0d14 0%, #111a2c 70%, #1b2233 100%); }
+  .acc-art::before { content: ''; position: absolute; inset: 0; background: repeating-linear-gradient(0deg, rgba(0, 229, 255, 0.05) 0 1px, transparent 1px 6px); }
+  .acc-art img { position: absolute; left: 50%; bottom: 0; transform: translateX(-50%); height: 78%; max-width: 100%; object-fit: contain; object-position: bottom; }
+  .acc-bubble { position: absolute; top: 16px; left: 16px; right: 16px; z-index: 1; display: grid; gap: 4px; padding: 10px 14px;
+                background: rgba(5, 7, 12, 0.88); border: 2px solid #ff2bd6; font-size: 15px; line-height: 1.35; color: #f2f2f2; }
+  .acc-bubble b { color: #ff2bd6; font-size: 13px; letter-spacing: 0.08em; text-transform: uppercase; }
+  .acc-form { display: grid; gap: 14px; align-content: center; padding: 32px 36px; min-width: 0; }
+  .acc-form > * { margin: 0; min-width: 0; }
+  .acc-kicker { color: #00e5ff; font-size: 13px; letter-spacing: 0.14em; text-transform: uppercase; }
+  .acc-form h2 { font-size: 30px; line-height: 1.1; }
+  .acc-form label { display: grid; gap: 6px; color: var(--muted); font-size: 15px; }
+  .acc-form input { font: 600 18px ui-monospace, "SF Mono", Menlo, Consolas, monospace; color: var(--grid); width: 100%; box-sizing: border-box;
+                    background: #0b0d14; border: 1px solid #3a4257; padding: 10px 12px; outline: none; }
+  .acc-form input:focus-visible { border-color: #ffdc00; box-shadow: 0 0 0 1px #ffdc00; }
+  .acc-form [hidden] { display: none; }
+  .acc-form p { color: var(--muted); font-size: 14px; line-height: 1.45; overflow-wrap: anywhere; }
+  .acc-form .err { color: #e5484d; min-height: 1.45em; }
+  .acc-form .err:empty { min-height: 0; }
+  .acc-form .err.ok { color: #3ddc84; }
+  .acc-form button { font: 600 18px ui-monospace, "SF Mono", Menlo, Consolas, monospace; color: #000; background: #00e5ff; border: 0; padding: 12px 18px; cursor: pointer; width: 100%; }
+  .acc-form button:hover { background: #7ff2ff; }
+  .acc-form button:disabled { opacity: 0.5; cursor: default; }
+  .acc-form button:focus-visible { outline: 2px solid #ffdc00; outline-offset: 2px; }
+  .acc-form a { color: #00e5ff; }
+  .acc-links { display: grid; gap: 8px; }
+  .acc-links p { margin: 0; }
+  @media (max-width: 720px) {   /* phone portrait: boss strip on top, form below */
+    .account { align-items: flex-start; padding: 12px; }
+    .acc-card { grid-template-columns: 1fr; }
+    .acc-art { min-height: 0; height: 190px; border-right: 0; border-bottom: 2px solid #3a4257;
+               display: flex; align-items: center; gap: 10px; padding: 0 0 0 12px; box-sizing: border-box; }
+    .acc-art img { position: static; transform: none; flex: none; height: 100%; width: auto; max-width: 52%; align-self: flex-end; }
+    .acc-bubble { position: relative; inset: auto; flex: 1; min-width: 0; font-size: 13px; }
+    .acc-form { padding: 20px 18px 24px; gap: 12px; }
+    .acc-form h2 { font-size: 24px; }
+    .acc-form input { font-size: 16px; }   /* 16px+ stops phones from zooming into the field */
+  }
+  @media (max-height: 520px) and (min-width: 721px) {   /* phone landscape: shorter card, the page scrolls if needed */
+    .account { align-items: flex-start; }
+    .acc-art { min-height: 0; }
+    .acc-art img { top: 96px; bottom: auto; height: calc(100vh - 130px); object-position: top; }
+    .acc-kicker, #acc-hint { display: none; }
+    .acc-form { padding: 18px 24px; gap: 10px; }
+    .acc-form h2 { font-size: 22px; }
+  }
   .portrait { width: calc(var(--w) / 21); aspect-ratio: 1; background: #1B2233 center / cover no-repeat; flex: none; }   /* same size as a grid tile; placeholder for the hero's picture */
   .hero-col { display: grid; gap: 2px; }
   .hero-name { font-size: 0.7em; font-weight: 600; color: var(--grid); line-height: 1.1; }
@@ -85,21 +167,47 @@
 </style>
 
 </head><body><div id="stage"><canvas id="c" width="1680" height="1040" aria-label="Game grid, 21 by 13 tiles"></canvas>
+  <!-- phone controls over the map (touch screens; Settings → touch controls): joystick, action + spells, menu row -->
+  <div class="touch" id="touch" hidden>
+    <div class="t-menu">
+      <button type="button" data-code="KeyI" aria-label="Inventory">&#x1F392;&#xFE0E;<small>bag</small></button>
+      <button type="button" data-code="KeyH" aria-label="Hero">&#x263A;&#xFE0E;<small>hero</small></button>
+      <button type="button" data-code="KeyM" aria-label="Map">&#x25A6;<small>map</small></button>
+      <button type="button" data-code="KeyQ" aria-label="Quests">!<small>quests</small></button>
+      <button type="button" data-code="Escape" aria-label="Menu or back">&#x2630;<small>menu</small></button>
+    </div>
+    <div class="t-stick" id="t-stick" aria-label="Move"><div class="t-knob" id="t-knob"></div></div>
+    <div class="t-btns">
+      <button type="button" class="t-spell s1" data-code="Digit1" aria-label="Spell 1">1</button>
+      <button type="button" class="t-spell s2" data-code="Digit2" aria-label="Spell 2">2</button>
+      <button type="button" class="t-spell s3" data-code="Digit3" aria-label="Spell 3">3</button>
+      <button type="button" class="t-act" data-code="Space" aria-label="Action">A</button>
+    </div>
+  </div>
   <!-- account screen at the start: create an account (name, email, password) or log in. Accounts live in Supabase;
        a new account must be confirmed through the link Supabase emails before it can log in. -->
-  <div class="naming" id="account" hidden>
-    <form class="naming-box form" id="acc-form" role="dialog" aria-labelledby="acc-title" novalidate>
+  <div class="account" id="account" hidden>
+    <div class="acc-card">
+    <div class="acc-art" aria-hidden="true">
+      <div class="acc-bubble"><b>Your boss</b><span>TradeCorp is hiring. Sign in and get to work.</span></div>
+      <img src="art/boss.png" alt="" onerror="this.remove()">
+    </div>
+    <form class="acc-form" id="acc-form" role="dialog" aria-labelledby="acc-title" novalidate>
+      <p class="acc-kicker">Little Game</p>
       <h2 id="acc-title">Create account</h2>
       <label id="acc-name-row">Hero name <input id="acc-name" maxlength="10" autocomplete="username" spellcheck="false"></label>
       <label>Email <input id="acc-email" type="email" autocomplete="email" spellcheck="false"></label>
       <label>Password <input id="acc-pass" type="password" autocomplete="new-password"></label>
       <p class="err" id="acc-err" role="alert"></p>
       <button type="submit" id="acc-submit">Create account</button>
-      <p id="acc-resend-row" hidden><a href="#" id="acc-resend">Resend the confirmation email</a></p>
-      <p><a href="#" id="acc-switch">Already have an account? Log in</a></p>
-      <p><a href="#" id="acc-guest">Play as guest (no saving)</a></p>
+      <div class="acc-links">
+        <p id="acc-resend-row" hidden><a href="#" id="acc-resend">Resend the confirmation email</a></p>
+        <p><a href="#" id="acc-switch">Already have an account? Log in</a></p>
+        <p><a href="#" id="acc-guest">Play as guest (no saving)</a></p>
+      </div>
       <p id="acc-hint">Name: letters only, up to 10 · password: 6+ characters. You'll get an email to confirm it's yours.</p>
     </form>
+    </div>
   </div>
   <!-- cheat password prompt (P) -->
   <div class="naming" id="cheat-lock" hidden>
@@ -166,7 +274,7 @@
   // Music starts only when the player enters the game; browsers also need a key press or tap before any sound.
   const MUSIC_SRC = 'audio/background_music.m4a';
   const SETTINGS_KEY = 'littlegame.settings';
-  const settings = Object.assign({ music: 2, sfx: 2 }, store.get(SETTINGS_KEY) || {});   // 0-5 steps of 20%, per device
+  const settings = Object.assign({ music: 2, sfx: 2, touch: 'auto' }, store.get(SETTINGS_KEY) || {});   // volumes: 0-5 steps of 20%; touch: auto / on / off. Per device
   const volumeBar = n => '[' + '='.repeat(n) + '\u00b7'.repeat(5 - n) + '] ' + String(n * 20).padStart(3) + '%';
   const audio = { ctx: null, music: null, sfx: null, buffer: null, loading: null, source: null, wanted: false, el: null };
   function audioCtx() {
@@ -191,7 +299,7 @@
   function stepVolume(which, d, wrap = true) {
     let n = settings[which] + d;
     n = wrap ? (n + 6) % 6 : Math.max(0, Math.min(5, n));   // Space / tap: 0-20-…-100-0; A/D stop at the ends
-    settings[which] = n; store.set(SETTINGS_KEY, { music: settings.music, sfx: settings.sfx });
+    settings[which] = n; store.set(SETTINGS_KEY, { ...settings });
     applyVolumes();
     if (which === 'music' && n > 0) startMusic();
   }
@@ -764,6 +872,12 @@
   AREAS['1:2'].walls = [
     { x: 11, y: 4, w: 3, h: 2, color: '#3a4257', art: 'ruinNoodleBar', artW: 3.6 },   // burned-out noodle bar (decorative ruin), top middle
   ];
+  // slums 6:3: a long street block (abandoned shops, vending machines, apartments), columns 2–11, rows 3–5, turned slightly right
+  AREAS['6:3'].walls = [
+    { x: 6, y: 5, w: 10, h: 3, color: '#3a4257', art: 'streetBlock', artW: 10 },   // even width: x is the tile right of the centre line
+  ];
+  AREAS['6:3'].drips = 0;   // its 2 Drips stand clear of the street block (the default spawn 8/5 is inside it)
+  for (const sp of [{ x: 6, y: 10 }, { x: 15, y: 6 }]) AREAS['6:3'].foes.push({ kind: 'drip', spawn: sp });
   const AREA_ALIAS = { city: '0:0', slums: '0:1' };   // area names used by older saves
   const areaLabel = id => `${AREAS[id].name} ${id}`;
   let areaName = '0:0';   // current zone id
@@ -847,7 +961,8 @@
     shop:         'art/shop.png',   // shop building (mirrored: awning on the right)
     work:         'art/work.png',   // work building, 3 x 2 tile footprint
     invIcon:      'art/invIcon.png',   // BackBag picture (the bag tile in the bar)
-    noBag: 'art/noBag.png', bagX: 'art/bagX.png',   // empty bag tile (crossed-out bag) and BackBag X
+    noBag: 'art/noBag.png', bagX: 'art/bagX.png', streetBlock: 'art/streetBlock.webp',   // street block: slums 6:3
+      // empty bag tile (crossed-out bag) and BackBag X
     officePC: 'art/officePC.png', boss: 'art/boss.png', questIcon: 'art/questIcon.png', dealCall: 'art/dealCall.png', dealDelivery: 'art/dealDelivery.png',   // TradeCorp + quests (drawn placeholders until the art exists)
     slot:         'art/slot.png',   // slot frame: inventory, equipment, abilities, inventory button
     bananaSword:  'art/bananaSword.png',   // item icon
@@ -1064,6 +1179,9 @@
       if (ui.kind === 'settings') return [
         { left: 'sound', right: '', act() { openWindow('sound', 0, fromHere()); } },
         { left: 'controls', right: '', act() { openWindow('controls', 0, fromHere()); } },
+        { left: 'touch controls', right: settings.touch === 'auto' ? `auto (${touchOn() ? 'on' : 'off'})` : settings.touch, act() {
+          settings.touch = { auto: 'on', on: 'off', off: 'auto' }[settings.touch] || 'auto'; store.set(SETTINGS_KEY, { ...settings }); updateTouch();
+          return `Touch controls: ${settings.touch}${settings.touch === 'auto' ? ' (shown on touch screens)' : ''}.`; } },
       ];
       if (ui.kind === 'sound') return [
         { left: 'background music', right: volumeBar(settings.music), vol: 'music', act() { stepVolume('music', 1); } },
@@ -1345,6 +1463,10 @@
       ['Q (or the quest icon)', 'active quests'],
       ['A / D (TradeCorp)', 'switch tab: My Office, Deals, Boss'],
       ['Esc (target selected)', 'deselect target'],
+      ['phone: joystick', 'move (in a window: choose)'],
+      ['phone: A · 1 2 3', 'Space (act / confirm) · spells'],
+      ['phone: top-left row', 'bag, hero, map, quests, menu / back'],
+      ['phone: hold', 'item or quest: throw away / cancel menu'],
     ];
 
     // windows opened from another window remember it: Esc (or "no") goes back there instead of closing everything
@@ -3364,7 +3486,7 @@
       accMode = mode; accMsg(''); $('acc-resend-row').hidden = true;
       $('acc-title').textContent = mode === 'create' ? 'Create account' : 'Log in';
       $('acc-submit').textContent = mode === 'create' ? 'Create account' : 'Log in';
-      $('acc-name-row').hidden = mode !== 'create';
+      $('acc-name-row').hidden = mode !== 'create'; $('acc-hint').hidden = mode !== 'create';
       $('acc-pass').autocomplete = mode === 'create' ? 'new-password' : 'current-password';
       $('acc-switch').textContent = mode === 'create' ? 'Already have an account? Log in' : 'New here? Create an account';
     }
@@ -3523,6 +3645,26 @@
 
     // tap/click a row in a window to pick it
     canvas.addEventListener('contextmenu', e => e.preventDefault());   // right-click is the game's item menu, not the browser's
+    // right-click (or a long press on a touch screen): quest → cancel menu, bag item → throw-away menu
+    function secondaryAt(cx, cy) {
+      if (!anyOpen() || naming()) return;
+      if (ui && ui.kind === 'quests') {
+        const row = rowRects.find(b => !b.panel && cx >= b.x && cx <= b.x + b.w && cy >= b.y && cy <= b.y + b.h);
+        if (row && quests[row.i]) openQuestMenu(row.i, cx, cy);
+        return;
+      }
+      const slot = !ui && panels.inventory && rowRects.find(b => b.panel === 'inventory' && cx >= b.x && cx <= b.x + b.w && cy >= b.y && cy <= b.y + b.h);
+      if (slot && inventory[slot.i]) { focus = 'inventory'; panels.inventory.cursor = slot.i; panels.inventory.msg = ''; openItemMenu(slot.i, cx, cy); }
+    }
+    let longPress = null;   // { id, x, y, timer }: finger held still for 0.5 s on the map
+    function armLongPress(e, cx, cy) {
+      clearTimeout(longPress?.timer);
+      longPress = { id: e.pointerId, x: e.clientX, y: e.clientY,
+                    timer: setTimeout(() => { longPress = null; secondaryAt(cx, cy); navigator.vibrate?.(15); }, 500) };
+    }
+    const endLongPress = e => { if (longPress && longPress.id === e.pointerId) { clearTimeout(longPress.timer); longPress = null; } };
+    canvas.addEventListener('pointerup', endLongPress); canvas.addEventListener('pointercancel', endLongPress);
+    canvas.addEventListener('pointermove', e => { if (longPress && longPress.id === e.pointerId && Math.hypot(e.clientX - longPress.x, e.clientY - longPress.y) > 12) endLongPress(e); });
     canvas.addEventListener('pointerdown', e => {
       if (naming()) return;
       const r = canvas.getBoundingClientRect();
@@ -3538,22 +3680,77 @@
         return;
       }
       if (ui && ui.bossTalk) { ui.bossTalk = false; return; }   // a click closes the boss's message
-      if (e.button === 2 && ui && ui.kind === 'quests') {   // right-click a quest: cancel menu
-        const row = rowRects.find(b => !b.panel && cx >= b.x && cx <= b.x + b.w && cy >= b.y && cy <= b.y + b.h);
-        if (row && quests[row.i]) openQuestMenu(row.i, cx, cy);
-        return;
-      }
-      if (e.button === 2) {   // right-click an item in the bag: throw-away menu
-        const slot = !ui && rowRects.find(b => b.panel === 'inventory' && cx >= b.x && cx <= b.x + b.w && cy >= b.y && cy <= b.y + b.h);
-        if (slot && inventory[slot.i]) { focus = 'inventory'; panels.inventory.cursor = slot.i; panels.inventory.msg = ''; openItemMenu(slot.i, cx, cy); }
-        return;
-      }
+      if (e.button === 2) { secondaryAt(cx, cy); return; }
+      if (e.pointerType && e.pointerType !== 'mouse') armLongPress(e, cx, cy);   // touch: holding a finger = right-click
       const hit = rowRects.find(b => (!ui || !b.panel) && cx >= b.x && cx <= b.x + b.w && cy >= b.y && cy <= b.y + b.h);
       if (hit && hit.panel) { focus = hit.panel; panels[hit.panel].cursor = hit.i; panels[hit.panel].msg = ''; }   // click a panel slot: focus + select
       else if (hit && hit.tab !== undefined) switchShopTab(hit.tab);
       else if (hit && ui && WINDOW_TABS[ui.kind] && hit.i !== ui.cursor) { ui.cursor = hit.i; ui.msg = ''; }   // shop: first click selects, a click on the selected item buys
       else if (hit) choose(hit.i);
     });
+
+    // ---- phone controls ------------------------------------------------------------
+    // Every button sends the same key event the keyboard would (Space, 1-3, I, H, M, Q, Esc), so all key logic is shared.
+    // The joystick holds W/A/S/D (8 directions) like held keys; inside windows it repeats them to move the highlight.
+    const touchEl = $('touch'), stickEl = $('t-stick'), knobEl = $('t-knob');
+    const touchOn = () => settings.touch === 'on' || (settings.touch === 'auto' && (matchMedia('(pointer: coarse)').matches || navigator.maxTouchPoints > 1 && !matchMedia('(pointer: fine)').matches));
+    const sendKey = (code, type = 'keydown', repeat = false) => {
+      const key = { Space: ' ', Escape: 'Escape' }[code] || code.replace(/^(Key|Digit)/, '').toLowerCase();
+      dispatchEvent(new KeyboardEvent(type, { code, key, repeat, bubbles: true, cancelable: true }));
+    };
+    function updateTouch() {
+      touchEl.hidden = !touchOn();
+      const sizeU = () => touchEl.style.setProperty('--u', (touchEl.clientHeight || canvas.clientHeight) / 100 + 'px');
+      sizeU();
+    }
+    new ResizeObserver(() => touchEl.style.setProperty('--u', canvas.clientHeight / 100 + 'px')).observe(canvas);
+    touchEl.querySelectorAll('button[data-code]').forEach(b => {
+      b.addEventListener('pointerdown', e => { e.preventDefault(); b.classList.add('on'); sendKey(b.dataset.code); });
+      const up = () => { b.classList.remove('on'); sendKey(b.dataset.code, 'keyup'); };
+      b.addEventListener('pointerup', up); b.addEventListener('pointercancel', up); b.addEventListener('pointerleave', up);
+      b.addEventListener('contextmenu', e => e.preventDefault());
+    });
+    let stick = null, stickKeys = [], stickRepeat = null;   // stick: { id, cx, cy, r } while a finger is on it
+    const STICK_CODE = { w: 'KeyW', a: 'KeyA', s: 'KeyS', d: 'KeyD' };
+    function setStickKeys(keys) {
+      for (const k of stickKeys) if (!keys.includes(k)) sendKey(STICK_CODE[k], 'keyup');
+      for (const k of keys) if (!stickKeys.includes(k)) sendKey(STICK_CODE[k]);
+      const changed = keys.join() !== stickKeys.join(); stickKeys = keys;
+      if (changed) {   // windows: hold to keep moving the highlight (first repeat after 0.35 s, then every 0.15 s)
+        clearTimeout(stickRepeat); clearInterval(stickRepeat);
+        if (keys.length) stickRepeat = setTimeout(() => { stickRepeat = setInterval(() => { if (anyOpen()) stickKeys.forEach(k => sendKey(STICK_CODE[k], 'keydown', true)); }, 150); }, 350);
+      }
+    }
+    function moveStick(e) {
+      const dx = e.clientX - stick.cx, dy = e.clientY - stick.cy, len = Math.hypot(dx, dy), max = stick.r * 0.6;
+      const k = len > max ? max / len : 1;
+      knobEl.style.transform = `translate(calc(-50% + ${dx * k}px), calc(-50% + ${dy * k}px))`;
+      if (len < stick.r * 0.28) return setStickKeys([]);   // dead zone
+      const a = Math.atan2(dy, dx), sector = Math.round(a / (Math.PI / 4));   // 8 directions, 45° each
+      const dirs = { 0: 'd', 1: 'sd', 2: 's', 3: 'as', 4: 'a', '-4': 'a', '-3': 'aw', '-2': 'w', '-1': 'dw' };
+      setStickKeys([...(dirs[sector] || '')].sort());
+    }
+    const endStick = e => {
+      if (!stick || e.pointerId !== stick.id) return;
+      stick = null; stickEl.classList.remove('on'); knobEl.style.transform = ''; setStickKeys([]);
+    };
+    stickEl.addEventListener('pointerdown', e => {
+      e.preventDefault(); stickEl.setPointerCapture(e.pointerId);
+      const r = stickEl.getBoundingClientRect();
+      stick = { id: e.pointerId, cx: r.left + r.width / 2, cy: r.top + r.height / 2, r: r.width / 2 };
+      stickEl.classList.add('on'); moveStick(e);
+    });
+    stickEl.addEventListener('pointermove', e => { if (stick && e.pointerId === stick.id) moveStick(e); });
+    stickEl.addEventListener('pointerup', endStick); stickEl.addEventListener('pointercancel', endStick);
+    stickEl.addEventListener('lostpointercapture', endStick);
+    // HUD spell tiles can be tapped too
+    document.querySelectorAll('.ability').forEach((el, i) => el.addEventListener('click', () => { if (!naming() && !anyOpen()) castSpell(i); }));
+    matchMedia('(pointer: coarse)').addEventListener?.('change', updateTouch);
+    updateTouch();
+    setInterval(() => {   // controls step aside for open panels
+      if (touchEl.hidden) return;
+      touchEl.classList.toggle('busy', anyOpen()); touchEl.classList.toggle('inv', !!panels.inventory && !ui); touchEl.classList.toggle('hero', !!panels.hero && !ui);
+    }, 150);
 
     spawnAllDrips();   // start of the game: every enemy in the world is spawned
     requestAnimationFrame(frame);
