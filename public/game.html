@@ -1,9 +1,4 @@
-<!doctype html>
-<html lang="en">
-<head>
-<meta charset="utf-8">
-<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-<title>Little Game</title>
+<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover"><title>Little Game</title>
 <style>
   :root { color-scheme: dark; --bg: #000; --grid: #fff; --player: #808080; --muted: #8a8a8a;
           /* on-screen width of the grid; one tile is --w / 21 */
@@ -36,6 +31,9 @@
              background: transparent; color: var(--grid); border: 2px solid var(--grid); font: 1.3em/1 ui-monospace, monospace; cursor: pointer; }
   .inv-btn { background: center / 62% no-repeat, center / 100% no-repeat; border: 0; }
   .inv-btn:hover { background-color: rgba(255, 255, 255, 0.08); }
+  .inv-btn { position: relative; }
+  .inv-btn.no-bag { opacity: 0.45; }
+  .inv-btn.no-bag::after { content: '\2715'; position: absolute; inset: 0; display: grid; place-items: center; color: #e5484d; font: 700 1.6em/1 ui-monospace, monospace; }
   .inv-btn:focus-visible { outline: 2px solid #ffdc00; outline-offset: 2px; }
   .ability[data-key]:not([data-key=""])::after { content: attr(data-key); position: absolute; right: 8%; bottom: 4%; font-size: 1.4em; color: #fff; text-shadow: 0 0 3px #000, 0 0 3px #000; }
   .ability { position: relative;
@@ -86,9 +84,7 @@
   .stat.gold i { color: #f5c542; }
 </style>
 
-</head>
-<body>
-<div id="stage"><canvas id="c" width="1680" height="1040" aria-label="Game grid, 21 by 13 tiles"></canvas>
+</head><body><div id="stage"><canvas id="c" width="1680" height="1040" aria-label="Game grid, 21 by 13 tiles"></canvas>
   <!-- account screen at the start: create an account (name, email, password) or log in. Accounts live in Supabase;
        a new account must be confirmed through the link Supabase emails before it can log in. -->
   <div class="naming" id="account" hidden>
@@ -300,7 +296,7 @@
   // in the shop, starting at lvl 0) and raises that patch's price by 15%, rounded up.
   // Food: never rises on purchase; instead it inflates by FOOD_INFLATION after every work shift (shown rounded up).
   const SHOP_ITEMS = [
-    { name: 'Cheap noodles', tab: 'food', price: 1,   gain: { energy: 10, health: 1 }, art: 'food', rarity: 'common',
+    { name: 'Cheap noodles', tab: 'food', class: 'food', stack: 16, price: 1,   gain: { energy: 10, health: 1 }, art: 'food', rarity: 'common',
       desc: 'A steaming bowl of street noodles. Refills energy and patches you up a little. Gets pricier with every work shift.' },
     { name: 'Smile',   tab: 'patches', class: 'patch', price: 30,  gain: { charisma: 1 }, patch: true, art: 'smilePatch', rarity: 'common',
       desc: 'Cheap social firmware. Every install makes you a little more likeable. +15% price per install.' },
@@ -310,7 +306,7 @@
       desc: 'A premium personality overlay. The biggest charisma boost per install. +15% price per install.' },
     // class 'equipment': goes to the inventory, gives its bonus only once equipped (I → A/D → Space).
     // kind: only one item per kind (e.g. one sword), counting inventory and equipped items. Bought once.
-    { name: 'Banana sword', tab: 'weapons', meleeArea: 1.2, price: 400, gain: { strength: 4, charisma: 1 }, attackMs: -100, class: 'equipment', kind: 'sword', art: 'bananaSword', rarity: 'common',   // attackMs: swings 0.1 s faster
+    { name: 'Banana sword', tab: 'weapons', buyLevel: 2, meleeArea: 1.2, price: 400, gain: { strength: 4, charisma: 1 }, attackMs: -100, class: 'equipment', kind: 'sword', art: 'bananaSword', rarity: 'common',   // attackMs: swings 0.1 s faster
       desc: 'A curved yellow blade that hits hard and swings fast. Goes to your inventory: equip it there. One sword at a time.' },
   ];
   // items that are never sold, only looted
@@ -325,6 +321,12 @@
     { name: 'Tar Orb',    class: 'upgrade',  stack: 16, gain: {}, value: 60, rarity: 'rare', art: 'tarOrb',   // crafted at MutaTech; Space in the inventory consumes one: +1 mana cap
       desc: 'A magic orb that fuses magic power and body', consume: { manaCap: 1 } },
     { name: 'AI chip',    class: 'resource', stack: 32, gain: {}, value: 24, rarity: 'rare', art: 'aiChip' },
+    // bags: class 'bag', worn in the bag slot (the backpack tile in the bar); slots = inventory size while worn.
+    // Sold in the ATB-Market (Other tab). A bag can only be swapped when the worn bag holds nothing but the new bag.
+    { name: 'BackBag', class: 'bag', slots: 2, price: 80, rarity: 'common', gain: {}, art: 'invIcon', tab: 'other',
+      desc: 'A worn street backpack with two pockets. Better than carrying loot in your hands.' },
+    { name: 'BackBag X', class: 'bag', slots: 4, price: 600, rarity: 'rare', gain: { charisma: 1 }, art: 'bagX', tab: 'other', buyLevel: 3,
+      desc: 'A reinforced tactical pack with four compartments and neon trim. Carries more, and looks sharp doing it.' },
     // crafted at MutaTech (Banana sword + 5 MutaGen + 30 energy, hero lvl 4). price: its value (not sold in shops yet; the Scrap Dealer pays 40%).
     // meleeArea: melee area × 1.3; minLevel: hero level needed to equip. Uses the Banana sword picture until it has its own art.
     { name: 'baNano Sword', class: 'equipment', kind: 'sword', rarity: 'rare', price: 1200, minLevel: 4, meleeArea: 1.3, attackMs: -140,
@@ -335,11 +337,11 @@
   // resources for 100% of their value (whole stack at once), and sells scrap for 2$ each. Skills and equipped items can't be sold.
   // MutaTech (city): crafting station for magic items. Each recipe: what it makes, what it costs (items + energy).
   const RECIPES = [
-    { make: 'Tar Orb', count: 1, cost: [['Tar', 10], ['MutaGen', 1]], energy: 20 },
+    { make: 'Tar Orb', count: 1, cost: [['Tar', 10], ['MutaGen', 1]], energy: 20, minLevel: 2 },
     { make: 'baNano Sword', count: 1, cost: [['Banana sword', 1], ['MutaGen', 5]], energy: 30, minLevel: 4 },   // the Banana sword must be in the inventory (not equipped)
   ];
   const SCRAP_DEALER = { equipShare: 0.4, scrapPerCost: 0.01, scrapPrice: 2 };
-  const INVENTORY_SLOTS = 4;
+  const BAG_ITEMS = () => LOOT_ITEMS.filter(it => it.class === 'bag');
   const ABILITY_SLOTS = 3;   // spell slots in the bar; keys 1 2 3 cast them
   // spells (learned from 'skill' items). Magic tar: a projectile toward the closest enemy, up to `range` tiles.
   // On hit the enemy can't move for `rootMs` and takes dot[0]–dot[1] damage every second, `ticks` times.
@@ -370,7 +372,7 @@
   const renameItems = list => (list || []).map(it => ({ ...it, name: newName(it.name) }));
   const renameKeys = o => Object.fromEntries(Object.entries(o || {}).map(([k, v]) => [newName(k), v]));
   const cleanName = v => v.replace(/[^\p{L}]/gu, '').slice(0, 10);   // letters only (any alphabet), up to 10
-  const startPrices = () => Object.fromEntries(SHOP_ITEMS.map(it => [it.name, it.price]));
+  const startPrices = () => Object.fromEntries([...SHOP_ITEMS, ...LOOT_ITEMS.filter(it => it.class === 'bag')].map(it => [it.name, it.price]));   // bags are sold too
   const raisePrice = p => Math.ceil(p * 115 / 100);   // integer maths avoids float drift (60 * 1.15 = 68.999…)
   const FOOD_INFLATION = 0.0062;   // +0.62% food price per work shift → average run ≈ 1000 turns (see design notes)
   const shown = (name, p) => name === FOOD ? Math.ceil(p - 1e-9) : p;   // food keeps a fractional price internally
@@ -379,17 +381,33 @@
   // charisma 1 → 1-4 health for 2-5 money; each extra charisma point adds +1 to max health risk
   // and +2 to max money, so risk keeps growing but each health point pays more
   const rand = (a, b) => a + Math.floor(Math.random() * (b - a + 1));
-  // 3 deal rows: the top row has a 1% chance of a +1–2 energy cap offer (charisma × 8 $), the bottom row a 0.5% chance
-  // of a Tar Orb offer (charisma × 10 $); the middle row is always a normal job (costs energy, pays money)
-  const WORK_OFFERS = { tarOrb: { chance: 0.005, pricePerCha: 10 }, energyCap: { chance: 0.01, pricePerCha: 8, amount: [1, 2] } };
-  const newDeals = cha => {
-    const O = WORK_OFFERS, job = () => ({ energy: rand(1, 3 + cha), money: rand(2, 3 + 2 * cha) });
-    return [
-      Math.random() < O.energyCap.chance ? { offer: 'energyCap', amount: rand(O.energyCap.amount[0], O.energyCap.amount[1]), price: cha * O.energyCap.pricePerCha } : job(),
-      job(),
-      Math.random() < O.tarOrb.chance ? { offer: 'tarOrb', price: cha * O.tarOrb.pricePerCha } : job(),
-    ];
-  };
+  // ---- TradeCorp deals: 3 rows, each rolled on its own (all reroll after one is taken) ----
+  // call: costs lvl…lvl+C energy, pays lvl×W…(lvl+C)×W money (energy and money rolled separately; C = charisma, W 1.2 / rare 1.6)
+  // sale: buy lvl pieces of a random item at full price (common: Tar, Scrap, Cheap noodles; rare: MutaGen or AI chip × lvl (max 32), or 1 Tar Orb)
+  // delivery: adds a delivery quest (details come later)
+  const DEAL_CHANCES = [['call', false, 0.941], ['call', true, 0.025], ['sale', false, 0.0245], ['sale', true, 0.005], ['delivery', false, 0.004], ['delivery', true, 0.0005]];
+  const DEAL_W = { common: 1.2, rare: 1.6 };
+  const CALL_LINES = ['A client wants their contract checked.', 'Someone needs a loan explained. Slowly.', 'A shop owner is angry about a late order.',
+                      'A tourist is lost and wants directions.', 'A gang boss wants to renegotiate. Politely.', 'A robot keeps calling to sell you insurance.'];
+  const RARE_CALL_LINES = ['A corporate VIP asks for you by name.', 'A rich collector wants a private deal.'];
+  const SALE_POOL = { common: ['Tar', 'Scrap', 'Cheap noodles'], rare: ['MutaGen', 'AI chip', 'Tar Orb'] };
+  const pick = a => a[Math.floor(Math.random() * a.length)];
+  function rollDeal(lvl, cha, foodPrice, force = null) {   // force: [type, rare] (cheat menu)
+    let r = Math.random(), roll = DEAL_CHANCES[0];
+    for (const c of DEAL_CHANCES) { if (r < c[2]) { roll = c; break; } r -= c[2]; }
+    const [type, rare] = force || roll;
+    if (type === 'call') {
+      const W = rare ? DEAL_W.rare : DEAL_W.common;
+      return { type, rare, energy: rand(lvl, lvl + cha), money: Math.round(lvl * W + Math.random() * cha * W), line: pick(rare ? RARE_CALL_LINES : CALL_LINES) };
+    }
+    if (type === 'sale') {
+      const item = pick(rare ? SALE_POOL.rare : SALE_POOL.common), count = item === 'Tar Orb' ? 1 : Math.min(32, lvl);
+      const unit = item === 'Cheap noodles' ? Math.ceil(foodPrice - 1e-9) : ((LOOT_ITEMS.find(it => it.name === item) || {}).value || 1);
+      return { type, rare, item, count, price: unit * count };
+    }
+    return { type, rare, name: rare ? 'Priority delivery' : 'Scheduled delivery',
+             desc: rare ? 'An urgent, well-paid package for a client across town. Details coming soon.' : 'A parcel has to reach a client somewhere in the city. Details coming soon.' };
+  }
 
   // solid things the hero can't walk through, in on-screen coordinates (column, row — counted from 1).
   // x, y = bottom-right tile of the footprint for even widths, bottom-centre for odd; w × h = footprint in tiles,
@@ -814,7 +832,9 @@
     heroWalkUp:   'art/heroWalkUp.png',   // 4 walk frames seen from behind
     shop:         'art/shop.png',   // shop building (mirrored: awning on the right)
     work:         'art/work.png',   // work building, 3 x 2 tile footprint
-    invIcon:      'art/invIcon.png',   // inventory button (backpack)
+    invIcon:      'art/invIcon.png',   // BackBag picture (the bag tile in the bar)
+    noBag: 'art/noBag.png', bagX: 'art/bagX.png',   // empty bag tile (crossed-out bag) and BackBag X
+    officePC: 'art/officePC.png', boss: 'art/boss.png', questIcon: 'art/questIcon.png', dealCall: 'art/dealCall.png', dealDelivery: 'art/dealDelivery.png',   // TradeCorp + quests (drawn placeholders until the art exists)
     slot:         'art/slot.png',   // slot frame: inventory, equipment, abilities, inventory button
     bananaSword:  'art/bananaSword.png',   // item icon
     bananoSword: 'art/bananoSword.png',   // baNano Sword icon (also drawn on his back)
@@ -889,7 +909,8 @@
     const facing = { x: saved.fx ?? 1, y: saved.fy ?? 0 };
     const stats = { ...START_STATS, ...(saved.stats || {}) };
     for (const st in CAPS) stats[st] = capped(st, stats[st]);   // older saves may be over the current caps
-    let deals = saved.deals || newDeals(stats.charisma);
+    const newDeals = () => [0, 1, 2].map(() => rollDeal(hero.level, stats.charisma, prices[FOOD]));
+    let deals = null;   // rolled below, once prices exist (older saves' deals are replaced)
     let dealsDone = saved.dealsDone ?? 0;   // how many work deals the hero has taken this run
     let heroName = capName(saved.heroName ?? null);  // the account's name
     let account = null;                     // logged-in Supabase user { id, email }, or null (account screen shows)
@@ -898,24 +919,46 @@
     let cheatsUnlocked = false;             // after the right password, for this page visit
     const inventory = renameItems(saved.inventory);   // [{ name, kind, class }] — no bonuses while here
     const equipped = renameItems(saved.equipped);      // equipped items — their bonuses apply
+    let bag = saved.bag ?? null;   // worn bag's name (BackBag, BackBag X) or null: no bag = no inventory slots
+    const invSlots = () => bag ? ((itemDef(bag) || {}).slots || 0) : 0;
+    const fullMsg = () => bag ? 'Inventory full.' : 'You have no bag: buy a BackBag at the ATB-Market (Other tab).';
+    // put a bag in the bag slot (its bonuses apply while worn); takes off the old one's bonuses
+    function wearBag(name) {
+      const oldDef = bag && itemDef(bag), newDef = itemDef(name) || {};
+      for (const [st, n] of Object.entries((oldDef && oldDef.gain) || {})) stats[st] -= n;
+      for (const [st, n] of Object.entries(newDef.gain || {})) stats[st] += n;
+      if ((oldDef && oldDef.gain && oldDef.gain.charisma) || (newDef.gain && newDef.gain.charisma)) deals = newDeals();
+      bag = name; renderStats();
+    }
     let restReadyAt = saved.restReadyAt ?? 0;   // Date.now() when the HomeDome can be used again
     const skills = (saved.skills || []).map(newName);            // learned skill names, shown in the ability slots
     const carried = () => [...inventory, ...equipped];
     const prices = { ...startPrices(), ...renameKeys(saved.prices) };
     const startLevels = () => Object.fromEntries(SHOP_ITEMS.filter(it => it.patch).map(it => [it.name, 0]));
     const levels = { ...startLevels(), ...renameKeys(saved.levels) };   // installed level of each patch
+    deals = saved.deals && saved.deals.every(d => d && d.type) ? saved.deals : newDeals();
+    const quests = saved.quests ? [...saved.quests] : [];   // active quests: { name, desc, rare, from }
     // open window: null, or { kind: 'shop' | 'work' | 'menu', cursor, msg }
     let ui = null;
-    window.claude?.hot?.snapshot?.(() => ({ x: player.x, y: player.y, fx: facing.x, fy: facing.y, stats, deals, prices, dealsDone, heroName, inventory, equipped, skills, areaName, restReadyAt, levels, discovered: [...discovered] }));
+    window.claude?.hot?.snapshot?.(() => ({ x: player.x, y: player.y, fx: facing.x, fy: facing.y, stats, deals, prices, dealsDone, heroName, inventory, equipped, skills, areaName, restReadyAt, levels, bag, discovered: [...discovered] }));
 
     document.getElementById('portrait').style.backgroundImage = `url(${ART_SRC.heroPortrait})`;
-    document.getElementById('inv-btn').style.backgroundImage = `url(${ART_SRC.invIcon}), url(${ART_SRC.slot})`;
+    // the bag tile in the bar: the worn bag's picture, or the crossed-out empty bag when none is worn
+    function renderBagTile() {
+      const el = document.getElementById('inv-btn'), def = bag && itemDef(bag), noBagArt = ready(ART.noBag);
+      const pic = def ? ART_SRC[def.art] : noBagArt ? ART_SRC.noBag : ART_SRC.invIcon;
+      el.style.backgroundImage = `url(${pic}), url(${ART_SRC.slot})`;
+      el.classList.toggle('no-bag', !def && !noBagArt);   // drawn cross until the empty-bag icon exists
+      el.title = def ? `${bag} · ${def.slots} slots · Inventory (I)` : 'No bag · Inventory (I)';
+    }
+    ART.noBag.addEventListener('load', () => renderBagTile());
     document.querySelectorAll('.ability').forEach(el => el.style.backgroundImage = `url(${ART_SRC.slot})`);
     let lookX = facing.x < 0 ? -1 : 1;
     let stepsTaken = 0;   // drives the walk animation
     let moveDir = { x: 0, y: 0 };   // direction of the current step (picks the walk sheet)   // which way the sprite faces (keeps the last left/right when moving up/down)
 
     function renderStats() {
+      renderBagTile();
       document.getElementById('portrait').title = heroName || DEFAULT_NAME;
       document.getElementById('hud-name').textContent = heroName || DEFAULT_NAME;
       document.getElementById('stat-deals').textContent = dealsDone;
@@ -945,9 +988,9 @@
     // each row: { left, right, act() -> message }
     function rows() {
       if (!ui) return [];
-      if (ui.kind === 'shop') return SHOP_ITEMS.filter(it => it.tab === SHOP_TABS[ui.tab || 0].key).map(it => {
+      if (ui.kind === 'shop') return [...SHOP_ITEMS, ...BAG_ITEMS()].filter(it => it.tab === SHOP_TABS[tabOf()].key).map(it => {
         const gains = Object.entries(it.gain);
-        const owned = it.kind && carried().some(x => x.name === it.name);
+        const owned = (it.kind || it.class === 'bag') && (carried().some(x => x.name === it.name) || bag === it.name);
         return {
           left: it.patch ? `${it.name}  lvl ${levels[it.name]}` : it.name,
           shopItem: { it, owned, price: shown(it.name, prices[it.name]) },   // drawn as a big tile (drawShopRow)
@@ -955,48 +998,40 @@
           act() {
             const price = shown(it.name, prices[it.name]);
             if (owned) return `You already have the ${it.name}.`;
-            if (it.minLevel && hero.level < it.minLevel) return `Reach level ${it.minLevel} to install ${it.name}.`;
+            const buyLvl = it.buyLevel || it.minLevel;   // shop level lock (buyLevel: needed to buy only, not to equip)
+            if (buyLvl && hero.level < buyLvl) return `Reach level ${buyLvl} to ${it.patch ? 'install' : 'buy'} ${it.name}.`;
             if (it.kind && carried().some(x => x.kind === it.kind)) return `You can only carry one ${it.kind}.`;
-            if (it.kind && inventory.length >= INVENTORY_SLOTS) return 'Your inventory is full.';
+            const carriesIt = it.kind || it.class === 'bag';   // goes into the bag (a first bag is worn straight away)
+            if (carriesIt && !(it.class === 'bag' && !bag) && inventory.length >= invSlots()) return fullMsg();
             if (stats.money < price) return `Not enough money for ${it.name}.`;
             // refuse only if nothing it gives can go up (food still helps when only energy or only health is full)
-            if (gains.every(([st]) => st in CAPS && stats[st] >= CAPS[st]))
+            if (gains.length && gains.every(([st]) => st in CAPS && stats[st] >= CAPS[st]))
               return gains.length > 1 ? 'You are already full.' : `Your ${gains[0][0]} is already full (${CAPS[gains[0][0]]}).`;
             stats.money -= price;
+            if (it.class === 'bag') {
+              if (!bag) { wearBag(it.name); return `You put on the ${it.name}: ${it.slots} slots.`; }
+              inventory.push({ name: it.name, class: 'bag' });
+              return `Got the ${it.name}. To wear it, empty your ${bag} and press Space on it (I).`;
+            }
             if (it.class === 'equipment') {   // no bonus until equipped
               inventory.push({ name: it.name, kind: it.kind, class: it.class });
               return `Got the ${it.name}. Equip it in your inventory (I, Space).`;
             }
             for (const [st, n] of gains) stats[st] = capped(st, stats[st] + n);
-            if (it.gain.charisma) deals = newDeals(stats.charisma);
+            if (it.gain.charisma) deals = newDeals();
             if (it.name !== FOOD) prices[it.name] = raisePrice(price);
             if (it.patch) { levels[it.name]++; return `Installed ${it.name} lvl ${levels[it.name]}. Next: ${prices[it.name]}$.`; }
             return it.name === FOOD ? `Bought ${it.name}.` : `Bought ${it.name}. Now ${prices[it.name]}$.`;
           },
         };
       });
-      if (ui.kind === 'work') return deals.map(d => d.offer ? {   // rare offer: buy something, then the deals reroll
-        left: d.offer === 'tarOrb' ? 'buy a Tar Orb' : `buy +${d.amount} ${ICON.energy} cap`, right: `pay ${d.price}$`,
-        item: d.offer === 'tarOrb' ? { name: 'Tar Orb' } : null,
-        act() {
-          if (stats.money < d.price) return `Not enough money (${d.price}$).`;
-          if (d.offer === 'tarOrb') { if (addItem('Tar Orb', 1)) return 'Your inventory is full.'; }
-          else { CAP_BASE.energy += d.amount; recalcCaps(); }
-          stats.money -= d.price;
-          deals = newDeals(stats.charisma);
-          return d.offer === 'tarOrb' ? `Bought a Tar Orb for ${d.price}$. New deals.` : `Energy cap now ${CAPS.energy}. New deals.`;
-        },
-      } : {
-        left: `use ${d.energy ?? d.health} ${ICON.energy}`, right: `get ${d.money}$`,
-        act() {
-          const cost = d.energy ?? d.health;   // older saved deals used "health"
-          if (stats.energy < cost) return 'Not enough energy for that deal. Eat something.';
-          stats.energy -= cost; stats.money += d.money; dealsDone++; gainExp(LEVEL_EXP.work);
-          prices[FOOD] *= 1 + FOOD_INFLATION;
-          deals = newDeals(stats.charisma);
-          return `Worked: -${cost} ${ICON.energy}, +${d.money}$. New deals.`;
-        },
-      });
+      if (ui.kind === 'work') {
+        const tab = WINDOW_TABS.work[tabOf()].key;
+        if (tab === 'office') return OFFICE_UPGRADES.map(u => ({ side: 'upgrade', data: u, left: u.name, right: '', act() { return 'Office upgrades come later.'; } }));
+        if (tab === 'boss') return PROMOTIONS.map(pr => ({ side: 'promo', data: pr, left: pr.name, right: '', act() { return 'Promotions come later.'; } }));
+        return deals.map(d => ({ deal: d, left: '', right: '', act() { return takeDeal(d); } }));
+      }
+      if (ui.kind === 'quests') return quests.map(q => ({ quest: q, left: q.name, right: '', act() { return q.desc; } }));
       if (ui.kind === 'menu') return [
         { left: 'continue', right: '', act() { ui = null; } },
         { left: 'restart', right: '', act() { openWindow('restart', 1, fromHere()); } },
@@ -1018,6 +1053,10 @@
         { left: 'create account', right: '', act() { toAccount('create'); } },
         { left: 'log in', right: '', act() { toAccount('login'); } },
         { left: 'keep playing', right: '', act() { ui = null; } },
+      ];
+      if (ui.kind === 'throw') return [   // "are you sure?" for throwing away items (from the right-click menu)
+        { left: 'Yes', right: '', act() { throwAway(ui.throwIdx, ui.throwName, ui.throwN); ui = null; } },
+        { left: 'No', right: '', act() { ui = null; } },
       ];
       if (ui.kind === 'restart') return [
         { left: 'yes', right: '', act() { newGame(); autosave(true); } },
@@ -1075,11 +1114,12 @@
       return [];
     }
     function newGame() {
-      Object.assign(stats, START_STATS); dealsDone = 0; Object.assign(prices, startPrices()); deals = newDeals(stats.charisma);
+      Object.assign(stats, START_STATS); dealsDone = 0; Object.assign(prices, startPrices()); deals = newDeals();
       discovered.clear();
+      quests.length = 0;
       areaName = '0:0'; spawnAllDrips();
       enterArea('0:0', START.x, START.y, 1, true);
-      inventory.length = 0; equipped.length = 0; skills.length = 0; restReadyAt = 0; Object.assign(levels, startLevels());
+      inventory.length = 0; equipped.length = 0; skills.length = 0; restReadyAt = 0; bag = null; Object.assign(levels, startLevels());
       rootedUntil = 0; floaters.length = 0; Object.assign(CAP_BASE, BASE_CAPS); hero.level = 1; hero.exp = 0; recalcCaps();
       ui = null; closePanels();
     }
@@ -1087,9 +1127,9 @@
     // ---- saving -------------------------------------------------------------------
     // everything a run needs; drip/fights/timers restart when loaded
     function snapshot() {
-      return { x: player.x, y: player.y, fx: facing.x, fy: facing.y, stats: { ...stats }, deals, prices: { ...prices }, dealsDone,
+      return { x: player.x, y: player.y, fx: facing.x, fy: facing.y, stats: { ...stats }, deals, prices: { ...prices }, dealsDone, quests: quests.map(q => ({ ...q })),
                inventory: inventory.map(it => ({ ...it })), equipped: equipped.map(it => ({ ...it })), skills: [...skills],
-               areaName, restReadyAt, levels: { ...levels }, manaCap: CAP_BASE.mana, energyCap: CAP_BASE.energy, level: hero.level, exp: hero.exp, strengthLevel: hero.level, discovered: [...discovered], enemies: saveEnemies() };
+               areaName, restReadyAt, levels: { ...levels }, manaCap: CAP_BASE.mana, energyCap: CAP_BASE.energy, level: hero.level, exp: hero.exp, strengthLevel: hero.level, bag, discovered: [...discovered], enemies: saveEnemies() };
     }
     function applySave(s) {
       Object.assign(CAP_BASE, BASE_CAPS, s.manaCap !== undefined ? { mana: s.manaCap } : {});
@@ -1097,12 +1137,16 @@
       hero.level = Math.min(MAX_LEVEL, s.level || 1); hero.exp = s.exp || 0; recalcCaps();
       Object.assign(stats, START_STATS, s.stats || {});
       if (s.strengthLevel === undefined) stats.strength += levelStrength(hero.level) - levelStrength(1);   // saves from before strength grew with level
-      deals = s.deals || newDeals(stats.charisma); dealsDone = s.dealsDone || 0;
+      deals = s.deals && s.deals.every(d => d && d.type) ? s.deals : null; dealsDone = s.dealsDone || 0;
+      quests.length = 0; quests.push(...(s.quests || []));
       for (const k in prices) delete prices[k]; for (const k in levels) delete levels[k];
       Object.assign(prices, startPrices(), renameKeys(s.prices)); Object.assign(levels, startLevels(), renameKeys(s.levels));
       inventory.length = 0; inventory.push(...renameItems(s.inventory));
+      bag = s.bag !== undefined ? s.bag : !inventory.length ? null : inventory.length <= 2 ? 'BackBag' : 'BackBag X';   // saves from before bags: a bag that fits what they carry
+      if (s.bag === undefined && bag === 'BackBag X') stats.charisma += 1;
       equipped.length = 0; equipped.push(...renameItems(s.equipped));
       skills.length = 0; skills.push(...(s.skills || []).map(newName));
+      if (!deals) deals = newDeals();
       restReadyAt = s.restReadyAt || 0; rootedUntil = 0; floaters.length = 0; closePanels();
       discovered.clear(); for (const id of s.discovered || ['0:0']) discovered.add(AREA_ALIAS[id] || id);
       const sa = AREA_ALIAS[s.areaName] || s.areaName, area = AREAS[sa] ? sa : '0:0';
@@ -1156,13 +1200,13 @@
       const S = SCRAP_DEALER, done = msg => { ui.cursor = Math.min(ui.cursor, inventory.length); return msg; };
       const list = [{ left: 'buy Scrap', item: { name: 'Scrap' }, pic: 'scrap', right: `-${S.scrapPrice}$`, act() {
         if (stats.money < S.scrapPrice) return `Not enough money (${S.scrapPrice}$).`;
-        if (addItem('Scrap', 1)) return 'Your inventory is full.';
+        if (addItem('Scrap', 1)) return fullMsg();
         stats.money -= S.scrapPrice; return `Bought 1 Scrap for ${S.scrapPrice}$.`;
       } }];
       inventory.forEach((it, idx) => {
         const def = itemDef(it.name) || {}, n = it.count || 1;
         const row = { left: `sell ${it.name}`, item: { name: it.name, count: n }, pic: it.name };
-        if (def.class === 'equipment') {
+        if (def.class === 'equipment' || def.class === 'bag') {
           const money = Math.round(def.price * S.equipShare), scrap = Math.floor(def.price * S.scrapPerCost);
           row.right = `+${money}$${scrap ? `  +${scrap} scrap` : ''}`;
           row.act = () => {
@@ -1191,15 +1235,15 @@
         row('money', '+500$', () => { stats.money += 500; return '+500$.'; }),
         row('refill', 'full ♥ ⚡ ◆', () => { for (const st in CAPS) stats[st] = CAPS[st]; return 'Health, energy and mana refilled.'; }),
         row('mana cap', `+3 (now ${CAPS.mana})`, () => { CAP_BASE.mana += 3; recalcCaps(); stats.mana = CAPS.mana; return `Mana cap ${CAPS.mana}, mana full.`; }),
-        row('work offers', 'Tar Orb + energy cap deals', () => { deals = [{ offer: 'energyCap', amount: 2, price: stats.charisma * 8 }, newDeals(stats.charisma)[1], { offer: 'tarOrb', price: stats.charisma * 10 }]; return 'TradeCorp now shows both rare offers.'; }),
         row('exp', '+50', () => { gainExp(50); return `Level ${hero.level}, ${hero.exp}/${expNeed(hero.level)} exp.`; }),
-        row('charisma', '+10 ✦', () => { stats.charisma += 10; deals = newDeals(stats.charisma); return `Charisma ${stats.charisma}.`; }),
+        row('deal types', 'rare call, rare sale, delivery', () => { deals = [['call', true], ['sale', true], ['delivery', false]].map(f => rollDeal(hero.level, stats.charisma, prices[FOOD], f)); return 'TradeCorp now shows one of each rare deal.'; }),
+        row('charisma', '+10 ✦', () => { stats.charisma += 10; deals = newDeals(); return `Charisma ${stats.charisma}.`; }),
         row('strength', '+5 ⚔', () => { stats.strength += 5; return `Strength ${stats.strength}.`; }),
         row('Magic tar', 'into inventory', () => give('Magic tar', 1)),
         row('Tar', '+10 into inventory', () => give('Tar', 10)),
         row('new items', 'MutaGen, Tar Orb, AI chip', () => ['MutaGen', 'Tar Orb', 'AI chip'].map(n => give(n, 1)).join(' ')),
-        row('Banana sword', 'into inventory', () => { if (inventory.length >= INVENTORY_SLOTS) return 'Inventory full.'; inventory.push({ name: 'Banana sword', kind: 'sword', class: 'equipment' }); return 'Added Banana sword.'; }),
-        row('baNano Sword', 'into inventory', () => { if (inventory.length >= INVENTORY_SLOTS) return 'Inventory full.'; inventory.push({ name: 'baNano Sword', kind: 'sword', class: 'equipment' }); return 'Added baNano Sword.'; }),
+        row('Banana sword', 'into inventory', () => { if (inventory.length >= invSlots()) return 'Inventory full.'; inventory.push({ name: 'Banana sword', kind: 'sword', class: 'equipment' }); return 'Added Banana sword.'; }),
+        row('baNano Sword', 'into inventory', () => { if (inventory.length >= invSlots()) return 'Inventory full.'; inventory.push({ name: 'baNano Sword', kind: 'sword', class: 'equipment' }); return 'Added baNano Sword.'; }),
         row('rest cooldown', 'reset', () => { restReadyAt = 0; return 'HomeDome can be used again.'; }),
         row('Drip', !drips.length ? 'none in this zone' : drips.some(d => !d.dead) ? 'defeat nearest (loot drops)' : 'respawn', () => {
           if (!drips.length) return 'No Drips live in this zone.';
@@ -1238,15 +1282,17 @@
       if (stats.energy < r.energy) return `Not enough energy (${r.energy} ${ICON.energy} needed).`;
       const backup = inventory.map(it => ({ ...it }));
       for (const [name, n] of r.cost) takeItems(name, n);
-      if (addItem(r.make, r.count)) { inventory.length = 0; inventory.push(...backup); return 'Your inventory is full.'; }
+      if (addItem(r.make, r.count)) { inventory.length = 0; inventory.push(...backup); return fullMsg(); }
       stats.energy -= r.energy; renderStats();
       return `Crafted ${r.count} ${r.make}.`;
     }
     const TITLES = { spelltech: 'MutaTech', shop: 'ATB-Market', work: 'TradeCorp', menu: 'Menu', controls: 'Controls', hero: 'Hero', inventory: 'Inventory', gameover: 'Game over', loot: 'Loot · Drip', rest: 'HomeDome', cheat: 'Cheats (testing)', scrap: 'Scrap Dealer',
-                     map: 'Map', settings: 'Settings', sound: 'Sound', restart: 'Restart', save: 'Save', load: 'Load game', logout: 'Log out', guest: 'Playing as guest' };
+                     map: 'Map', settings: 'Settings', sound: 'Sound', restart: 'Restart', throw: 'Throw away', quests: 'Quests', save: 'Save', load: 'Load game', logout: 'Log out', guest: 'Playing as guest' };
     // windows with a paragraph above their options
     const WINDOW_TEXT = {
       restart: 'Are you sure?',
+      quests: () => quests.length ? '' : 'No active quests yet. Take a Scheduled delivery at TradeCorp (Deals).',
+      throw: () => `Are you sure? ${ui.throwN > 1 ? ui.throwN + ' × ' : ''}${ui.throwName} will be gone forever.`,
       sound: 'A / D (or ← →) to change, Space to step up. Each step is 20%.',
       guest: 'Guests can’t save. Create a free account to keep this run, or log in to continue a saved one.',
       logout: 'Log out? Sure. Leave your hero alone in a neon city crawling with gangs, killer drones, and things lurking in dark alleys. Without you, they’ll be robbed, hunted, and probably found face-down in a puddle under a flickering noodle sign. But hey, I’m sure you have VERY important things to do.',
@@ -1266,18 +1312,44 @@
       ['W / S (hero)', 'choose equipped item'],
       ['Space (hero)', 'unequip'],
       ['A / D (inventory)', 'choose a slot'],
-      ['Space (inventory)', 'equip / learn'],
+      ['Space (inventory)', 'equip / learn / wear a bag'],
+      ['right-click (inventory)', 'throw away an item'],
       ['A / D (sound settings)', 'volume down / up'],
       ['A / D (shop)', 'switch tab (or click a tab)'],
       ['click (shop)', 'select an item, click again to buy'],
       ['W / S', 'choose in a window'],
       ['1 2 3', 'pick a row (window) / cast spell'],
       ['Tab', 'next target (closest first)'],
+      ['Q (or the quest icon)', 'active quests'],
+      ['A / D (TradeCorp)', 'switch tab: My Office, Deals, Boss'],
       ['Esc (target selected)', 'deselect target'],
     ];
 
     // windows opened from another window remember it: Esc (or "no") goes back there instead of closing everything
-    function switchShopTab(i) { ui.tab = (i + SHOP_TABS.length) % SHOP_TABS.length; ui.cursor = 0; ui.msg = ''; }
+    // windows with browser-like tabs (A/D or a click); start: the tab shown when the window opens
+    const WINDOW_TABS = { shop: SHOP_TABS, work: Object.assign([{ key: 'office', name: 'My Office' }, { key: 'deals', name: 'Deals' }, { key: 'boss', name: 'Boss' }], { start: 1 }) };
+    const tabOf = () => ui.tab ?? (WINDOW_TABS[ui.kind].start || 0);
+    function switchShopTab(i) { const n = WINDOW_TABS[ui.kind].length; ui.tab = (i + n) % n; ui.cursor = 0; ui.msg = ''; ui.scroll = 0; }
+    // My Office upgrades and Boss promotions: placeholders for now (icon, name, description, price / deals needed)
+    const OFFICE_UPGRADES = [1, 2, 3, 4, 5].map(n => ({ name: `Upgrade ${n}`, desc: 'Empty upgrade slot. Coming soon.', price: '—' }));
+    const PROMOTIONS = [1, 2, 3].map(n => ({ name: `Promotion ${n}`, desc: 'A new job title. Coming soon.', deals: '—' }));
+    // take a deal: calls cost energy and pay money, sales cost money and give items, deliveries add a quest. Then all 3 reroll.
+    function takeDeal(d) {
+      if (d.type === 'call') {
+        if (stats.energy < d.energy) return 'Not enough energy for that call. Eat something.';
+        stats.energy -= d.energy; stats.money += d.money;
+        prices[FOOD] *= 1 + FOOD_INFLATION;
+      } else if (d.type === 'sale') {
+        if (stats.money < d.price) return `Not enough money (${d.price}$).`;
+        const backup = inventory.map(it => ({ ...it }));
+        if (addItem(d.item, d.count)) { inventory.length = 0; inventory.push(...backup); return fullMsg(); }
+        stats.money -= d.price;
+      } else quests.push({ name: d.name, desc: d.desc, rare: d.rare, from: 'TradeCorp' });
+      dealsDone++; gainExp(LEVEL_EXP.work);
+      deals = newDeals();
+      return d.type === 'call' ? `Call done: -${d.energy} NRG, +${d.money}$. New deals.` : d.type === 'sale' ? `Bought ${d.count} ${d.item} for ${d.price}$. New deals.`
+        : `${d.name} added to your quests (Q). New deals.`;
+    }
     function openWindow(kind, cursor = 0, back = null) {
       ui = { kind, cursor, msg: '', back };
       held.clear(); tapped.clear();
@@ -1327,6 +1399,13 @@
         pn.msg = `Learned ${item.name}: spell slot ${skills.length}, key ${skills.length}.`;
         renderStats(); return;
       }
+      if (def.class === 'food') {   // eat one: its gains, up to the caps (refused when nothing would go up)
+        const up = Object.entries(def.gain || {}).filter(([st]) => !(st in CAPS) || stats[st] < CAPS[st]);
+        if (!up.length) { pn.msg = 'You are already full.'; return; }
+        for (const [st, n] of Object.entries(def.gain)) stats[st] = capped(st, stats[st] + n);
+        if ((item.count || 1) > 1) item.count--; else inventory.splice(pn.cursor, 1);
+        pn.msg = `Ate ${item.name}: ${bonusText(def)}.`; renderStats(); return;
+      }
       if (def.class === 'resource') { pn.msg = `${item.name} is a resource, used for crafting later.`; return; }
       if (def.consume) {   // consumable: use one (Tar Orb: +1 mana cap)
         if (def.consume.manaCap) { CAP_BASE.mana += def.consume.manaCap; recalcCaps(); }
@@ -1335,19 +1414,25 @@
         renderStats(); return;
       }
       if (def.class === 'upgrade') { pn.msg = `${item.name} is an upgrade material, used later.`; return; }
+      if (def.class === 'bag') {   // swap bags: only when the worn bag holds nothing but this new bag
+        if (inventory.length > 1) { pn.msg = `Empty your ${bag} first.`; return; }
+        const old = bag; inventory.splice(pn.cursor, 1); wearBag(item.name);
+        if (old) inventory.push({ name: old, class: 'bag' });
+        pn.cursor = 0; pn.msg = `Wearing ${item.name} (${def.slots} slots).${old ? ` ${old} inside.` : ''}`; return;
+      }
       equipSelected(item, def, pn);
     }
     // Space on an equipped slot in the hero panel: the item goes back to the backpack and its bonuses are removed
     function unequipSelected(pn) {
       const item = equipped[pn.cursor];
       if (!item) { pn.msg = 'Nothing equipped in this slot.'; return; }
-      if (inventory.length >= INVENTORY_SLOTS) { pn.msg = 'Your inventory is full.'; return; }
+      if (inventory.length >= invSlots()) { pn.msg = fullMsg(); return; }
       const def = itemDef(item.name) || { gain: {} };
       equipped.splice(pn.cursor, 1);
       inventory.push(item);
       const gains = Object.entries(def.gain);
       for (const [st, n] of gains) stats[st] -= n;
-      if (def.gain.charisma) deals = newDeals(stats.charisma);
+      if (def.gain.charisma) deals = newDeals();
       pn.cursor = Math.min(pn.cursor, Math.max(0, equipped.length - 1));
       pn.msg = `Unequipped the ${item.name}: ${gains.map(([st, n]) => `-${n} ${STAT_SHORT[st] || st}`).join(' ')}`;
       renderStats();
@@ -1361,7 +1446,7 @@
       equipped.push(item);
       const gains = Object.entries(def.gain);
       for (const [st, n] of gains) stats[st] += n;
-      if (def.gain.charisma) deals = newDeals(stats.charisma);
+      if (def.gain.charisma) deals = newDeals();
       pn.msg = `Equipped the ${item.name}: ${gains.map(([st, n]) => `+${n} ${STAT_SHORT[st] || st}`).join(' ')}`;
       renderStats();
     }
@@ -1380,8 +1465,43 @@
       heroAttack();
     }
     function goBack() { const b = ui.back; openWindow(b.kind, b.cursor, b.back); }
+    // ---- right-click menu on bag items: throw away 1 or the whole stack (then "are you sure?") ----
+    let itemMenu = null;   // { idx, name, x, y, cursor, opts: [{ label, n }] } in canvas px
+    function openItemMenu(idx, x, y) {
+      const it = inventory[idx]; if (!it) { itemMenu = null; return; }
+      const n = it.count || 1;
+      itemMenu = { idx, name: it.name, x, y, cursor: 0, opts: n > 1 ? [{ label: 'Throw away 1', n: 1 }, { label: `Throw away all (${n})`, n }] : [{ label: 'Throw away', n: 1 }] };
+    }
+    function pickItemMenu(i) {
+      const m = itemMenu, o = m && m.opts[i]; itemMenu = null;
+      if (!o || !inventory[m.idx] || inventory[m.idx].name !== m.name) return;
+      openWindow('throw', 1); ui.throwIdx = m.idx; ui.throwName = m.name; ui.throwN = o.n;   // cursor starts on "No"
+    }
+    function throwAway(idx, name, n) {
+      const it = inventory[idx]; if (!it || it.name !== name) return;
+      const left = (it.count || 1) - n;
+      if (left > 0) it.count = left; else inventory.splice(idx, 1);
+      if (panels.inventory) { panels.inventory.cursor = Math.min(panels.inventory.cursor, Math.max(0, invSlots() - 1)); panels.inventory.msg = `Threw away ${n > 1 ? n + ' × ' : ''}${name}.`; }
+      renderStats();
+    }
+    const MENU = { w: 300, rowH: 44 };
+    function drawItemMenu() {
+      const m = itemMenu; if (!m) return;
+      const h = m.opts.length * MENU.rowH + 16, x = Math.min(m.x, canvas.width - MENU.w - 8), y = Math.min(m.y, canvas.height - h - 8);
+      m.box = { x, y, w: MENU.w, h };
+      ctx.fillStyle = 'rgba(0, 0, 0, 0.95)'; ctx.fillRect(x, y, MENU.w, h);
+      ctx.strokeStyle = '#fff'; ctx.lineWidth = 2; ctx.strokeRect(x + 1, y + 1, MENU.w - 2, h - 2);
+      ctx.font = '22px ' + MONO; ctx.textAlign = 'left'; ctx.textBaseline = 'middle';
+      m.opts.forEach((o, i) => {
+        const ry = y + 8 + i * MENU.rowH;
+        if (i === m.cursor) { ctx.fillStyle = 'rgba(255, 220, 0, 0.14)'; ctx.fillRect(x + 6, ry, MENU.w - 12, MENU.rowH - 4); }
+        ctx.fillStyle = i === m.cursor ? '#fff' : '#cfcfcf'; ctx.fillText(o.label, x + 18, ry + MENU.rowH / 2 - 2);
+      });
+    }
     function escPressed() {   // Esc: back to the previous window, or close everything, or drop the target, or open the menu
       if (locked()) return;
+      if (itemMenu) { itemMenu = null; return; }
+      if (ui && ui.kind === 'throw') { ui = null; return; }   // back to the inventory
       if (ui && ui.back) goBack();
       else if (anyOpen()) closeAll();
       else if (target) target = null;
@@ -1826,7 +1946,7 @@
         const k = Math.min(n, max - (it.count || 1)); it.count = (it.count || 1) + k; n -= k;
         if (!n) return 0;
       }
-      while (n > 0 && inventory.length < INVENTORY_SLOTS) {
+      while (n > 0 && inventory.length < invSlots()) {
         const k = Math.min(n, max); inventory.push({ name, class: def.class, kind: def.kind, count: k }); n -= k;
       }
       return n;
@@ -1847,7 +1967,7 @@
       } });
       for (const it of L.items) list.push({ left: it.name, item: { name: it.name, count: it.count }, pic: it.name, right: `×${it.count}`, act() {
         const left = addItem(it.name, it.count), got = it.count - left;
-        if (!got) return 'Your inventory is full.';
+        if (!got) return fullMsg();
         it.count = left;
         if (!left) L.items.splice(L.items.indexOf(it), 1);
         taken(); return left ? `Took ${got} ${it.name}. Inventory full.` : `Took ${it.name}.`;
@@ -1912,14 +2032,14 @@
         const pn = panels[focus];
         const d = (keys.includes('d') ? 1 : 0) - (keys.includes('a') ? 1 : 0);
         const v = (keys.includes('s') ? 1 : 0) - (keys.includes('w') ? 1 : 0);
-        const step = focus === 'inventory' ? d : v || d, n = focus === 'inventory' ? INVENTORY_SLOTS : EQUIP_SLOTS;
+        const step = focus === 'inventory' ? d : v || d, n = focus === 'inventory' ? Math.max(1, invSlots()) : EQUIP_SLOTS;
         if (step) { pn.cursor = (pn.cursor + step + n) % n; pn.msg = ''; }
         return;
       }
       if (ui) {                              // inside a window W/S move the highlight
         const vr = ui.kind === 'sound' && rows()[ui.cursor];   // sound window: A/D turn the highlighted volume down/up
         if (vr && vr.vol && (keys.includes('a') || keys.includes('d'))) { stepVolume(vr.vol, keys.includes('d') ? 1 : -1, false); ui.msg = ''; return; }
-        if (ui.kind === 'shop' && (keys.includes('a') || keys.includes('d'))) { switchShopTab((ui.tab || 0) + (keys.includes('d') ? 1 : -1)); return; }
+        if (WINDOW_TABS[ui.kind] && (keys.includes('a') || keys.includes('d'))) { switchShopTab(tabOf() + (keys.includes('d') ? 1 : -1)); return; }
         if (keys.includes('w')) moveCursor(-1);
         if (keys.includes('s')) moveCursor(1);
         return;
@@ -2217,8 +2337,9 @@
 
       rowRects = [];
       drawStates();
-      if (!(ui && ui.kind === 'map')) drawMinimap(rx, ry);
+      if (!(ui && ui.kind === 'map')) { drawMinimap(rx, ry); drawQuestButton(); }
       drawPanels();
+      if (!ui) drawItemMenu();
       if (ui) drawWindow();
     }
 
@@ -2517,8 +2638,8 @@
       const nameLines = wrapText(it.name, nameW);
       nameLines.forEach((l, i) => ctx.fillText(l, nameX, sy + 22 + i * 32));
       ctx.font = '18px ' + MONO; ctx.fillStyle = '#8a8a8a';
-      const locked = it.minLevel && hero.level < it.minLevel;
-      const sub = locked ? `needs lvl ${it.minLevel}` : it.patch ? `patch · installed lvl ${levels[it.name]}` : it.class === 'equipment' ? `${it.rarity || 'common'} equipment` : 'used at once';
+      const buyLvl = it.buyLevel || it.minLevel, locked = buyLvl && hero.level < buyLvl;
+      const sub = locked ? `needs lvl ${buyLvl}` : it.patch ? `patch · installed lvl ${levels[it.name]}` : it.class === 'equipment' ? `${it.rarity || 'common'} equipment` : it.class === 'bag' ? (bag === it.name ? 'worn now' : `${it.rarity || 'common'} bag`) : 'used at once';
       if (locked) ctx.fillStyle = '#e5484d';
       ctx.fillText(sub, nameX, sy + big - 12);
       // price, right side
@@ -2530,7 +2651,7 @@
       const mx = nameX + nameW + 24, mw = priceX - 150 - mx;
       let bx = mx; ctx.textAlign = 'left'; ctx.font = '600 24px ' + MONO;
       // short stat names, no icons: the colour tells the stat
-      const parts = Object.entries(it.gain || {}).map(([st, n]) => [`+${n} ${STAT_SHORT[st] || st}`, STAT_COLOR[st] || '#fff']);
+      const parts = [...(it.slots ? [[`${it.slots} SLOTS`, '#f2f2f2']] : []), ...Object.entries(it.gain || {}).map(([st, n]) => [`+${n} ${STAT_SHORT[st] || st}`, STAT_COLOR[st] || '#fff'])];
       if (it.attackMs) parts.push([`${secs(it.attackMs)}s ATK SPD`, '#ffe600']);
       if (it.meleeArea) parts.push([`+${Math.round((it.meleeArea - 1) * 100)}% AOE`, '#00e5ff']);
       if (it.patch) parts.push(['per install', '#8a8a8a']);
@@ -2540,6 +2661,105 @@
       for (const [t, c] of parts) { ctx.fillStyle = c; ctx.fillText(t, bx, sy + 20); bx += ctx.measureText(t).width + gapW; }
       ctx.font = '19px ' + MONO; ctx.fillStyle = '#cfcfcf';
       wrapText(it.desc || '', mw).slice(0, 3).forEach((l, i) => ctx.fillText(l, mx, sy + 56 + i * 25));
+    }
+    // ---- TradeCorp drawing ----
+    const DEAL_TITLE = { call: ['Customer call', 'Rare customer call'], sale: ['Sale offer', 'Rare sale offer'] };
+    function glyphSlot(x, y, size, key, glyph, color) {   // an icon picture if its art exists, else a big drawn symbol in a slot
+      if (ready(ART.slot)) ctx.drawImage(ART.slot, x, y, size, size);
+      if (key && ready(ART[key])) { const i = size * 0.14; ctx.drawImage(ART[key], x + i, y + i, size - 2 * i, size - 2 * i); return; }
+      ctx.fillStyle = color; ctx.font = `700 ${Math.round(size * 0.5)}px ` + MONO; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+      ctx.fillText(glyph, x + size / 2, y + size / 2 + 2);
+    }
+    function rareEdge(x, y, size) { const i = size * 0.09; ctx.save(); ctx.strokeStyle = RARITY.rare; ctx.globalAlpha = 0.85; ctx.lineWidth = 3; ctx.shadowColor = RARITY.rare; ctx.shadowBlur = 6; ctx.strokeRect(x + i, y + i, size - 2 * i, size - 2 * i); ctx.restore(); }
+    function drawDealRow(d, x, y, w, h, sel) {
+      const big = h - 32, sx = x + 16, sy = y + 16, nameX = sx + big + 20, nameW = 280, priceX = x + w - 20, cy = y + h / 2;
+      if (d.type === 'sale') drawSlot(sx, sy, big, { name: d.item, count: d.count });
+      else glyphSlot(sx, sy, big, d.type === 'call' ? 'dealCall' : 'dealDelivery', d.type === 'call' ? '☎' : '▣', d.rare ? RARITY.rare : '#f2f2f2');
+      if (d.rare && d.type !== 'sale') rareEdge(sx, sy, big);
+      const title = d.type === 'delivery' ? d.name : DEAL_TITLE[d.type][d.rare ? 1 : 0];
+      ctx.textAlign = 'left'; ctx.textBaseline = 'middle'; ctx.fillStyle = d.rare ? RARITY.rare : '#fff'; ctx.font = (sel ? '700 ' : '600 ') + '26px ' + MONO;
+      wrapText(title, nameW).forEach((l, i) => ctx.fillText(l, nameX, sy + 20 + i * 30));
+      ctx.font = '18px ' + MONO; ctx.fillStyle = '#8a8a8a';
+      ctx.fillText(d.type === 'call' ? `${d.rare ? 'rare' : 'common'} call` : d.type === 'sale' ? `${d.rare ? 'rare' : 'common'} sale` : `${d.rare ? 'rare' : 'common'} quest`, nameX, sy + big - 12);
+      const mx = nameX + nameW + 24, mw = priceX - 150 - mx;
+      ctx.font = '600 24px ' + MONO;
+      const parts = d.type === 'call' ? [[`-${d.energy} NRG`, STAT_COLOR.energy], [`+${d.money}$`, '#f5c542']]
+        : d.type === 'sale' ? [[`${d.count} × ${d.item}`, rarityColor(d.item)]] : [['Delivery quest', '#00e5ff']];
+      drawParts(parts, mx, sy + 20, 22);
+      const text = d.type === 'call' ? d.line : d.type === 'sale' ? `A supplier sells ${d.count} ${d.item} at full price.` : d.desc;
+      ctx.font = '19px ' + MONO; ctx.fillStyle = '#cfcfcf';
+      wrapText(text, mw).slice(0, 3).forEach((l, i) => ctx.fillText(l, mx, sy + 56 + i * 25));
+      ctx.textAlign = 'right'; ctx.font = '700 32px ' + MONO;
+      if (d.type === 'call') { ctx.fillStyle = stats.energy >= d.energy ? '#9dff5c' : '#e5484d'; ctx.fillText(`${d.energy} NRG`, priceX, cy); }
+      else if (d.type === 'sale') { ctx.fillStyle = stats.money >= d.price ? '#f5c542' : '#e5484d'; ctx.fillText(`${d.price}$`, priceX, cy); }
+      else { ctx.fillStyle = '#00e5ff'; ctx.fillText('accept', priceX, cy); }
+    }
+    // My Office / Boss: a picture on the left, a small scrolling list on the right
+    function drawSideTab(list, x, y, w, h) {
+      const picW = Math.round(w * 0.46), lx = x + picW + 20, lw = w - picW - 20, rowH = 104, visible = Math.floor(h / rowH);
+      if (list[0].side === 'upgrade') drawOfficePicture(x, y, picW, h); else drawBossPicture(x, y, picW, h);
+      ui.scroll = Math.max(0, Math.min(ui.scroll || 0, list.length - visible));
+      if (ui.cursor < ui.scroll) ui.scroll = ui.cursor; if (ui.cursor >= ui.scroll + visible) ui.scroll = ui.cursor - visible + 1;
+      list.slice(ui.scroll, ui.scroll + visible).forEach((r, k) => {
+        const i = ui.scroll + k, ry = y + k * rowH, sel = i === ui.cursor, d = r.data, sz = rowH - 24;
+        rowRects.push({ x: lx, y: ry, w: lw, h: rowH - 8, i });
+        ctx.fillStyle = sel ? 'rgba(255, 220, 0, 0.12)' : 'rgba(255, 255, 255, 0.03)'; ctx.fillRect(lx, ry, lw, rowH - 8);
+        glyphSlot(lx + 10, ry + 8, sz, null, r.side === 'upgrade' ? '⚙' : '★', '#6a6a6a');
+        ctx.textAlign = 'left'; ctx.textBaseline = 'middle'; ctx.fillStyle = sel ? '#fff' : '#cfcfcf'; ctx.font = (sel ? '700 ' : '600 ') + '22px ' + MONO;
+        ctx.fillText(d.name, lx + sz + 24, ry + 24);
+        ctx.font = '17px ' + MONO; ctx.fillStyle = '#8a8a8a'; ctx.fillText(d.desc, lx + sz + 24, ry + 52);
+        ctx.textAlign = 'right'; ctx.font = '600 20px ' + MONO; ctx.fillStyle = '#f5c542';
+        ctx.fillText(r.side === 'upgrade' ? `${d.price}$` : `${d.deals} deals`, lx + lw - 14, ry + 24);
+      });
+      if (list.length > visible) {   // scroll bar
+        const bx = lx + lw - 4, bh = h - 8, th = bh * visible / list.length, ty = y + bh * ui.scroll / list.length;
+        ctx.fillStyle = 'rgba(255, 255, 255, 0.12)'; ctx.fillRect(bx, y, 4, bh); ctx.fillStyle = 'rgba(255, 255, 255, 0.5)'; ctx.fillRect(bx, ty, 4, th);
+      }
+    }
+    function drawOfficePicture(x, y, w, h) {   // the office computer with 5 chip slots (drawn until art/officePC.png exists)
+      ctx.fillStyle = '#0b0d14'; ctx.fillRect(x, y, w, h - 8);
+      const im = ART.officePC;
+      if (ready(im)) { const s = Math.min(w / im.naturalWidth, (h - 8) / im.naturalHeight); ctx.drawImage(im, x + (w - im.naturalWidth * s) / 2, y, im.naturalWidth * s, im.naturalHeight * s); }
+      else {
+        const mw = w * 0.72, mh = h * 0.42, mx = x + (w - mw) / 2, my = y + 24;
+        ctx.fillStyle = '#1b2233'; ctx.fillRect(mx, my, mw, mh); ctx.strokeStyle = '#3a4257'; ctx.lineWidth = 6; ctx.strokeRect(mx, my, mw, mh);
+        ctx.fillStyle = '#062a33'; ctx.fillRect(mx + 14, my + 14, mw - 28, mh - 28);
+        ctx.fillStyle = '#00e5ff'; ctx.font = '600 22px ' + MONO; ctx.textAlign = 'left'; ctx.textBaseline = 'middle';
+        ['> TradeCorp OS', '> chips: 0 / 5', '> ready_'].forEach((t, i) => ctx.fillText(t, mx + 30, my + 44 + i * 32));
+        ctx.fillStyle = '#3a4257'; ctx.fillRect(x + w / 2 - 14, my + mh, 28, 30); ctx.fillRect(x + w / 2 - 70, my + mh + 30, 140, 10);
+      }
+      const n = 5, cs = Math.min(64, (w - 40) / n - 10), total = n * cs + (n - 1) * 10, cx0 = x + (w - total) / 2, cy = y + h - cs - 36;
+      ctx.fillStyle = '#8a8a8a'; ctx.font = '16px ' + MONO; ctx.textAlign = 'center'; ctx.fillText('chip slots', x + w / 2, cy - 16);
+      for (let i = 0; i < n; i++) drawSlot(cx0 + i * (cs + 10), cy, cs, null);
+    }
+    function drawBossPicture(x, y, w, h) {   // your boss (drawn until art/boss.png exists)
+      ctx.fillStyle = '#0b0d14'; ctx.fillRect(x, y, w, h - 8);
+      const im = ART.boss;
+      if (ready(im)) { const s = Math.min(w / im.naturalWidth, (h - 8) / im.naturalHeight); ctx.drawImage(im, x + (w - im.naturalWidth * s) / 2, y + (h - 8 - im.naturalHeight * s) / 2, im.naturalWidth * s, im.naturalHeight * s); return; }
+      const cx = x + w / 2;
+      ctx.fillStyle = '#3a4257'; ctx.beginPath(); ctx.arc(cx, y + h * 0.3, h * 0.13, 0, Math.PI * 2); ctx.fill();
+      ctx.beginPath(); ctx.moveTo(cx - w * 0.28, y + h - 30); ctx.quadraticCurveTo(cx, y + h * 0.42, cx + w * 0.28, y + h - 30); ctx.closePath(); ctx.fill();
+      ctx.fillStyle = '#8a8a8a'; ctx.font = '600 20px ' + MONO; ctx.textAlign = 'center'; ctx.textBaseline = 'middle'; ctx.fillText('Your boss', cx, y + h - 16);
+    }
+    function drawQuestRow(q, x, y, w, h) {
+      glyphSlot(x + 12, y + 8, h - 16, 'questIcon', '!', q.rare ? RARITY.rare : '#ffe600');
+      ctx.textAlign = 'left'; ctx.textBaseline = 'middle'; ctx.fillStyle = q.rare ? RARITY.rare : '#fff'; ctx.font = '600 24px ' + MONO;
+      ctx.fillText(q.name, x + h + 10, y + 24);
+      ctx.font = '17px ' + MONO; ctx.fillStyle = '#cfcfcf';
+      wrapText(q.desc, w - h - 30).slice(0, 2).forEach((l, i) => ctx.fillText(l, x + h + 10, y + 52 + i * 22));
+      ctx.textAlign = 'right'; ctx.fillStyle = '#8a8a8a'; ctx.font = '16px ' + MONO; ctx.fillText(q.from || '', x + w - 14, y + 24);
+    }
+    // quest button under the minimap (click or Q opens the quest list); a badge shows how many quests are active
+    let questBtn = null;
+    function drawQuestButton() {
+      const size = 64, x = canvas.width - 20 - size, y = 20 + MINI.rows * MINI.ch + 40;
+      questBtn = { x, y, w: size, h: size };
+      ctx.save(); ctx.globalAlpha = 0.85;
+      glyphSlot(x, y, size, 'questIcon', '!', '#ffe600');
+      if (quests.length) { ctx.fillStyle = '#e5484d'; ctx.beginPath(); ctx.arc(x + size - 6, y + 6, 12, 0, Math.PI * 2); ctx.fill();
+        ctx.fillStyle = '#fff'; ctx.font = '700 15px ' + MONO; ctx.textAlign = 'center'; ctx.textBaseline = 'middle'; ctx.fillText(String(quests.length), x + size - 6, y + 7); }
+      ctx.fillStyle = '#fff'; ctx.font = '600 14px ' + MONO; ctx.textAlign = 'right'; ctx.textBaseline = 'top'; ctx.fillText('Q quests', x + size, y + size + 6);
+      ctx.restore();
     }
     function drawCraftRow(r, x, y, w, h, sel) {
       const big = h - 40, sx = x + 20, sy = y + 20, nameW = 220;
@@ -2577,15 +2797,16 @@
       if (ui.kind === 'gameover') { drawGameOver(); return; }
       const list = rows();
       const info = ui.kind === 'controls';          // read-only list, nothing to select
-      const rowH = info ? 38 : ui.kind === 'shop' ? 150 : ui.kind === 'loot' || ui.kind === 'scrap' ? 88 : ui.kind === 'cheat' ? 50 : ui.kind === 'spelltech' ? 262 : 64;   // shop and loot rows are taller for the item pictures
+      const rowH = info ? 38 : ui.kind === 'shop' || ui.kind === 'work' ? 150 : ui.kind === 'quests' ? 96 : ui.kind === 'loot' || ui.kind === 'scrap' ? 88 : ui.kind === 'cheat' ? 50 : ui.kind === 'spelltech' ? 262 : 64;   // shop and loot rows are taller for the item pictures
       const hero = ui.kind === 'hero', inv = ui.kind === 'inventory';
-      const wide = hero || inv || ['shop', 'scrap', 'save', 'load', 'logout', 'guest', 'sound', 'spelltech'].includes(ui.kind);
-      const pw = (ui.kind === 'spelltech' || ui.kind === 'shop' ? 15 : wide ? 11 : 9) * TILE;
+      const wide = hero || inv || ['quests', 'shop', 'scrap', 'save', 'load', 'logout', 'guest', 'sound', 'spelltech'].includes(ui.kind);
+      const pw = (ui.kind === 'spelltech' || ui.kind === 'shop' || ui.kind === 'work' ? 15 : wide ? 11 : 9) * TILE;
       ctx.font = '26px ' + MONO;
-      const textLines = WINDOW_TEXT[ui.kind] ? wrapText(WINDOW_TEXT[ui.kind], pw - 80) : [];
+      const wtext = typeof WINDOW_TEXT[ui.kind] === 'function' ? WINDOW_TEXT[ui.kind]() : WINDOW_TEXT[ui.kind];
+      const textLines = wtext ? wrapText(wtext, pw - 80) : [];
       const msgLines = ui.msg ? wrapText(ui.msg, pw - 80) : [];
-      const shop = ui.kind === 'shop', tabsH = shop ? 70 : 0;   // shop: row of tabs under the title, fixed height for the biggest tab
-      const listN = shop ? Math.max(...SHOP_TABS.map(t => SHOP_ITEMS.filter(it => it.tab === t.key).length)) : list.length;
+      const tabs = WINDOW_TABS[ui.kind], shop = !!tabs, tabsH = tabs ? 70 : 0;   // tabbed windows: row of tabs under the title, fixed height
+      const listN = ui.kind === 'shop' ? Math.max(...SHOP_TABS.map(t => [...SHOP_ITEMS, ...BAG_ITEMS()].filter(it => it.tab === t.key).length)) : ui.kind === 'work' ? 3 : list.length;
       const textH = (textLines.length ? textLines.length * 34 + 24 : 0) + tabsH, gaps = list.filter(r => r.gapBefore).length * 24;
       const ph = hero || inv ? 7 * TILE : ui.kind === 'rest' ? 5 * TILE
         : Math.min(canvas.height - 20, Math.max(6 * TILE, 110 + textH + listN * rowH + gaps + Math.max(1, msgLines.length) * 32 + 100));
@@ -2616,8 +2837,8 @@
         const tw = 210, th = 50, ty = py + 92, lineY = ty + th;
         ctx.strokeStyle = 'rgba(255, 255, 255, 0.35)'; ctx.lineWidth = 2;
         ctx.beginPath(); ctx.moveTo(px + 24, lineY); ctx.lineTo(px + pw - 24, lineY); ctx.stroke();
-        SHOP_TABS.forEach((t, i) => {
-          const tx = px + 40 + i * (tw + 8), on = i === (ui.tab || 0);
+        tabs.forEach((t, i) => {
+          const tx = px + 40 + i * (tw + 8), on = i === tabOf();
           ctx.beginPath(); ctx.moveTo(tx, lineY); ctx.lineTo(tx, ty + 10); ctx.quadraticCurveTo(tx, ty, tx + 10, ty);
           ctx.lineTo(tx + tw - 10, ty); ctx.quadraticCurveTo(tx + tw, ty, tx + tw, ty + 10); ctx.lineTo(tx + tw, lineY);
           ctx.fillStyle = on ? '#1b2233' : '#0b0d14'; ctx.fill();
@@ -2629,15 +2850,18 @@
         });
         ctx.textAlign = 'left';
         if (!list.length) { ctx.fillStyle = '#8a8a8a'; ctx.font = '24px ' + MONO; ctx.fillText('Nothing for sale here yet.', px + 40, top + 40); }
+        if (list.length && list[0].side) drawSideTab(list, px + 24, top, pw - 48, listN * rowH - 8);
       }
       let gapY = 0;
-      list.forEach((r, i) => {
+      (list.length && list[0].side ? [] : list).forEach((r, i) => {
         if (r.gapBefore) gapY += 24;
         const y = top + i * rowH + gapY, sel = !info && i === ui.cursor;
         rowRects.push({ x: px + 24, y, w: pw - 48, h: rowH - 8, i });
         if (sel) { ctx.fillStyle = 'rgba(255, 220, 0, 0.12)'; ctx.fillRect(px + 24, y, pw - 48, rowH - 8); }
         if (r.craft) { drawCraftRow(r.craft, px + 24, y, pw - 48, rowH - 8, sel); return; }
         if (r.shopItem) { drawShopRow(r.shopItem, px + 24, y, pw - 48, rowH - 8, sel); return; }
+        if (r.deal) { drawDealRow(r.deal, px + 24, y, pw - 48, rowH - 8, sel); return; }
+        if (r.quest) { drawQuestRow(r.quest, px + 24, y, pw - 48, rowH - 8); return; }
         ctx.fillStyle = r.dim ? '#6a6a6a' : r.item && rarityOf(r.item.name) !== 'common' ? rarityColor(r.item.name) : sel || info ? '#fff' : '#cfcfcf';
         ctx.font = (sel ? '600 ' : '') + (info ? '22px ' : ui.kind === 'cheat' ? '26px ' : '30px ') + MONO;
         ctx.textAlign = 'left';
@@ -2668,7 +2892,7 @@
       }
       ctx.fillStyle = '#8a8a8a';
       ctx.font = '22px ' + MONO;
-      ctx.fillText(hero ? 'H or Esc close' : ui.kind === 'gameover' ? 'Space start a new game' : inv ? 'A/D/W/S choose · Space equip/learn/unequip · I or Esc close' : ui.kind === 'loot' ? 'W/S choose · Space take · Esc close' : ui.kind === 'cheat' ? 'W/S choose · Space apply · P or Esc close' : ui.kind === 'scrap' ? 'W/S choose · Space buy / sell · Esc close' : shop ? 'A/D tab · W/S choose · Space buy · Esc close' : ui.kind === 'spelltech' ? 'W/S choose · Space craft · Esc close' : ui.kind === 'rest' ? (restReadyAt > Date.now() ? (ui.back ? 'Esc back' : 'Esc close') : 'Space confirm · Esc close') : info ? (ui.back ? 'Esc back' : 'Esc close') : (ui.back ? 'W/S choose · Space select · Esc back' : 'W/S choose · Space select · Esc close'), px + 40, py + ph - 40);
+      ctx.fillText(hero ? 'H or Esc close' : ui.kind === 'gameover' ? 'Space start a new game' : inv ? 'A/D/W/S choose · Space equip/learn/unequip · I or Esc close' : ui.kind === 'loot' ? 'W/S choose · Space take · Esc close' : ui.kind === 'cheat' ? 'W/S choose · Space apply · P or Esc close' : ui.kind === 'scrap' ? 'W/S choose · Space buy / sell · Esc close' : ui.kind === 'work' ? 'A/D tab · W/S choose · Space accept · Esc close' : shop ? 'A/D tab · W/S choose · Space buy · Esc close' : ui.kind === 'quests' ? 'W/S choose · Q or Esc close' : ui.kind === 'spelltech' ? 'W/S choose · Space craft · Esc close' : ui.kind === 'rest' ? (restReadyAt > Date.now() ? (ui.back ? 'Esc back' : 'Esc close') : 'Space confirm · Esc close') : info ? (ui.back ? 'Esc back' : 'Esc close') : (ui.back ? 'W/S choose · Space select · Esc back' : 'W/S choose · Space select · Esc close'), px + 40, py + ph - 40);
     }
 
     // ---- game over ------------------------------------------------------------------------
@@ -2914,7 +3138,7 @@
       ctx.strokeRect(x - 5, y - 5, size + 10, size + 10);
     }
     // an item's bonuses as [text, colour] pairs with short stat names (STR, CHSM, ATK SPD, AOE…); the colour tells the stat
-    const bonusParts = def => def ? [...Object.entries(def.gain || {}).map(([st, n]) => [`${n > 0 ? '+' : ''}${n} ${STAT_SHORT[st] || st}`, STAT_COLOR[st] || '#fff']),
+    const bonusParts = def => def ? [...(def.slots ? [[`${def.slots} SLOTS`, '#f2f2f2']] : []), ...Object.entries(def.gain || {}).map(([st, n]) => [`${n > 0 ? '+' : ''}${n} ${STAT_SHORT[st] || st}`, STAT_COLOR[st] || '#fff']),
       ...(def.attackMs ? [[`${def.attackMs > 0 ? '+' : ''}${secs(def.attackMs)}s ATK SPD`, '#ffe600']] : []),
       ...(def.meleeArea ? [[`+${Math.round((def.meleeArea - 1) * 100)}% AOE`, '#00e5ff']] : [])] : [];
     const bonusText = def => bonusParts(def).map(p => p[0]).join('  ');
@@ -2927,8 +3151,13 @@
       const pn = panels.inventory, on = focus === 'inventory', w = INV_PANEL.w, h = INV_PANEL.h;
       const x = canvas.width - w - 16, y = canvas.height - h - 16;
       panelFrame(x, y, w, h, 'Inventory', on);
-      const size = 96, gap = 16, total = INVENTORY_SLOTS * size + (INVENTORY_SLOTS - 1) * gap, x0 = x + (w - total) / 2, sy = y + 62;
-      for (let i = 0; i < INVENTORY_SLOTS; i++) {
+      const slots = invSlots(), size = 96, gap = 16, total = Math.max(1, slots) * size + (Math.max(1, slots) - 1) * gap, x0 = x + (w - total) / 2, sy = y + 62;
+      if (!slots) {   // no bag worn: nothing to carry things in
+        ctx.fillStyle = '#8a8a8a'; ctx.font = '20px ' + MONO; ctx.textAlign = 'left'; ctx.textBaseline = 'middle';
+        wrapText('No bag. Buy a BackBag at the ATB-Market (Other tab) to carry items.', w - 48).forEach((l, i) => ctx.fillText(l, x + 24, sy + 30 + i * 28));
+        ctx.font = '16px ' + MONO; ctx.fillText('I or Esc close', x + 24, y + h - 18); return;
+      }
+      for (let i = 0; i < slots; i++) {
         const sx = x0 + i * (size + gap);
         drawSlot(sx, sy, size, inventory[i] || null);
         rowRects.push({ x: sx, y: sy, w: size, h: size, i, panel: 'inventory' });
@@ -2942,15 +3171,16 @@
         ctx.fillStyle = rarityColor(sel.name);   // name in its rarity colour
         ctx.fillText(`${sel.name} · ${rarityOf(sel.name)} ${def.class || sel.class || 'item'}${def.stack > 1 ? ` · ${n}/${def.stack}` : ''}`, x + 24, ly);
         ctx.fillStyle = '#cfcfcf';
-        if (def.class === 'equipment') { const ex = drawParts(bonusParts(def), x + 24, ly + 26, 10);   // hint only if it fits in the panel
-          if (ex + ctx.measureText('· Space equip').width < x + w - 16) { ctx.fillStyle = '#cfcfcf'; ctx.fillText('· Space equip', ex, ly + 26); } }
+        if (def.class === 'equipment' || def.class === 'bag' || def.class === 'food') { const hint = def.class === 'bag' ? '· Space wear' : def.class === 'food' ? '· Space eat' : '· Space equip', ex = drawParts(bonusParts(def), x + 24, ly + 26, 10);   // hint only if it fits in the panel
+          if (ex + ctx.measureText(hint).width < x + w - 16) { ctx.fillStyle = '#cfcfcf'; ctx.fillText(hint, ex, ly + 26); } }
         else ctx.fillText(def.class === 'skill' ? 'Space to learn' : def.class === 'resource' ? 'crafting resource' : def.consume ? 'Space to consume: +1 MANA cap' : def.class === 'upgrade' ? 'upgrade material (use comes later)' : '', x + 24, ly + 26);
-        const unit = def.class === 'equipment' ? def.price : def.value;   // equipment: shop price; resources: value per piece
+        const unit = def.class === 'food' ? shown(sel.name, prices[sel.name]) : def.class === 'equipment' || def.class === 'bag' ? def.price : def.value;   // equipment: shop price; resources: value per piece
         ctx.fillStyle = '#f5c542';
         ctx.fillText(unit === undefined ? 'total price: —' : `total price: ${unit * n}$${n > 1 ? `  (${n} × ${unit}$)` : ''}`, x + 24, ly + 52);
       } else { ctx.fillStyle = '#8a8a8a'; ctx.fillText('empty slot', x + 24, ly); }
       ctx.fillStyle = '#8a8a8a'; ctx.font = '16px ' + MONO;
-      ctx.fillText('A/D choose · Space use · I or Esc close', x + 24, y + h - 18);
+      ctx.fillText('A/D · Space use · right-click throw · I/Esc close', x + 24, y + h - 18);
+      ctx.textAlign = 'right'; ctx.fillStyle = rarityColor(bag); ctx.font = '600 18px ' + MONO; ctx.fillText(bag, x + w - 24, y + 34);   // the worn bag
     }
 
     // hero: middle left. Full-body picture, stats, and the equipped slots (W/S choose, Space unequips).
@@ -3147,17 +3377,20 @@
     // keys are read by their physical position (e.code), so WASD, H, I, P and 1-3 work on any keyboard layout
     // (Cyrillic, AZERTY, Greek…). Arrow keys also move, and the number pad works for numbers.
     const CODE_KEYS = { KeyW: 'w', KeyA: 'a', KeyS: 's', KeyD: 'd', ArrowUp: 'w', ArrowLeft: 'a', ArrowDown: 's', ArrowRight: 'd',
-                        KeyH: 'h', KeyI: 'i', KeyP: 'p', KeyM: 'm' };
+                        KeyH: 'h', KeyI: 'i', KeyP: 'p', KeyM: 'm', KeyQ: 'q' };
     const keyOf = e => CODE_KEYS[e.code] || (/^(Digit|Numpad)[0-9]$/.test(e.code) ? e.code.slice(-1) : e.key.toLowerCase());
     addEventListener('keydown', e => {
       if (naming() || e.metaKey || e.ctrlKey || e.altKey) return;
       const k = keyOf(e);
+      if (itemMenu && !e.repeat && ['w', 's'].includes(k)) { e.preventDefault(); itemMenu.cursor = (itemMenu.cursor + (k === 's' ? 1 : -1) + itemMenu.opts.length) % itemMenu.opts.length; return; }
+      if (itemMenu && e.code === 'Space') { e.preventDefault(); if (!e.repeat) pickItemMenu(itemMenu.cursor); return; }
       if (e.code === 'Space') { e.preventDefault(); if (!e.repeat) spacePressed(); return; }
       if (k === 'p') { e.preventDefault(); if (!e.repeat && !locked()) { if (ui && ui.kind === 'cheat') closeWindow(); else openCheats(); } return; }   // CHEAT menu (testing) — remove before release
       if (k === 'i') { e.preventDefault(); if (!e.repeat && !ui) togglePanel('inventory'); return; }
       if (k === 'm') { e.preventDefault(); if (!e.repeat && !locked()) { if (ui && ui.kind === 'map') closeWindow(); else if (!ui) openWindow('map'); } return; }
       if (k === 'h') { e.preventDefault(); if (!e.repeat && !ui) togglePanel('hero'); return; }
       if (e.key === 'Escape') { e.preventDefault(); if (!e.repeat) escPressed(); return; }
+      if (k === 'q') { e.preventDefault(); if (!e.repeat && !locked()) { if (ui && ui.kind === 'quests') closeWindow(); else if (!ui) openWindow('quests'); } return; }
       if (e.code === 'Tab') { e.preventDefault(); if (!e.repeat && !anyOpen()) cycleTarget(); return; }
       if (ui && /^[1-9]$/.test(k)) { choose(+k - 1); return; }
       if (!anyOpen() && /^[1-3]$/.test(k)) { e.preventDefault(); if (!e.repeat) castSpell(+k - 1); return; }
@@ -3173,16 +3406,30 @@
     addEventListener('blur', () => held.clear());
 
     // tap/click a row in a window to pick it
+    canvas.addEventListener('contextmenu', e => e.preventDefault());   // right-click is the game's item menu, not the browser's
     canvas.addEventListener('pointerdown', e => {
-      if (!anyOpen() || naming()) return;
+      if (naming()) return;
       const r = canvas.getBoundingClientRect();
       const s = Math.min(r.width / canvas.width, r.height / canvas.height);   // object-fit: contain
       const ox = (r.width - canvas.width * s) / 2, oy = (r.height - canvas.height * s) / 2;
       const cx = (e.clientX - r.left - ox) / s, cy = (e.clientY - r.top - oy) / s;
+      if (!ui && !locked() && questBtn && e.button === 0 && cx >= questBtn.x && cx <= questBtn.x + questBtn.w && cy >= questBtn.y && cy <= questBtn.y + questBtn.h) { openWindow('quests'); return; }
+      if (!anyOpen()) return;
+      if (itemMenu) {   // menu open: a click on an option picks it, anywhere else closes the menu
+        const b = itemMenu.box;
+        if (b && e.button === 0 && cx >= b.x && cx <= b.x + b.w && cy >= b.y + 8 && cy < b.y + b.h - 8) pickItemMenu(Math.floor((cy - b.y - 8) / MENU.rowH));
+        else itemMenu = null;
+        return;
+      }
+      if (e.button === 2) {   // right-click an item in the bag: throw-away menu
+        const slot = !ui && rowRects.find(b => b.panel === 'inventory' && cx >= b.x && cx <= b.x + b.w && cy >= b.y && cy <= b.y + b.h);
+        if (slot && inventory[slot.i]) { focus = 'inventory'; panels.inventory.cursor = slot.i; panels.inventory.msg = ''; openItemMenu(slot.i, cx, cy); }
+        return;
+      }
       const hit = rowRects.find(b => (!ui || !b.panel) && cx >= b.x && cx <= b.x + b.w && cy >= b.y && cy <= b.y + b.h);
       if (hit && hit.panel) { focus = hit.panel; panels[hit.panel].cursor = hit.i; panels[hit.panel].msg = ''; }   // click a panel slot: focus + select
       else if (hit && hit.tab !== undefined) switchShopTab(hit.tab);
-      else if (hit && ui && ui.kind === 'shop' && hit.i !== ui.cursor) { ui.cursor = hit.i; ui.msg = ''; }   // shop: first click selects, a click on the selected item buys
+      else if (hit && ui && WINDOW_TABS[ui.kind] && hit.i !== ui.cursor) { ui.cursor = hit.i; ui.msg = ''; }   // shop: first click selects, a click on the selected item buys
       else if (hit) choose(hit.i);
     });
 
@@ -3192,6 +3439,4 @@
 
   window.claude?.hot?.ready ? window.claude.hot.ready(start) : start(window.claude?.hot?.data ?? {});
 </script>
-
-</body>
-</html>
+</body></html>
