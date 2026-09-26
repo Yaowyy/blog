@@ -81,6 +81,30 @@
   /* ---- phone view (touch controls on a phone-sized screen): the map fills the screen, the camera follows the hero,
      the bottom HUD is replaced by a small hero HUD in the top-left. Works upright and sideways. */
   .phud { display: none; }
+  /* ---- full-window view (computers): the map fills the whole window, the camera follows the hero, and the
+     XP bar + HUD float over the bottom of the map on a see-through dark strip (hidden while a window is open) */
+  .dock { display: contents; }
+  html.fill, html.fill body { height: 100%; overflow: hidden; }
+  html.fill body { padding: 0; display: block; }
+  html.fill { --w: min(max(100vw, 100vh * 21 / 13), 2400px); }   /* zone width on screen: HUD tiles stay map-tile sized */
+  html.fill #stage { position: fixed; inset: 0; width: 100vw; height: 100vh; height: 100dvh; aspect-ratio: auto; }
+  html.fill canvas { width: 100%; height: 100%; }
+  /* desktop: no bottom panel. Only the 3 spell slots stay, floating at the bottom-centre (the phone-style HUD is top-left) */
+  html.fill .dock { display: flex; justify-content: center; position: fixed; left: 0; right: 0; bottom: 14px; z-index: 3; pointer-events: none; transition: opacity 0.2s; }
+  html.fill .dock .xpbar, html.fill .dock .hud-left, html.fill .dock .hud-right, html.fill .dock .inv-btn { display: none; }
+  html.fill .dock .hud { display: flex; width: auto; font-size: 20px; }
+  html.fill .dock .abilities { pointer-events: auto; gap: 10px; order: 0; width: auto; }
+  html.fill .dock .ability { width: 64px; cursor: pointer; filter: drop-shadow(0 2px 6px rgba(0, 0, 0, 0.7)); }
+  html.fill .touch .t-stick, html.fill .touch .t-btns { display: none; }   /* desktop: no joystick or touch buttons, only the menu row */
+  html.fill .t-menu { left: auto; right: calc(var(--mini-w, 120px) + 10px); top: 8px; gap: 8px; }
+  html.fill .t-menu button { width: 60px; font-size: 22px; }
+  html.fill .t-menu button:hover { opacity: 1; border-color: #00e5ff; }
+  html.fill .t-menu small { font-size: 10px; white-space: nowrap; }
+  html.fill .touch.win .t-menu { display: none; }
+  html.fill .phud { zoom: 1.35; }   /* the phone HUD, a bit bigger on a computer screen */
+  html.phone .ph-more { display: none; }   /* phones: strength, charisma and deals are in the hero panel */
+  .ph-res .str { color: #ff8a3d; } .ph-res .cha { color: #c79bff; } .ph-res .deals { color: #8a8a8a; }
+  html.fill .dock.away { opacity: 0; pointer-events: none; }
   html.phone, html.phone body { height: 100%; overflow: hidden; overscroll-behavior: none; }
   html.phone body { padding: 0; display: block; }
   html.phone .hud, html.phone .xpbar { display: none; }
@@ -99,11 +123,11 @@
   html.phone.portrait .t-menu { flex-direction: column; right: 8px; top: calc(var(--mini-h, 80px) + 16px); }
   html.phone .touch.win .t-menu { display: none; }
   html.phone .touch.hero .t-stick { top: auto; right: auto; left: 4%; bottom: 6%; }   /* phones: the hero panel sits mid-left, clear of the stick */   /* a window is open: it has its own ✕ */
-  html.phone .phud { display: flex; position: absolute; z-index: 3; gap: 8px; align-items: flex-start;
+  :is(html.phone, html.fill) .phud { display: flex; position: absolute; z-index: 3; gap: 8px; align-items: flex-start;
                      left: calc(env(safe-area-inset-left, 0px) + 8px); top: calc(env(safe-area-inset-top, 0px) + 8px);
                      padding: 6px 8px 6px 6px; background: rgba(5, 7, 12, 0.72); border: 1px solid rgba(255, 255, 255, 0.18); border-radius: 10px;
                      font: 600 11px/1.2 ui-monospace, "SF Mono", Menlo, Consolas, monospace; color: #fff; pointer-events: none; }
-  html.phone .phud.away { display: none; }   /* a window or panel is open */
+  :is(html.phone, html.fill) .phud.away { display: none; }   /* a window or panel is open */
   .ph-face { width: 46px; height: 46px; flex: none; padding: 0; border: 2px solid #00e5ff; border-radius: 8px; background: #1B2233 center / cover no-repeat;
              pointer-events: auto; touch-action: none; cursor: pointer; -webkit-tap-highlight-color: transparent; }
   .ph-bars { display: grid; gap: 3px; width: 132px; }
@@ -236,6 +260,7 @@
       <div class="ph-bar mana"><i id="ph-mana"></i><span id="ph-manat"></span></div>
       <div class="ph-bar xp"><i id="ph-xp"></i></div>
       <div class="ph-res"><span class="nrg">&#x26A1;&#xFE0E; <b id="ph-nrg">0</b></span><span class="gold">$ <b id="ph-money">0</b></span></div>
+      <div class="ph-res ph-more"><span class="str" title="Strength">&#x2694;&#xFE0E; <b id="ph-str">1</b></span><span class="cha" title="Charisma">&#x2726; <b id="ph-cha">1</b></span><span class="deals" title="Deals made at work">deals <b id="ph-deals">0</b></span></div>
     </div>
   </div>
   <!-- phone controls over the map (touch screens; Settings → touch controls): joystick, action + spells, menu row -->
@@ -301,6 +326,7 @@
   </div>
 </div>
 
+<div class="dock" id="dock">
 <div class="xpbar" id="xpbar" title="Experience"><div class="xp-fill" id="xp-fill"></div><span class="xp-lvl" id="xp-lvl">lvl 1</span><span class="xp-text" id="xp-text">0 / 100</span></div>
 <div class="hud">
   <div class="hud-left">
@@ -332,6 +358,7 @@
       </div>
     </div>
   </div>
+</div>
 </div>
 
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.117.1/dist/umd/supabase.js"></script>
@@ -447,6 +474,26 @@
   const SAVE_VERSION = 1;
   const canvas = document.getElementById('c');
   const ctx = canvas.getContext('2d');
+  // sharp rendering: the game draws in "logical" canvas px (canvas.width/height, ~1040 tall), but the canvas buffer is sized
+  // to the real screen pixels (devicePixelRatio), so nothing gets stretched by the browser. PX = screen px per logical px.
+  let LW = canvas.width, LH = canvas.height, PX = 1;
+  const CANVAS_W = Object.getOwnPropertyDescriptor(HTMLCanvasElement.prototype, 'width'), CANVAS_H = Object.getOwnPropertyDescriptor(HTMLCanvasElement.prototype, 'height');
+  Object.defineProperty(canvas, 'width', { get: () => LW, set: v => { LW = v; fitBacking(); } });
+  Object.defineProperty(canvas, 'height', { get: () => LH, set: v => { LH = v; fitBacking(); } });
+  function fitBacking() {
+    const r = canvas.getBoundingClientRect(), dpr = window.devicePixelRatio || 1;
+    let k = r.width && r.height ? Math.min(r.width / LW, r.height / LH) * dpr : 1;
+    k = Math.min(k, Math.sqrt(9e6 / (LW * LH)));   // at most ~9 million pixels (4K), so big retina screens stay fast
+    const pw = Math.max(1, Math.round(LW * k)), ph = Math.max(1, Math.round(LH * k));
+    if (CANVAS_W.get.call(canvas) !== pw) CANVAS_W.set.call(canvas, pw);
+    if (CANVAS_H.get.call(canvas) !== ph) CANVAS_H.set.call(canvas, ph);
+    PX = pw / LW;
+    ctx.imageSmoothingQuality = 'high';   // resizing the buffer resets this
+  }
+  const setTransform0 = ctx.setTransform.bind(ctx);
+  ctx.setTransform = (a, b, c, d, e, f) => setTransform0(a * PX, b * PX, c * PX, d * PX, e * PX, f * PX);
+  new ResizeObserver(() => fitBacking()).observe(canvas);
+  addEventListener('resize', () => fitBacking());
   const MONO = 'ui-monospace, "SF Mono", Menlo, Consolas, monospace';
 
   // ---- rules --------------------------------------------------------------
@@ -1890,7 +1937,7 @@
     function drawStates() {
       const list = heroStates(), size = 56, gap = 8;
       list.forEach((s, i) => {
-        const def = STATES[s.key], x = 16 + i * (size + gap), y = phoneView ? phudBottom() + 12 : canvas.height - 16 - size, im = ART[def.icon];
+        const def = STATES[s.key], x = 16 + i * (size + gap), y = mobUI() ? phudBottom() + 12 : viewBottom() - 16 - size, im = ART[def.icon];
         ctx.save();
         if (ready(im)) { ctx.imageSmoothingQuality = 'high'; ctx.drawImage(im, x, y, size, size); }
         else {   // placeholder badge until the icon art exists
@@ -2562,13 +2609,15 @@
       renderStats();
     }
     const GROUND_REPEAT = 6;   // tiles per texture repeat
+    const groundScale = () => Math.min(2, Math.max(1, Math.ceil(PX * worldCam(0, 0).z * 4) / 4));
     function buildGround() {
       const im = ART[ZONE_TYPES[AREAS[areaName].type].floor];
       if (!ready(im)) return null;
-      const g = document.createElement('canvas'); g.width = WORLD_W; g.height = WORLD_H;
-      const gx = g.getContext('2d'); gx.imageSmoothingQuality = 'high';
+      const gs = groundScale();   // built at the screen's resolution (up to 2×), so the floor isn't stretched
+      const g = document.createElement('canvas'); g.width = Math.round(WORLD_W * gs); g.height = Math.round(WORLD_H * gs); g.gs = gs;
+      const gx = g.getContext('2d'); gx.imageSmoothingQuality = 'high'; gx.scale(gs, gs);
       const B = GROUND_REPEAT * TILE;
-      for (let y = 0; y < g.height; y += B) for (let x = 0; x < g.width; x += B) gx.drawImage(im, x, y, B, B);
+      for (let y = 0; y < WORLD_H; y += B) for (let x = 0; x < WORLD_W; x += B) gx.drawImage(im, x, y, B, B);
       if (AREAS[areaName].decals) placeDecals(gx);
       const lake = AREAS[areaName].lake;   // toxic lake quarter, flat on the ground
       if (lake && ready(ART[lake.art])) gx.drawImage(ART[lake.art], lake.x, lake.y);
@@ -2714,13 +2763,19 @@
     let cam = { z: 1, ox: 0, oy: 0 };
     let phoneView = false;   // set by layoutView(): touch controls on → full-screen view with a camera
     let viewTiles = 7;       // tiles shown across the screen's short side in that view
+    let fillView = false;    // computers: the canvas takes the window's shape and the zone covers it (camera scrolls a little)
+    let dockH = 0;           // height of the floating HUD at the bottom, in canvas px (fill view)
+    const mobUI = () => phoneView || fillView;   // phone-style HUD (phones and, since the bottom panel went, computers too)
+    const viewBottom = () => canvas.height - (fillView ? dockH : 0);   // lowest canvas y not covered by the HUD
     function worldCam(rx, ry) {
-      if (!phoneView) return { z: canvas.width / WORLD_W, ox: 0, oy: 0 };
+      if (!phoneView && !fillView) return { z: canvas.width / WORLD_W, ox: 0, oy: 0 };
       const land = canvas.width >= canvas.height;
-      const z = Math.max(land ? canvas.height / (viewTiles * TILE) : canvas.width / (viewTiles * TILE), canvas.width / WORLD_W, canvas.height / WORLD_H);
+      const z = fillView ? Math.max(canvas.width / WORLD_W, canvas.height / WORLD_H)   // computers: the zone covers the window
+        : Math.max(land ? canvas.height / (viewTiles * TILE) : canvas.width / (viewTiles * TILE), canvas.width / WORLD_W, canvas.height / WORLD_H);
       const vw = canvas.width / z, vh = canvas.height / z, hx = (rx + 0.5) * TILE, hy = (ry + 0.5) * TILE;
-      const camX = Math.max(0, Math.min(WORLD_W - vw, hx - vw / 2)), camY = Math.max(0, Math.min(WORLD_H - vh, hy - vh / 2));
-      return { z, ox: -camX * z, oy: -camY * z };
+      const pad = fillView ? dockH / z : 0;   // the bottom rows can scroll up above the floating HUD
+      const camX = Math.max(0, Math.min(WORLD_W - vw, hx - vw / 2)), camY = Math.max(0, Math.min(WORLD_H - vh + pad, hy - (vh - pad) / 2));
+      return { z, ox: Math.round(-camX * z * PX) / PX, oy: Math.round(-camY * z * PX) / PX };   // whole screen pixels: no shimmer while scrolling
     }
     function draw(rx, ry) {
       ctx.setTransform(1, 0, 0, 1, 0, 0);
@@ -2732,11 +2787,11 @@
       const wantWire = !!AREAS[areaName].coils && ['wallStraight', 'wallBroken', 'wallCorner', 'wallEnd'].every(k => ready(ART[k]));
       const wantTar = AREAS[areaName].exits.length > 0 && AREAS[areaName].exits.every(e => { const st = passageStyle(areaName, e.to); return ready(st ? ART[st.art] : ART.tar); });
       const wantLake = !!AREAS[areaName].lake && ready(ART[AREAS[areaName].lake.art]);
-      if (!groundLayer || (wantDecals && !groundLayer.hasDecals) || (wantWire && !groundLayer.hasWire) || (wantTar && !groundLayer.hasTar) || (wantLake && !groundLayer.hasLake)) {
+      if (!groundLayer || groundLayer.gs !== groundScale() || (wantDecals && !groundLayer.hasDecals) || (wantWire && !groundLayer.hasWire) || (wantTar && !groundLayer.hasTar) || (wantLake && !groundLayer.hasLake)) {
         groundLayer = buildGround();
         if (groundLayer) { groundLayer.hasDecals = wantDecals; groundLayer.hasWire = wantWire; groundLayer.hasTar = wantTar; groundLayer.hasLake = wantLake; }
       }
-      if (groundLayer) ctx.drawImage(groundLayer, 0, 0);
+      if (groundLayer) ctx.drawImage(groundLayer, 0, 0, WORLD_W, WORLD_H);
 
       // grid lines only until the floor texture is loaded (its slab joints are the grid)
       if (!groundLayer) {
@@ -2813,7 +2868,7 @@
 
       rowRects = [];
       drawStates();
-      if (!(ui && ui.kind === 'map')) { drawMinimap(rx, ry); if (!phoneView) { drawQuestButton(); drawLbButton(); } else questBtn = lbBtn = null; }
+      if (!(ui && ui.kind === 'map')) { drawMinimap(rx, ry); if (!mobUI()) { drawQuestButton(); drawLbButton(); } else questBtn = lbBtn = null; }
       drawPanels();
       if (!ui) drawItemMenu();
       if (ui) drawWindow();
@@ -3705,8 +3760,8 @@
       drawMapGrid(x, y, MINI.cw, MINI.ch, aTop, aTop - MINI.rows + 1, bLeft, bLeft + MINI.cols - 1, false);
       ctx.restore();
       ctx.strokeStyle = '#fff'; ctx.lineWidth = 2; rr(x - 5, y - 5, w + 10, h + 10, 13); ctx.stroke();
-      ctx.fillStyle = '#fff'; ctx.font = (phoneView ? '600 26px ' : '600 14px ') + MONO; ctx.textAlign = 'right'; ctx.textBaseline = 'top';
-      ctx.fillText(phoneView ? areaLabel(areaName).toUpperCase() : 'M map', x + w, y + h + 10);   // phones: the area name (no M key there)
+      ctx.fillStyle = '#fff'; ctx.font = (phoneView ? '600 26px ' : fillView ? '600 17px ' : '600 14px ') + MONO; ctx.textAlign = 'right'; ctx.textBaseline = 'top';
+      ctx.fillText(mobUI() ? areaLabel(areaName).toUpperCase() : 'M map', x + w, y + h + 10);   // phones: the area name (no M key there)
       ctx.restore();
     }
     // big map (M): the whole world in the middle of the screen, fully opaque
@@ -3824,7 +3879,7 @@
     // inventory: bottom right, just above the info bar. Backpack slots only (equipped items are in the hero panel).
     function drawInventoryPanel() {
       const pn = panels.inventory, on = focus === 'inventory', w = INV_PANEL.w, h = INV_PANEL.h;
-      const x = canvas.width - w - 16, y = canvas.height - h - 16;
+      const x = canvas.width - w - 16, y = viewBottom() - h - 16;
       panelFrame(x, y, w, h, 'Inventory', on);
       if (!ui) drawCloseX(x + w - 54, y + 10, 'inventory');
       const slots = invSlots(), size = 96, gap = 16, total = Math.max(1, slots) * size + (Math.max(1, slots) - 1) * gap, x0 = x + (w - total) / 2, sy = y + 62;
@@ -3862,7 +3917,7 @@
     // hero: middle left. Full-body picture, stats, and the equipped slots (W/S choose, Space unequips).
     function drawHeroPanel() {
       const pn = panels.hero, on = focus === 'hero', w = HERO_PANEL.w, h = HERO_PANEL.h;
-      const x = 16, y = (canvas.height - h) / 2, top = y + 64;
+      const x = 16, y = Math.max(12, (viewBottom() - h) / 2), top = y + 64;
       panelFrame(x, y, w, h, heroName || DEFAULT_NAME, on);
       if (!ui) drawCloseX(x + w - 54, y + 10, 'hero');
       const bw = 180, bh = 320;
@@ -4231,36 +4286,49 @@
     // phone view: the canvas takes the screen's shape (sideways: 1040 px tall; upright: 1240 px wide, so every window still fits)
     // and the camera zooms in on the hero (see worldCam). Desktop and tablets keep the 1680 × 1040 canvas with the whole zone.
     const phudEl = $('phud');
+    // menu row labels: phones show names, computers show the key too
+    const MENU_LABELS = [...touchEl.querySelectorAll('.t-menu small')].map(el => [el, el.textContent,
+      { bag: 'I bag', map: 'M map', quests: 'Q quests', top: 'L top', menu: 'Esc menu', full: 'full' }[el.textContent] || el.textContent]);
     function layoutView() {
       const vw = window.innerWidth, vh = window.innerHeight;
       phoneView = touchOn();   // touch controls on (phones, tablets, or turned on in Settings): full-screen view with the camera
       viewTiles = Math.max(7, Math.min(13, Math.round(Math.min(vw, vh) / 56)));   // tiles across the short side: 7 on phones, more on tablets
-      fsBtn.hidden = !phoneView || !(document.fullscreenEnabled || document.webkitFullscreenEnabled);
+      fsBtn.hidden = !(document.fullscreenEnabled || document.webkitFullscreenEnabled);
       document.documentElement.classList.toggle('phone', phoneView);
       document.documentElement.classList.toggle('portrait', phoneView && vh > vw);
+      fillView = !phoneView;
+      document.documentElement.classList.toggle('fill', fillView);
+      touchEl.hidden = !phoneView && !fillView;   // desktop keeps the layer for its menu row (the joystick and buttons are hidden by CSS)
+      MENU_LABELS.forEach(([el, ph, desk]) => { el.textContent = fillView ? desk : ph; });
       let W = WORLD_W, H = WORLD_H;
       if (phoneView) { if (vw >= vh) { H = 1040; W = Math.round(1040 * vw / vh); } else { W = 1240; H = Math.round(1240 * vh / vw); } }
+      else if (fillView) { if (vw / vh >= COLS / ROWS) { H = WORLD_H; W = Math.round(WORLD_H * vw / vh); } else { W = WORLD_W; H = Math.round(WORLD_W * vh / vw); } }
       if (canvas.width !== W || canvas.height !== H) { canvas.width = W; canvas.height = H; }
       requestAnimationFrame(() => {   // sizes that depend on the laid-out page
         const k = canvas.clientWidth / canvas.width;   // CSS px per canvas px
         touchEl.style.setProperty('--u', (phoneView ? Math.min(vw, vh) : canvas.clientHeight) / 100 + 'px');
         touchEl.style.setProperty('--mini-w', (MINI.cols * MINI.cw + 30) * k + 'px');
         document.documentElement.style.setProperty('--mini-h', (MINI.rows * MINI.ch + 60) * k + 'px');
+        measureDock();
       });
     }
+    const dockEl = $('dock');
+    function measureDock() { dockH = 0; }   // nothing covers the bottom of the map any more (the spell slots float)
+    new ResizeObserver(measureDock).observe(dockEl);
     // bottom of the phone HUD in canvas px (things drawn on the canvas below it: status icons, the enemy panel when upright)
     function phudBottom() {
-      if (!phoneView || !phudEl.offsetHeight) return 12;
+      if (!mobUI() || !phudEl.offsetHeight) return 12;
       return (phudEl.offsetTop + phudEl.offsetHeight) * canvas.width / Math.max(1, canvas.clientWidth);
     }
     function renderPhud() {
-      if (!phoneView) return;
+      if (!mobUI()) return;
       const pct = (a, b) => Math.max(0, Math.min(100, b ? a / b * 100 : 0)) + '%';
       $('ph-name').textContent = heroName || DEFAULT_NAME; $('ph-lvl').textContent = `lvl ${hero.level}`;
       $('ph-hp').style.width = pct(stats.health, CAPS.health); $('ph-hpt').textContent = `${stats.health}/${CAPS.health}`;
       $('ph-mana').style.width = pct(stats.mana, CAPS.mana); $('ph-manat').textContent = `${stats.mana}/${CAPS.mana}`;
       const need = expNeed(hero.level); $('ph-xp').style.width = need ? pct(hero.exp, need) : '100%';
       $('ph-nrg').textContent = stats.energy; $('ph-money').textContent = stats.money;
+      $('ph-str').textContent = stats.strength; $('ph-cha').textContent = stats.charisma; $('ph-deals').textContent = dealsDone;
     }
     $('ph-face').style.backgroundImage = `url(${ART_SRC.heroPortrait})`;
     $('t-quest-img').src = ART_SRC.questIcon; $('t-lb-img').src = ART_SRC.trophy; renderBagTile();
@@ -4314,6 +4382,7 @@
       touchEl.classList.toggle('busy', anyOpen()); touchEl.classList.toggle('win', !!ui); touchEl.classList.toggle('inv', !!panels.inventory && !ui); touchEl.classList.toggle('hero', !!panels.hero && !ui);
       phudEl.classList.toggle('away', anyOpen()); renderPhud();
     }, 150);
+    setInterval(() => dockEl.classList.toggle('away', fillView && (!!ui || naming())), 100);   // a window is open: the floating HUD steps aside
 
     spawnAllDrips();   // start of the game: every enemy in the world is spawned
     requestAnimationFrame(frame);
