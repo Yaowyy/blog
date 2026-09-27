@@ -1117,18 +1117,15 @@
   // tiles and rushes in; next to the hero it rises for 0.2 s (red beeping light), then rams: level + 1 damage (+ his level − hero
   // level), 40% chance to slow the hero by 20% for 3 s. After the ram it stays low for 0.6 s: only then can melee reach it
   // (spells always can). Cooldown 1.8 s. Gives up when the hero is 10+ tiles away and flies home.
-  // At exactly 3 health (once per life) it cloaks (2% visible, can't be targeted), flies 3 tiles away and repairs +3 per second for 3 s.
+  // When a hit leaves it at 10% of max HP or less (once per life) it cloaks (2% visible, can't be targeted), flies 3 tiles away and repairs 30% of max HP over 3 s.
   const DRONE = { name: 'Mav-1K', exp: [3, 4], hp: 14, aggro: 3, leash: 10, stepMs: 500, windupMs: 250, lowMs: 700, cooldownMs: 1800,
-                  slowChance: 0.4, slow: 0.2, slowMs: 3000, cloakHp: 3, cloakMs: 3000, cloakAlpha: 0.02, fleeDist: 3, repair: 3,
+                  slowChance: 0.4, slow: 0.2, slowMs: 3000, cloakPct: 0.1, cloakMs: 3000, cloakAlpha: 0.02, fleeDist: 3, repairPct: 0.3,
                   respawnMs: [40000, 100000], lootMs: 30000, fadeMs: 2000, loot: { money: [4, 10], aiChipChance: 0.1 } };
   const ENEMY = { drip: DRIP, scav: SCAV, drone: DRONE };
-  // enemy max health: the hero's health curve with its own base and shape (hpShape); without hpShape it stays at `hp`.
-  // Drip: round(10 + [1 + 0.2(L − 1)] × (L − 1)^0.7) → 10 at lvl 1, 23 at lvl 10, 48 at lvl 20.
-  // Toxic Scav: round(26 + [1 + 0.3(L − 1)] × (L − 1)^0.8) → 26 at lvl 1, 47 at lvl 10, 97 at lvl 20.
-  DRIP.hpShape = 0.7; DRIP.hpGrowth = 0.2;
-  SCAV.hpShape = 0.8; SCAV.hpGrowth = 0.3;
-  DRONE.hpShape = 0.7; DRONE.hpGrowth = 0.2;   // Drip's curve from 14: 14 at lvl 1, 15 at lvl 2
-  const enemyMaxHp = (kind, zoneId) => { const T = ENEMY[kind]; return T.hpShape ? levelHealth(T.hp, zoneLevel(zoneId), T.hpShape, T.hpGrowth) : T.hp; };
+  // enemy max health = round(the hero's max HP at the enemy's level × the enemy's hpMult). Every new enemy gets its own hpMult.
+  // Drip ×1: 10 / 12 / 14 / 17 / 21 at lvl 1-5 · Mav-1K ×0.8: 8 / 10 / 11 / 14 / 17 · Toxic Scav ×1.8: 18 / 22 / 25 / 31 / 38
+  DRIP.hpMult = 1; DRONE.hpMult = 0.8; SCAV.hpMult = 1.8;
+  const enemyMaxHp = (kind, zoneId) => Math.max(1, Math.round(heroHealthCap(10, zoneLevel(zoneId)) * (ENEMY[kind].hpMult ?? 1)));
   const ET = d => ENEMY[d.kind || 'drip'];   // an enemy's type (rules)
   // Scav sheets are cut to the hero's scale (277 px tall ≈ HERO_H tiles): ax = feet centre, foot = px from the cell bottom to the soles
   const SCAV_ART = { walk: { frames: 4, cellW: 238, cellH: 287, ax: 132.5, foot: 0 },   // walk cycle, 4 frames per tile stepped
@@ -2269,8 +2266,9 @@
     function updateDrone() {
       const D = DRONE, d = drip, t = gameTime, dist = cheb(player.x, player.y, d.x, d.y);
       if (d.cloakUntil) {   // cloaked: flies off 3 tiles and repairs +3 per second for 3 s
-        while (d.repairNext && t >= d.repairNext && d.repairNext <= d.cloakUntil) {
-          d.hp = Math.min(d.maxHp, d.hp + D.repair); d.repairNext += 1000;
+        while (d.repairNext && t >= d.repairNext && d.repairNext <= d.cloakUntil && d.repairTicks > 0) {   // 30% of max HP over 3 ticks
+          const add = Math.ceil(d.repairLeft / d.repairTicks); d.repairLeft -= add; d.repairTicks--;
+          d.hp = Math.min(d.maxHp, d.hp + add); d.repairNext += 1000;
         }
         if (t >= d.cloakUntil) { d.cloakUntil = 0; d.repairNext = 0; d.flee = null; d.aggro = true; }
         else {
@@ -2310,9 +2308,9 @@
         float('slowed!', '#4ea1ff', player.x + 0.5, player.y - 1.1);
       }
     }
-    function droneCloak(d) {   // exactly 3 health, once per life: vanish, fly 3 tiles away from the hero, repair
+    function droneCloak(d) {   // 10% health or less, once per life: vanish, fly 3 tiles away from the hero, repair
       const D = DRONE, t = gameTime;
-      d.repaired = true; d.cloakUntil = t + D.cloakMs; d.repairNext = t + 1000; d.hitAt = 0; d.lowUntil = 0; d.aggro = false; d.returning = false;
+      d.repaired = true; d.cloakUntil = t + D.cloakMs; d.repairNext = t + 1000; d.repairLeft = Math.round(d.maxHp * D.repairPct); d.repairTicks = Math.round(D.cloakMs / 1000); d.hitAt = 0; d.lowUntil = 0; d.aggro = false; d.returning = false;
       let best = null;
       for (let y = 0; y < ROWS; y++) for (let x = 0; x < COLS; x++) {
         if (!droneFree(x, y, d) || Math.abs(cheb(x, y, d.x, d.y) - D.fleeDist) > 0) continue;
@@ -2384,7 +2382,7 @@
       drip.hp = Math.max(0, drip.hp - dmg);
       drip.hurtStart = gameTime; drip.aggro = true; drip.returning = false;
       float(text, color, drip.x + 0.5, drip.y - 0.9);
-      if (drip.kind === 'drone' && drip.hp === DRONE.cloakHp && !drip.repaired) droneCloak(drip);
+      if (drip.kind === 'drone' && drip.hp > 0 && drip.hp <= drip.maxHp * DRONE.cloakPct && !drip.repaired) droneCloak(drip);   // once per life, at 10% HP or less
       if (drip.hp <= 0) {   // nothing is given yet: the loot waits on his puddle
         drip.dead = true; drip.deadAt = gameTime; drip.hitAt = 0; drip.dot = null; drip.stunUntil = 0; kills++;
         if (drip.kind === 'drone') {   // falls: the wreck lands on the nearest walkable tile (it may have been over a building)
