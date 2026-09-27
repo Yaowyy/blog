@@ -390,7 +390,8 @@
   // Music starts only when the player enters the game; browsers also need a key press or tap before any sound.
   const MUSIC_SRC = 'audio/background_music.m4a';
   const SETTINGS_KEY = 'littlegame.settings';
-  const settings = Object.assign({ music: 2, sfx: 2, touch: 'auto' }, store.get(SETTINGS_KEY) || {});   // volumes: 0-5 steps of 20%; touch: auto / on / off. Per device
+  const settings = Object.assign({ music: 2, sfx: 2, touch: 'auto' }, store.get(SETTINGS_KEY) || {});   // new players start at 40% / 40%
+  if ((settings.v || 0) < 2) { settings.music = 2; settings.sfx = 2; settings.v = 2; store.set(SETTINGS_KEY, { ...settings }); }   // one-time reset to 40% for everyone (sound update)   // volumes: 0-5 steps of 20%; touch: auto / on / off. Per device
   const volumeBar = n => '[' + '='.repeat(n) + '\u00b7'.repeat(5 - n) + '] ' + String(n * 20).padStart(3) + '%';
   const audio = { ctx: null, music: null, sfx: null, buffer: null, loading: null, source: null, wanted: false, el: null };
   function audioCtx() {
@@ -399,8 +400,9 @@
     if (!AC) return null;
     audio.ctx = new AC();
     audio.music = audio.ctx.createGain(); audio.music.connect(audio.ctx.destination);
-    audio.sfx = audio.ctx.createGain(); audio.sfx.connect(audio.ctx.destination);   // sound effects will play through this one
+    audio.sfx = audio.ctx.createGain(); audio.sfx.connect(audio.ctx.destination);   // sound effects play through this one
     applyVolumes();
+    setTimeout(() => Object.keys(SFX).forEach(loadSfx), 0);   // decode the effects early so the first one isn't silent
     return audio.ctx;
   }
   const curve = n => Math.pow(n / 5, 2);   // ears hear volume logarithmically: squared steps feel even
@@ -450,6 +452,28 @@
         audio.source = src;
       }
     }).catch(() => fallbackMusic());   // an old browser that can't decode it: a plain looping <audio>
+  }
+  // sound effects: short clips decoded once, played through the SFX volume. gain: the clips are recorded quietly, so they're lifted a bit
+  const SFX = { interact: { src: 'audio/buttonInteract.m4a', gain: 2 }, navigate: { src: 'audio/menuNavigate.m4a', gain: 1.75 } };
+  let sfxQuietUntil = 0;   // an interaction just played: skip the navigate tick that the same click causes
+  function loadSfx(k) {
+    const d = SFX[k], ac = audioCtx(); if (!ac || d.loading) return;
+    d.loading = fetch(d.src).then(r => { if (!r.ok) throw 0; return r.arrayBuffer(); })
+      .then(data => new Promise((ok, fail) => { const p = ac.decodeAudioData(data, ok, fail); if (p && p.catch) p.catch(fail); }))
+      .then(buf => { d.buffer = buf; }).catch(() => {});
+  }
+  function playSfx(k) {
+    const d = SFX[k], now = performance.now();
+    if (!settings.sfx || !d) return;
+    if (k === 'navigate' && now < sfxQuietUntil) return;
+    if (k === 'interact') sfxQuietUntil = now + 150;
+    const ac = audioCtx(); if (!ac) return;
+    if (ac.state === 'suspended' && !document.hidden) ac.resume().catch(() => {});
+    if (!d.buffer) { loadSfx(k); return; }
+    if (k === 'navigate' && d.lastAt && now - d.lastAt < 45) return;   // held key: at most ~20 ticks a second
+    d.lastAt = now;
+    const src = ac.createBufferSource(), g = ac.createGain();
+    g.gain.value = d.gain; src.buffer = d.buffer; src.connect(g); g.connect(audio.sfx); src.start();
   }
   function fallbackMusic() {
     if (audio.el) return;
@@ -509,11 +533,11 @@
   const CAPS = { health: 10, energy: 20, mana: 0 };
   const BASE_CAPS = { ...CAPS };   // the cheat menu can raise CAPS; "new game" puts these back
   // ---- experience and levels ----
-  // Level 1 → 2 needs 100 exp; each next level needs 1.6 × the previous, rounded to 10. Max level 20.
+  // Level 1 → 2 needs 100 exp; each next level needs 1.4 × the previous, rounded to 10. Max level 20.
   const MAX_LEVEL = 20;
-  const EXP_NEED = (() => { const a = [100]; while (a.length < MAX_LEVEL - 1) a.push(Math.round(a[a.length - 1] * 1.6 / 10) * 10); return a; })();
+  const EXP_NEED = (() => { const a = [100]; while (a.length < MAX_LEVEL - 1) a.push(Math.round(a[a.length - 1] * 1.4 / 10) * 10); return a; })();
   const expNeed = lvl => lvl >= MAX_LEVEL ? 0 : EXP_NEED[lvl - 1];   // exp to go from lvl to lvl + 1
-  // each level up: health cap = round(10 + [1 + 0.2(L − 1)] × (L − 1)^0.8) (10 at lvl 1, 26 at lvl 10, 61 at lvl 20; see heroHealthCap),
+  // each level up: max health = round(previous max + 0.8 × new level) (10 at lvl 1, 12 at 2, 14 at 3, 53 at 10, 177 at 20; see heroHealthCap),
   // +1 mana cap, +10% energy cap (compounding, shown as whole numbers), +0.1% crit chance,
   // strength × 1.12, health regen × 1.06, mana regen × 1.09 (all three kept as fractions, used / shown rounded)
   const LEVEL_GROWTH = { energy: 0.10 }, LEVEL_CRIT = 0.001, LEVEL_MANA = 1;
@@ -522,7 +546,7 @@
   const levelStrength = L => Math.round(1 * levelMult('strength', L));   // hero's own strength (1 at lvl 1, 2 at 5, 3 at 10, 9 at 20)
   const HP_CURVE = { growth: 1, growthPerLvl: 0.2, shape: 0.8 };
   const levelHealth = (base, L, shape, perLvl = HP_CURVE.growthPerLvl) => Math.round(base + (HP_CURVE.growth + perLvl * (L - 1)) * Math.pow(L - 1, shape));
-  const heroHealthCap = (base, L) => levelHealth(base, L, HP_CURVE.shape);
+  const heroHealthCap = (base, L) => { let hp = base; for (let l = 2; l <= L; l++) hp = Math.round(hp + l * 0.8); return hp; };   // hero only (enemies keep levelHealth)
   const LEVEL_EXP = { work: 1 };   // exp per work deal. Discovering a zone: |a| + |b| of its coordinates (zoneSum).
   // Killing an enemy: base `exp` × (2 × enemy level − hero level) + (zone's |a| + |b|) / 2 (rounded down), never below 0.
   // Enemy damage: base damage + (enemy level - hero level), never below 0 (npcDamage).
@@ -608,7 +632,7 @@
   const SPELLS = {
     'Magic tar': { mana: 3, range: 5, speed: 9, rootMs: 2000, dot: [1, 2], ticks: 2, tickMs: 1000 },   // root 2 s + 1-2 damage per second for 2 s
   };
-  // critical strike (spells only): 0.03% per charisma point, capped at 15%. A crit adds the hero's strength to the damage.
+  // critical strike (any attack: melee and spells): 0.03% per charisma point, capped at 15%. A crit adds the hero's strength to the damage.
   const CRIT_PER_CHA = 0.0003, CRIT_CAP = 0.15;
   const HERO_MANA_REGEN_MS = 60000;     // hero gets 1 mana back every minute of game time (up to the mana cap)
   const NPC_HEALTH_REGEN_MS = 60000;    // every enemy (all zones) heals 1 health per minute of game time
@@ -1094,7 +1118,7 @@
   // level), 40% chance to slow the hero by 20% for 3 s. After the ram it stays low for 0.6 s: only then can melee reach it
   // (spells always can). Cooldown 1.8 s. Gives up when the hero is 10+ tiles away and flies home.
   // At exactly 3 health (once per life) it cloaks (2% visible, can't be targeted), flies 3 tiles away and repairs +3 per second for 3 s.
-  const DRONE = { name: 'Mav-1K', exp: [3, 4], hp: 14, aggro: 3, leash: 10, stepMs: 500, windupMs: 200, lowMs: 600, cooldownMs: 1800,
+  const DRONE = { name: 'Mav-1K', exp: [3, 4], hp: 14, aggro: 3, leash: 10, stepMs: 500, windupMs: 250, lowMs: 700, cooldownMs: 1800,
                   slowChance: 0.4, slow: 0.2, slowMs: 3000, cloakHp: 3, cloakMs: 3000, cloakAlpha: 0.02, fleeDist: 3, repair: 3,
                   respawnMs: [40000, 100000], lootMs: 30000, fadeMs: 2000, loot: { money: [4, 10], aiChipChance: 0.1 } };
   const ENEMY = { drip: DRIP, scav: SCAV, drone: DRONE };
@@ -1904,15 +1928,15 @@
     }
 
     // Space: open the tile the hero faces, pick the highlighted row, or equip in the inventory
-    function spacePressed() {
-      if (ui) { choose(ui.cursor); return; }
-      if (focus === 'inventory' && panels.inventory) { useSelected(panels.inventory); return; }
-      if (focus === 'hero' && panels.hero) { unequipSelected(panels.hero); return; }
+    function spacePressed() {   // everything but a swing plays the interact click
+      if (ui) { playSfx('interact'); choose(ui.cursor); return; }
+      if (focus === 'inventory' && panels.inventory) { playSfx('interact'); useSelected(panels.inventory); return; }
+      if (focus === 'hero' && panels.hero) { playSfx('interact'); unequipSelected(panels.hero); return; }
       // enemy in reach: swing. Otherwise loot / open the faced building if there is one, else swing at the air.
       if (!meleeTargets().length && !moving) {
-        if (lootable()) { lootTarget = lootable(); openWindow('loot'); return; }
+        if (lootable()) { playSfx('interact'); lootTarget = lootable(); openWindow('loot'); return; }
         const w = wallAt(player.x + facing.x, player.y + facing.y);
-        if (w && w.opens) { openWindow(w.opens); return; }
+        if (w && w.opens) { playSfx('interact'); openWindow(w.opens); return; }
       }
       heroAttack();
     }
@@ -2325,7 +2349,8 @@
       heroAttackStart = gameTime;   // attack animation in the facing direction (diagonals use the side view)
       heroAttackDir = facing.x ? 'side' : facing.y > 0 ? 'down' : 'up';
       if (facing.x) lookX = facing.x;
-      for (const d of meleeTargets()) { drip = d; damageDrip(stats.strength, `-${stats.strength}`, '#fff'); }
+      const crit = Math.random() < critChance(), dmg = stats.strength * (crit ? 2 : 1);   // a crit adds strength once more (one roll per swing)
+      for (const d of meleeTargets()) { drip = d; damageDrip(dmg, crit ? `-${dmg} crit!` : `-${dmg}`, crit ? '#ffe600' : '#fff'); }
     }
     // time between swings: 1 s with fists; equipment can shorten it (attackMs, e.g. banana sword -100 ms), at least 0.3 s
     const heroAttackMs = () => Math.max(300, HERO_ATTACK_MS + equipped.reduce((t, it) => t + ((itemDef(it.name) || {}).attackMs || 0), 0));
@@ -2630,7 +2655,17 @@
     // ---- drawing ------------------------------------------------------------
     let rowRects = [];   // canvas-space hit areas of window rows, for taps/clicks
 
+    // menu navigation tick: the selection moved inside an open window / panel (W/A/S/D, arrows, mouse). Opening or
+    // closing something only updates the snapshot, so it stays quiet.
+    let navOpen = '', navSel = '';
+    function watchNavigation() {
+      const open = [ui && ui.kind, !!panels.inventory, !!panels.hero, !!itemMenu].join('|');
+      const sel = [ui && ui.tab, ui && ui.cursor, ui && ui.bossTalk, focus, panels.inventory && panels.inventory.cursor, panels.hero && panels.hero.cursor, itemMenu && itemMenu.cursor].join('|');
+      if (open === navOpen && sel !== navSel && (ui || panels.inventory || panels.hero || itemMenu) && !naming()) playSfx('navigate');
+      navOpen = open; navSel = sel;
+    }
     function frame(now) {
+      watchNavigation();
       const dt = !anyOpen() && !naming() ? Math.min(100, now - lastFrame) : 0;
       gameTime += dt;   // game clock pauses behind windows
       lastFrame = now;
@@ -3999,7 +4034,7 @@
         ['HP', CAPS.health, 'health'], ['STR', stats.strength, 'strength'],   // max values (current ones are in the HUD)
         ['MANA', CAPS.mana, 'mana'], ['CHSM', stats.charisma, 'charisma'],
         ['NRG', CAPS.energy, 'energy'],
-        ['CRIT (spells)', `${(critChance() * 100).toFixed(2)}%`, 'crit'],
+        ['CRIT', `${(critChance() * 100).toFixed(2)}%`, 'crit'],
         ['ATK SPD', `${secs(heroAttackMs())}s`, 'atk'],
         ['HP REG', Math.round(healthRegen()), 'hregen', '/min'], ['MANA REG', `${Math.round(manaRegen())}/min`, 'mregen'],
         ['MOVE SPD', Math.round((1 + lbSpeed() + equipSum('speed')) * 100), 'spd', '%'],
@@ -4254,7 +4289,7 @@
       if (naming() || e.metaKey || e.ctrlKey || e.altKey) return;
       const k = keyOf(e);
       if (itemMenu && !e.repeat && ['w', 's'].includes(k)) { e.preventDefault(); itemMenu.cursor = (itemMenu.cursor + (k === 's' ? 1 : -1) + itemMenu.opts.length) % itemMenu.opts.length; return; }
-      if (itemMenu && e.code === 'Space') { e.preventDefault(); if (!e.repeat) pickItemMenu(itemMenu.cursor); return; }
+      if (itemMenu && e.code === 'Space') { e.preventDefault(); if (!e.repeat) { playSfx('interact'); pickItemMenu(itemMenu.cursor); } return; }
       if (e.code === 'Space') { e.preventDefault(); if (!e.repeat) spacePressed(); return; }
       if (k === 'p') { e.preventDefault(); if (!e.repeat && !locked()) { if (ui && ui.kind === 'cheat') closeWindow(); else openCheats(); } return; }   // CHEAT menu (testing) — remove before release
       if (k === 'i') { e.preventDefault(); if (!e.repeat && !ui) togglePanel('inventory'); return; }
@@ -4265,7 +4300,7 @@
       if (k === 'l') { e.preventDefault(); if (!e.repeat && !locked()) { if (ui && ui.kind === 'leaderboard') closeWindow(); else if (!ui) openLeaderboard(); } return; }
       if (k === 'q') { e.preventDefault(); if (!e.repeat && !locked()) { if (ui && ui.kind === 'quests') closeWindow(); else if (!ui) openWindow('quests'); } return; }
       if (e.code === 'Tab') { e.preventDefault(); if (!e.repeat && !anyOpen()) cycleTarget(); return; }
-      if (ui && /^[1-9]$/.test(k)) { choose(+k - 1); return; }
+      if (ui && /^[1-9]$/.test(k)) { playSfx('interact'); choose(+k - 1); return; }
       if (!anyOpen() && /^[1-3]$/.test(k)) { e.preventDefault(); if (!e.repeat) castSpell(+k - 1); return; }
       if (!KEYS.includes(k)) return;
       e.preventDefault();
@@ -4316,7 +4351,7 @@
       if (!anyOpen()) return;
       if (itemMenu) {   // menu open: a click on an option picks it, anywhere else closes the menu
         const b = itemMenu.box;
-        if (b && e.button === 0 && cx >= b.x && cx <= b.x + b.w && cy >= b.y + 8 && cy < b.y + b.h - 8) pickItemMenu(Math.floor((cy - b.y - 8) / MENU.rowH));
+        if (b && e.button === 0 && cx >= b.x && cx <= b.x + b.w && cy >= b.y + 8 && cy < b.y + b.h - 8) { playSfx('interact'); pickItemMenu(Math.floor((cy - b.y - 8) / MENU.rowH)); }
         else itemMenu = null;
         return;
       }
@@ -4333,7 +4368,7 @@
       if (hit && hit.panel) { focus = hit.panel; panels[hit.panel].cursor = hit.i; panels[hit.panel].msg = ''; }   // click a panel slot: focus + select
       else if (hit && hit.tab !== undefined) switchShopTab(hit.tab);
       else if (hit && ui && WINDOW_TABS[ui.kind] && hit.i !== ui.cursor) { ui.cursor = hit.i; ui.msg = ''; }   // shop: first click selects, a click on the selected item buys
-      else if (hit) choose(hit.i);
+      else if (hit) { playSfx('interact'); choose(hit.i); }   // a click that acts = the same click as Space
     });
 
     // ---- phone controls ------------------------------------------------------------
