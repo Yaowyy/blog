@@ -547,7 +547,7 @@
   const HP_CURVE = { growth: 1, growthPerLvl: 0.2, shape: 0.8 };
   const levelHealth = (base, L, shape, perLvl = HP_CURVE.growthPerLvl) => Math.round(base + (HP_CURVE.growth + perLvl * (L - 1)) * Math.pow(L - 1, shape));
   const heroHealthCap = (base, L) => { let hp = base; for (let l = 2; l <= L; l++) hp = Math.round(hp + l * 0.8); return hp; };   // hero only (enemies keep levelHealth)
-  const LEVEL_EXP = { work: 1 };   // exp per work deal. Discovering a zone: |a| + |b| of its coordinates (zoneSum).
+  const LEVEL_EXP = { work: 1 };   // exp per sale / delivery deal (calls: see dealExp). Discovering a zone: |a| + |b| of its coordinates (zoneSum).
   // Killing an enemy: round(its max HP × KILL_EXP) exp, the same for every hero level (killExp).
   const KILL_EXP = 0.4;
   const killExp = d => Math.round(d.maxHp * KILL_EXP);
@@ -562,7 +562,8 @@
       : Math.round(CAP_BASE[st] * Math.pow(1 + LEVEL_GROWTH[st], hero.level - 1))) + (ex[st] || 0);
   }
   const capped = (st, v) => st in CAPS ? Math.min(CAPS[st], v) : v;
-  const REST = { price: 1, gain: { health: 5, energy: 5, mana: 1 }, cooldownMs: 5 * 60 * 1000 };   // HomeDome: Space asks to rest for 1$; then 5 min (real time) until the next rest
+  const REST = { price: 1, share: { health: 0.4, energy: 0.4, mana: 0.4 }, cooldownMs: 5 * 60 * 1000 };   // HomeDome: rest for 1$ = 40% of max HP / energy / mana back (rounded); then 5 min (real time) until the next rest
+  const restGain = () => Object.fromEntries(Object.entries(REST.share).map(([st, f]) => [st, Math.round(CAPS[st] * f)]).filter(([, n]) => n > 0));
 
   // price here is the starting price. Patches (patch: true): each purchase installs the next level (shown as "lvl N"
   // in the shop, starting at lvl 0) and raises that patch's price by 12%, rounded up.
@@ -1336,7 +1337,8 @@
             if (buyLvl && hero.level < buyLvl) return `Reach level ${buyLvl} to ${it.patch ? 'install' : 'buy'} ${it.name}.`;
             if (it.kind && carried().some(x => x.kind === it.kind)) return `You can only carry one ${it.kind}.`;
             const carriesIt = it.kind || it.slot || it.class === 'bag';   // goes into the bag (a first bag is worn straight away)
-            if (carriesIt && !(it.class === 'bag' && !bag) && inventory.length >= invSlots()) return fullMsg();
+            const noRoom = carriesIt && !(it.class === 'bag' && !bag) && inventory.length >= invSlots();
+            if (noRoom && !(it.class === 'equipment' && canWearDirect(it))) return fullMsg();   // equipment with a free slot is worn instead
             if (stats.money < price) return `Not enough money for ${it.name}.`;
             if (it.class === 'food' && stats.energy >= CAPS.energy) {   // full of energy: offer to keep it for later
               const fits = inventory.some(x => x.name === it.name && (x.count || 1) < (it.stack || 1)) || inventory.length < invSlots();
@@ -1362,6 +1364,7 @@
               return `Got the ${it.name}. To wear it, empty your ${bag} and press Space on it (I).`;
             }
             if (it.class === 'equipment') {   // no bonus until equipped
+              if (noRoom) return `${bag ? `No room in your ${bag}` : 'No bag'}, so you put on the ${it.name}: ${wearDirect(it.name)}.`;
               inventory.push({ name: it.name, kind: it.kind, class: it.class });
               return `Got the ${it.name}. Equip it in your inventory (I, Space).`;
             }
@@ -1450,12 +1453,12 @@
       if (ui.kind === 'rest') {
         const wait = restReadyAt - Date.now();
         const clock = ms => { const s = Math.ceil(ms / 1000); return `${Math.floor(s / 60)}:${String(s % 60).padStart(2, '0')}`; };
-        if (wait > 0) return [{ left: 'not tired yet', right: `rest again in ${clock(wait)}`, act() { return 'You rested recently. Come back later.'; } }];
+        if (wait > 0) return [{ rest: { wait: clock(wait) }, left: 'not tired yet', right: `rest again in ${clock(wait)}`, act() { return `You rested recently. Come back in ${clock(wait)}.`; } }];
         return [{
-        left: `rest for ${REST.price}$?`, right: Object.entries(REST.gain).map(([st, n]) => `+${n} ${ICON[st]}`).join('  '),
+        rest: {}, left: `rest for ${REST.price}$?`, right: Object.entries(restGain()).map(([st, n]) => `+${n} ${ICON[st]}`).join('  '),
         act() {
           if (stats.money < REST.price) return `Not enough money to rest (${REST.price}$).`;
-          const up = Object.entries(REST.gain).map(([st, n]) => [st, capped(st, stats[st] + n) - stats[st]]).filter(([, d]) => d > 0);
+          const up = Object.entries(restGain()).map(([st, n]) => [st, capped(st, stats[st] + n) - stats[st]]).filter(([, d]) => d > 0);
           if (!up.length) return 'You are already fully rested.';
           stats.money -= REST.price;
           for (const [st, d] of up) stats[st] += d;
@@ -1696,7 +1699,11 @@
       if (stats.energy < r.energy) return `Not enough energy (${r.energy} ${ICON.energy} needed).`;
       const backup = inventory.map(it => ({ ...it }));
       for (const [name, n] of r.cost) takeItems(name, n);
-      if (addItem(r.make, r.count)) { inventory.length = 0; inventory.push(...backup); return fullMsg(); }
+      const left = addItem(r.make, r.count);
+      if (left && r.count === 1 && canWearDirect(itemDef(r.make))) {   // no room in the bag: equipment goes straight into its free slot
+        stats.energy -= r.energy; return `Crafted ${r.make} and put it on (${bag ? `no room in your ${bag}` : 'no bag'}): ${wearDirect(r.make)}.`;
+      }
+      if (left) { inventory.length = 0; inventory.push(...backup); return fullMsg(); }
       stats.energy -= r.energy; renderStats();
       return `Crafted ${r.count} ${r.make}.`;
     }
@@ -1788,7 +1795,11 @@
     const bossLine = () => { const pr = PROMOTIONS[promotion];
       return `${heroName || DEFAULT_NAME}, ${dealsDone} deals. I've been watching your numbers. The ${pr.name} desk is yours if you want it: pick the glowing promotion and press Space.`; };
     // take a deal: calls cost energy and pay money, sales cost money and give items, deliveries add a quest. Then all 3 reroll.
+    // exp for a deal: 1 + one more for every full 5 of (money earned − energy spent), at least 1.
+    // Calls: profit 0-4 → 1 exp, 5-9 → 2, 10-14 → 3 … Sales and deliveries earn no money here: 1 exp.
+    const dealExp = d => d.type === 'call' ? Math.max(1, Math.floor((d.money - dealCost(d)) / 5) + 1) : LEVEL_EXP.work;
     function takeDeal(d) {
+      const exp = dealExp(d);   // before anything changes (the cost can depend on the promotion)
       if (d.type === 'call') {
         if (stats.energy < dealCost(d)) return 'Not enough energy for that call. Eat something.';
         stats.energy -= dealCost(d); stats.money += d.money;
@@ -1801,10 +1812,10 @@
         if (quests.length >= MAX_QUESTS) return `You already have ${MAX_QUESTS} active quests. Cancel one first (Q).`;
         quests.push({ name: d.name, desc: d.desc, rare: d.rare, from: 'TradeCorp' });
       }
-      dealsDone++; gainExp(LEVEL_EXP.work);
+      dealsDone++; gainExp(exp);
       deals = newDeals();
       const note = promoReadyAny() ? ' A promotion is ready (My Boss).' : '';
-      return (d.type === 'call' ? `Call done: -${dealCost(d)} NRG, +${d.money}$. New deals.` : d.type === 'sale' ? `Bought ${d.count} ${d.item} for ${dealCost(d)}$. New deals.`
+      return (d.type === 'call' ? `Call done: -${dealCost(d)} NRG, +${d.money}$, +${exp} exp. New deals.` : d.type === 'sale' ? `Bought ${d.count} ${d.item} for ${dealCost(d)}$. New deals.`
         : `${d.name} added to your quests (Q). New deals.`) + note;
     }
     function openWindow(kind, cursor = 0, back = null) {
@@ -1907,9 +1918,19 @@
       pn.msg = `Unequipped the ${item.name}: ${gains.map(([st, n]) => `-${n} ${STAT_SHORT[st] || st}`).join(' ')}`;
       renderStats();
     }
+    const equipLevel = def => def.minLevel || (rarityOf(def.name) !== 'common' ? 2 : 1);   // own level requirement, else rare+ needs level 2
+    // a new item (bought / crafted) that doesn't fit in the bag goes straight into its free equipment slot
+    const canWearDirect = def => !!def && slotOf(def) >= 0 && !inSlot(slotOf(def)) && hero.level >= equipLevel(def);
+    function wearDirect(name) {   // returns the bonus text
+      const def = itemDef(name); equipped.push({ name, kind: def.kind, class: def.class });
+      for (const [st, n] of Object.entries(def.gain || {})) stats[st] += n;
+      recalcCaps(); for (const [st, n] of Object.entries(def.capGain || {})) stats[st] = capped(st, stats[st] + n);
+      if ((def.gain || {}).charisma) deals = newDeals();
+      renderStats(); return bonusText(def);
+    }
     function equipSelected(item, def, pn) {
       if (!def || def.class !== 'equipment') { pn.msg = `The ${item.name} can't be equipped.`; return; }
-      const needLvl = def.minLevel || (rarityOf(item.name) !== 'common' ? 2 : 1);   // own level requirement, else rare+ needs level 2
+      const needLvl = equipLevel(def);
       if (hero.level < needLvl) { pn.msg = `Reach level ${needLvl} to equip ${item.name}.`; return; }
       const slot = slotOf(def);
       if (slot < 0) { pn.msg = `The ${item.name} has no equipment slot.`; return; }
@@ -3393,6 +3414,27 @@
       ctx.font = '19px ' + MONO; ctx.fillStyle = '#cfcfcf';
       wrapText(it.desc || '', mw).slice(0, 3).forEach((l, i) => ctx.fillText(l, mx, sy + 56 + i * 25));
     }
+    // HomeDome: one big row like the shop's: the building in a slot, what a nap gives, the price (or the time left to wait)
+    function drawRestRow(r, x, y, w, h, sel) {
+      const big = h - 32, sx = x + 16, sy = y + 16, nameX = sx + big + 20, nameW = 250, priceX = x + w - 20, cy = y + h / 2, cool = !!r.wait;
+      ctx.save(); if (cool) ctx.globalAlpha = 0.55;
+      glyphSlot(sx, sy, big, 'homedome', '⌂', '#f2f2f2');
+      ctx.textAlign = 'left'; ctx.textBaseline = 'middle';
+      ctx.fillStyle = '#fff'; ctx.font = (sel ? '700 ' : '600 ') + '28px ' + MONO; ctx.fillText('Power nap', nameX, sy + 22);
+      ctx.font = '18px ' + MONO; ctx.fillStyle = cool ? '#e5484d' : '#8a8a8a';
+      ctx.fillText(cool ? `ready in ${r.wait}` : `once every ${REST.cooldownMs / 60000} min`, nameX, sy + big - 12);
+      const mx = nameX + nameW + 24, mw = priceX - 150 - mx;
+      const parts = Object.entries(restGain()).map(([st, n]) => [`+${n} ${STAT_SHORT[st] || st}`, STAT_COLOR[st] || '#fff']);
+      ctx.font = '600 24px ' + MONO; drawParts(parts, mx, sy + 20, 22);
+      ctx.font = '19px ' + MONO; ctx.fillStyle = '#cfcfcf';
+      wrapText('Crash in your capsule for a quick nap.', mw).slice(0, 1).forEach((l, i) => ctx.fillText(l, mx, sy + 58 + i * 25));
+      ctx.font = '18px ' + MONO;   // where the hero is now (full ones in grey)
+      drawParts(Object.keys(REST.share).filter(st => CAPS[st] > 0).map(st => [`${STAT_SHORT[st] || st} ${stats[st]}/${CAPS[st]}`, stats[st] >= CAPS[st] ? '#6b6a63' : '#8a8a8a']), mx, sy + big - 12, 18);
+      ctx.textAlign = 'right'; ctx.font = '700 34px ' + MONO;
+      ctx.fillStyle = cool ? '#8a8a8a' : stats.money >= REST.price ? '#f5c542' : '#e5484d';
+      ctx.fillText(cool ? r.wait : `${REST.price}$`, priceX, cy);
+      ctx.restore();
+    }
     // ---- TradeCorp drawing ----
     const DEAL_TITLE = { call: ['Customer call', 'Rare customer call'], sale: ['Sale offer', 'Rare sale offer'] };
     function glyphSlot(x, y, size, key, glyph, color) {   // an icon picture if its art exists, else a big drawn symbol in a slot
@@ -3416,6 +3458,7 @@
       ctx.font = '600 24px ' + MONO;
       const parts = d.type === 'call' ? [[`-${dealCost(d)} NRG`, STAT_COLOR.energy], [`+${d.money}$`, '#f5c542']]
         : d.type === 'sale' ? [[`${d.count} × ${d.item}`, rarityColor(d.item)]] : [['Delivery quest', '#00e5ff']];
+      parts.push([`+${dealExp(d)} exp`, '#b58cff']);   // exp for taking it (calls: more for a better money-to-energy deal)
       drawParts(parts, mx, sy + 20, 22);
       const text = d.type === 'call' ? d.line : d.type === 'sale' ? `A supplier sells ${d.count} ${d.item} at full price.` : d.desc;
       ctx.font = '19px ' + MONO; ctx.fillStyle = '#cfcfcf';
@@ -3599,10 +3642,10 @@
       if (ui.kind === 'gameover') { drawGameOver(); return; }
       const list = rows();
       const info = ui.kind === 'controls';          // read-only list, nothing to select
-      const rowH = info ? 38 : ui.kind === 'shop' || ui.kind === 'work' ? 150 : ui.kind === 'quests' || ui.kind === 'leaderboard' ? 96 : ui.kind === 'loot' || ui.kind === 'scrap' ? 88 : ui.kind === 'cheat' ? 50 : ui.kind === 'spelltech' ? 262 : 64;   // shop and loot rows are taller for the item pictures
+      const rowH = info ? 38 : ui.kind === 'shop' || ui.kind === 'work' || ui.kind === 'rest' ? 150 : ui.kind === 'quests' || ui.kind === 'leaderboard' ? 96 : ui.kind === 'loot' || ui.kind === 'scrap' ? 88 : ui.kind === 'cheat' ? 50 : ui.kind === 'spelltech' ? 262 : 64;   // shop and loot rows are taller for the item pictures
       const hero = ui.kind === 'hero', inv = ui.kind === 'inventory';
       const wide = hero || inv || ['leaderboard', 'quests', 'shop', 'scrap', 'save', 'load', 'logout', 'guest', 'sound', 'spelltech'].includes(ui.kind);
-      const pw = (ui.kind === 'spelltech' || ui.kind === 'shop' || ui.kind === 'work' ? 15 : wide ? 11 : 9) * TILE;
+      const pw = (ui.kind === 'spelltech' || ui.kind === 'shop' || ui.kind === 'work' || ui.kind === 'rest' ? 15 : wide ? 11 : 9) * TILE;
       ctx.font = '26px ' + MONO;
       const wtext = typeof WINDOW_TEXT[ui.kind] === 'function' ? WINDOW_TEXT[ui.kind]() : WINDOW_TEXT[ui.kind];
       const textLines = wtext ? wrapText(wtext, pw - 80) : [];
@@ -3610,8 +3653,8 @@
       const tabs = WINDOW_TABS[ui.kind], shop = !!tabs, tabsH = tabs ? 70 : 0;   // tabbed windows: row of tabs under the title, fixed height
       const listN = ui.kind === 'shop' ? Math.max(...SHOP_TABS.map(t => [...SHOP_ITEMS, ...BAG_ITEMS()].filter(it => it.tab === t.key).length)) : ui.kind === 'work' ? 3 : ui.kind === 'leaderboard' ? 5 : list.length;
       const textH = (textLines.length ? textLines.length * 34 + 24 : 0) + tabsH, gaps = list.filter(r => r.gapBefore).length * 24;
-      const ph = hero || inv ? 7 * TILE : ui.kind === 'rest' ? 5 * TILE
-        : Math.min(canvas.height - 20, Math.max(6 * TILE, 110 + textH + listN * rowH + gaps + Math.max(1, msgLines.length) * 32 + 100));
+      const ph = hero || inv ? 7 * TILE
+        : Math.min(canvas.height - 20, Math.max((ui.kind === 'rest' ? 4.5 : 6) * TILE, 110 + textH + listN * rowH + gaps + Math.max(1, msgLines.length) * 32 + 100));
       const px = (canvas.width - pw) / 2, py = (canvas.height - ph) / 2;
       ctx.fillStyle = 'rgba(0, 0, 0, 0.6)';
       ctx.fillRect(0, 0, canvas.width, canvas.height);
@@ -3626,7 +3669,7 @@
       ctx.textAlign = 'left';
       ctx.font = '600 40px ' + MONO;
       ctx.fillText(hero ? (heroName || DEFAULT_NAME) : ui.kind === 'loot' && lootTarget ? `Loot · ${ET(lootTarget).name}` : ui.kind === 'quests' ? `Quests ${quests.length}/${MAX_QUESTS}` : TITLES[ui.kind], px + 40, py + 56);
-      if (ui.kind === 'shop' || ui.kind === 'work' || ui.kind === 'scrap') {   // wallet in the corner
+      if (ui.kind === 'shop' || ui.kind === 'work' || ui.kind === 'scrap' || ui.kind === 'rest') {   // wallet in the corner
         ctx.textAlign = 'right';
         ctx.font = '26px ' + MONO;
         ctx.fillStyle = '#8a8a8a';
@@ -3667,6 +3710,7 @@
         if (sel) { ctx.fillStyle = 'rgba(255, 220, 0, 0.12)'; ctx.fillRect(px + 24, y, pw - 48, rowH - 8); }
         if (r.craft) { drawCraftRow(r.craft, px + 24, y, pw - 48, rowH - 8, sel); return; }
         if (r.shopItem) { drawShopRow(r.shopItem, px + 24, y, pw - 48, rowH - 8, sel); return; }
+        if (r.rest) { drawRestRow(r.rest, px + 24, y, pw - 48, rowH - 8, sel); return; }
         if (r.deal) { drawDealRow(r.deal, px + 24, y, pw - 48, rowH - 8, sel); return; }
         if (r.quest) { drawQuestRow(r.quest, px + 24, y, pw - 48, rowH - 8); return; }
         if (r.lb) { drawLbRow(r, px + 24, y, pw - 48, rowH - 8); return; }
