@@ -303,7 +303,7 @@
     <div class="acc-card">
     <div class="acc-art" aria-hidden="true">
       <div class="acc-bubble"><b>Your boss</b><span>TradeCorp is hiring. Sign in and get to work.</span></div>
-      <img src="art/boss.png" alt="" onerror="this.remove()">
+      <img src="art/ui/boss.png" alt="" onerror="this.remove()">
     </div>
     <form class="acc-form" id="acc-form" role="dialog" aria-labelledby="acc-title" novalidate>
       <p class="acc-kicker">Little Game</p>
@@ -528,27 +528,29 @@
   // Enemy damage: base damage + (enemy level - hero level), never below 0 (npcDamage).
   const CAP_BASE = { ...CAPS };    // caps before the level bonus (Tar Orbs raise the mana base)
   const hero = { level: 1, exp: 0 };
+  let capExtra = () => ({});   // max-stat bonus from worn equipment (capGain), set up by start()
   function recalcCaps() {
-    for (const st in CAP_BASE) CAPS[st] = st === 'health' ? heroHealthCap(CAP_BASE.health, hero.level)
+    const ex = capExtra();
+    for (const st in CAP_BASE) CAPS[st] = (st === 'health' ? heroHealthCap(CAP_BASE.health, hero.level)
       : st === 'mana' ? CAP_BASE.mana + LEVEL_MANA * (hero.level - 1)
-      : Math.round(CAP_BASE[st] * Math.pow(1 + LEVEL_GROWTH[st], hero.level - 1));
+      : Math.round(CAP_BASE[st] * Math.pow(1 + LEVEL_GROWTH[st], hero.level - 1))) + (ex[st] || 0);
   }
   const capped = (st, v) => st in CAPS ? Math.min(CAPS[st], v) : v;
   const REST = { price: 1, gain: { health: 5, energy: 5, mana: 1 }, cooldownMs: 5 * 60 * 1000 };   // HomeDome: Space asks to rest for 1$; then 5 min (real time) until the next rest
 
   // price here is the starting price. Patches (patch: true): each purchase installs the next level (shown as "lvl N"
-  // in the shop, starting at lvl 0) and raises that patch's price by 15%, rounded up.
-  // Food: never rises on purchase. Instead every 100 deals at TradeCorp adds FOOD_CLIMB[name] to its price (shown rounded up):
-  // price = start + climb × floor(deals / 100). Starts 1 : 4 : 12 : 24, ratios drift to about 1 : 3 : 6.75 : 10 by 10 000 deals.
+  // in the shop, starting at lvl 0) and raises that patch's price by 12%, rounded up.
+  // Food: every 100 pieces of food bought (all kinds together) adds FOOD_CLIMB[name] to each food's price (shown rounded up):
+  // price = start + climb × floor(foodBought / 100). Starts 1 : 4 : 12 : 24, ratios drift to about 1 : 3 : 6.75 : 10 by 10 000 deals.
   const SHOP_ITEMS = [
     { name: 'Cheap noodles', tab: 'food', class: 'food', stack: 16, price: 1,   gain: { energy: 10, health: 1 }, art: 'food', rarity: 'common',
-      desc: 'A steaming bowl of street noodles. Refills energy and patches you up a little. +1$ every 100 deals.' },
+      desc: 'A steaming bowl of street noodles. Refills energy and patches you up a little. +1$ per 100 food bought.' },
     { name: 'Beef brisket', tab: 'food', class: 'food', stack: 16, price: 4, gain: { energy: 18, health: 2 }, art: 'beefBrisket', rarity: 'common',
-      desc: 'Slow-smoked brisket from a rooftop grill. A proper meal: more energy and a bit more healing. +3$ every 100 deals.' },
-    { name: 'Dumplings', tab: 'food', class: 'food', stack: 16, price: 12, gain: { energy: 33, health: 4 }, art: 'dumplings', rarity: 'common',
-      desc: 'A steamer basket of fat dumplings. Keeps you going through a long shift. +6.7$ every 100 deals.' },
-    { name: 'Energy Drink', tab: 'food', class: 'food', stack: 16, price: 24, gain: { energy: 50 }, art: 'energyDrink', rarity: 'common',
-      desc: 'Neon-blue fizz in a can. A huge energy kick, no healing at all. +10$ every 100 deals.' },
+      desc: 'Slow-smoked brisket from a rooftop grill. A proper meal: more energy and a bit more healing. +3$ per 100 food bought.' },
+    { name: 'Dumplings', tab: 'food', class: 'food', stack: 16, price: 12, buyLevel: 4, gain: { energy: 33, health: 4 }, art: 'dumplings', rarity: 'rare',
+      desc: 'A steamer basket of fat dumplings. Keeps you going through a long shift. +6.7$ per 100 food bought.' },
+    { name: 'NRG Shot', tab: 'food', class: 'food', stack: 16, price: 24, buyLevel: 6, gain: { energy: 50 }, art: 'nrgShot', rarity: 'rare',
+      desc: 'A tiny vial of neon-blue fuel. A huge energy kick, no healing at all. +10$ per 100 food bought.' },
     { name: 'Smile',   tab: 'patches', class: 'patch', price: 30,  gain: { charisma: 1 }, patch: true, art: 'smilePatch', rarity: 'common',
       desc: 'Cheap social firmware. Every install makes you a little more likeable. +15% price per install.' },
     { name: 'Social',  tab: 'patches', class: 'patch', minLevel: 2, price: 90,  gain: { charisma: 2 }, patch: true, art: 'socialPatch', rarity: 'common',
@@ -557,8 +559,15 @@
       desc: 'A premium personality overlay. The biggest charisma boost per install. +15% price per install.' },
     // class 'equipment': goes to the inventory, gives its bonus only once equipped (I → A/D → Space).
     // kind: only one item per kind (e.g. one sword), counting inventory and equipped items. Bought once.
-    { name: 'Banana sword', tab: 'weapons', buyLevel: 2, meleeArea: 1.2, price: 400, gain: { strength: 4, charisma: 1 }, attackMs: -100, class: 'equipment', kind: 'sword', art: 'bananaSword', rarity: 'common',   // attackMs: swings 0.1 s faster
+    { name: 'Banana sword', tab: 'weapons', buyLevel: 2, meleeArea: 1.2, price: 390, gain: { strength: 3, charisma: 1 }, attackMs: -120, class: 'equipment', kind: 'sword', art: 'bananaSword', rarity: 'common',   // attackMs: swings 0.1 s faster
       desc: 'A curved yellow blade that hits hard and swings fast. Goes to your inventory: equip it there. One sword at a time.' },
+    // armor (Armor tab): capGain raises max HP / NRG while worn, hpRegen adds health per minute, speed = move speed bonus
+    { name: 'NRG Headset', tab: 'armor', price: 390, gain: { charisma: 1 }, capGain: { health: 1, energy: 3 }, hpRegen: 1, class: 'equipment', slot: 'head', art: 'nrgHeadset', rarity: 'common',
+      desc: 'Noise-cancelling headset with a charge loop. Keeps you calm, charged and talking. Goes to your inventory: equip it there.' },
+    { name: 'NRG Shirt', tab: 'armor', price: 590, gain: { charisma: 2 }, capGain: { health: 2, energy: 5 }, hpRegen: 1, class: 'equipment', slot: 'chest', art: 'nrgShirt', rarity: 'common',
+      desc: 'Smart fabric with woven power lines. Soaks up a hit and stores extra energy. Goes to your inventory: equip it there.' },
+    { name: 'NRG Sneakers', tab: 'armor', price: 390, gain: { charisma: 1 }, capGain: { health: 1, energy: 3 }, speed: 0.1, class: 'equipment', slot: 'boots', art: 'nrgSneakers', rarity: 'common',
+      desc: 'Springy sneakers with glowing soles. You walk 10% faster. Goes to your inventory: equip it there.' },
   ];
   // items that are never sold, only looted
   // class 'resource': stacks (up to `stack` per inventory slot), used for crafting later.
@@ -604,7 +613,9 @@
   const HERO_MANA_REGEN_MS = 60000;     // hero gets 1 mana back every minute of game time (up to the mana cap)
   const NPC_HEALTH_REGEN_MS = 60000;    // every enemy (all zones) heals 1 health per minute of game time
   const HERO_HEALTH_REGEN_MS = 60000;   // and 1 health every minute of game time (up to the health cap)
-  const EQUIP_SLOTS = 3;   // shown on the right of the hero view (H)
+  // equipment slots, top to bottom on the right of the hero view (H): each takes one type only
+  const EQUIP_SLOT_KEYS = ['weapon', 'head', 'chest', 'boots'], EQUIP_SLOTS = EQUIP_SLOT_KEYS.length;
+  const slotOf = def => !def || def.class !== 'equipment' ? -1 : def.kind === 'sword' ? 0 : EQUIP_SLOT_KEYS.indexOf(def.slot);   // swords → weapon slot
   // item rarity: the colour of the item's name, and a coloured edge in its slot (not for common)
   const RARITY = { common: '#ffffff', rare: '#4ea1ff', mythical: '#b36bff', legendary: '#ff9a2e', titanic: '#ff3b3b', transcendent: '#ff5fd2' };
   const rarityOf = name => (itemDef(name) || {}).rarity || 'common';
@@ -618,14 +629,14 @@
   const FOOD = 'Cheap noodles';   // the food item: its price inflates with work shifts instead of rising on purchase
   // item names used by older saves -> current names
   const OLD_NAMES = { 'tart': 'Tar', 'magic tart': 'Magic tar', 'tar': 'Tar', 'magic tar': 'Magic tar', 'scrap': 'Scrap', 'food': FOOD,
-                      'smile patch': 'Smile', 'social patch': 'Social', 'persona patch': 'Persona', 'banana sword': 'Banana sword' };
+                      'Energy Drink': 'NRG Shot', 'smile patch': 'Smile', 'social patch': 'Social', 'persona patch': 'Persona', 'banana sword': 'Banana sword' };
   const newName = n => OLD_NAMES[n] || n;
   const renameItems = list => (list || []).map(it => ({ ...it, name: newName(it.name) }));
   const renameKeys = o => Object.fromEntries(Object.entries(o || {}).map(([k, v]) => [newName(k), v]));
   const cleanName = v => v.replace(/[^\p{L}]/gu, '').slice(0, 10);   // letters only (any alphabet), up to 10
   const startPrices = () => Object.fromEntries([...SHOP_ITEMS, ...LOOT_ITEMS.filter(it => it.class === 'bag')].map(it => [it.name, it.price]));   // bags are sold too
-  const raisePrice = p => Math.ceil(p * 115 / 100);   // integer maths avoids float drift (60 * 1.15 = 68.999…)
-  const FOOD_CLIMB = { 'Cheap noodles': 1, 'Beef brisket': 3, 'Dumplings': 6.7, 'Energy Drink': 10 };   // $ added every 100 deals
+  const raisePrice = p => Math.ceil(p * 112 / 100);   // patches: +12% per install (integer maths avoids float drift)
+  const FOOD_CLIMB = { 'Cheap noodles': 1, 'Beef brisket': 3, 'Dumplings': 6.7, 'NRG Shot': 10 };   // $ added per 100 food bought
   const foodCostAt = (name, done) => itemDef(name).price + FOOD_CLIMB[name] * Math.floor(done / 100);   // exact (can be fractional)
 
   // work: trade health for money, 3 random deals, all reroll after one is taken
@@ -1105,63 +1116,65 @@
   // hero: smooth chibi art from ChatGPT, facing right; flipped for left. Feet sit on the bottom-centre of his tile.
   // art files are published next to this page in the art/ folder (not embedded), so the game file stays small
   const ART_SRC = {
-    droneFly: 'art/droneFly.png', droneAttack: 'art/droneAttack.png', droneHurt: 'art/droneHurt.png', dronePortrait: 'art/dronePortrait.png', statusSlowed: 'art/statusSlowed.png',   // Mav-1K sheets: 4 cells 300 × 300, faces left
+    droneFly: 'art/enemies/drone/droneFly.png', droneAttack: 'art/enemies/drone/droneAttack.png', droneHurt: 'art/enemies/drone/droneHurt.png', dronePortrait: 'art/enemies/drone/dronePortrait.png', statusSlowed: 'art/ui/statusSlowed.png',   // Mav-1K sheets: 4 cells 300 × 300, faces left
     trophy: "data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Cpath d='M18 12H9v5a10 10 0 0 0 10 10M46 12h9v5a10 10 0 0 1-10 10' fill='none' stroke='%23FFE600' stroke-width='4'/%3E%3Cpath d='M18 7h28v14a14 14 0 0 1-28 0z' fill='%23FFE600' stroke='%2310131C' stroke-width='3'/%3E%3Cpath d='M26 13v8' stroke='%23fff8a0' stroke-width='3' stroke-linecap='round'/%3E%3Crect x='28' y='34' width='8' height='9' fill='%23FFE600' stroke='%2310131C' stroke-width='2'/%3E%3Crect x='18' y='43' width='28' height='9' rx='2' fill='%2300E5FF' stroke='%2310131C' stroke-width='3'/%3E%3C/svg%3E",   // leaderboard button (drawn, no file)
-    heroSprite:   'art/heroSprite.png',
-    heroFull:     'art/heroFull.png',
-    mapFog: 'art/mapFog.jpg',   // seamless fog texture for undiscovered zones on the maps
-    heroFall: 'art/heroFall.png', heroDefeated: 'art/heroDefeated.png',   // death: 4-frame fall (faces right) + Game over picture
-    statusRooted: 'art/statusRooted.png', statusInjured: 'art/statusInjured.png',   // status effect icons (badge with a coloured border)
-    heroPunchSide: 'art/heroPunchSide.png', heroPunchDown: 'art/heroPunchDown.png', heroPunchUp: 'art/heroPunchUp.png',   // attack sheets, 4 frames each
-    heroSwordSide: 'art/heroSwordSide.png', heroSwordDown: 'art/heroSwordDown.png', heroSwordUp: 'art/heroSwordUp.png',
-    heroWalk:     'art/heroWalk.png',   // 4 walk frames side by side, facing right
-    heroWalkDown: 'art/heroWalkDown.png',   // 4 walk frames facing the viewer
-    heroWalkUp:   'art/heroWalkUp.png',   // 4 walk frames seen from behind
-    shop:         'art/shop.png',   // shop building (mirrored: awning on the right)
-    work:         'art/work.png',   // work building, 3 x 2 tile footprint
-    invIcon:      'art/invIcon.png',   // BackBag picture (the bag tile in the bar)
-    noBag: 'art/noBag.png', bagX: 'art/bagX.png', streetBlock: 'art/streetBlock.webp',   // street block: slums 6:3
+    heroSprite:   'art/hero/heroSprite.png',
+    heroFull:     'art/hero/heroFull.png',
+    mapFog: 'art/ui/mapFog.jpg',   // seamless fog texture for undiscovered zones on the maps
+    heroFall: 'art/hero/heroFall.png', heroDefeated: 'art/hero/heroDefeated.png',   // death: 4-frame fall (faces right) + Game over picture
+    statusRooted: 'art/ui/statusRooted.png', statusInjured: 'art/ui/statusInjured.png',   // status effect icons (badge with a coloured border)
+    heroPunchSide: 'art/hero/heroPunchSide.png', heroPunchDown: 'art/hero/heroPunchDown.png', heroPunchUp: 'art/hero/heroPunchUp.png',   // attack sheets, 4 frames each
+    heroSwordSide: 'art/hero/heroSwordSide.png', heroSwordDown: 'art/hero/heroSwordDown.png', heroSwordUp: 'art/hero/heroSwordUp.png',
+    heroWalk:     'art/hero/heroWalk.png',   // 4 walk frames side by side, facing right
+    heroWalkDown: 'art/hero/heroWalkDown.png',   // 4 walk frames facing the viewer
+    heroWalkUp:   'art/hero/heroWalkUp.png',   // 4 walk frames seen from behind
+    shop:         'art/buildings/shop.png',   // shop building (mirrored: awning on the right)
+    work:         'art/buildings/work.png',   // work building, 3 x 2 tile footprint
+    invIcon:      'art/items/bags/invIcon.png',   // BackBag picture (the bag tile in the bar)
+    noBag: 'art/ui/noBag.png', bagX: 'art/items/bags/bagX.png', streetBlock: 'art/buildings/streetBlock.webp',   // street block: slums 6:3
       // empty bag tile (crossed-out bag) and BackBag X
-    officePC: 'art/officePC.png', boss: 'art/boss.png', questIcon: 'art/questIcon.png', dealCall: 'art/dealCall.png', dealDelivery: 'art/dealDelivery.png',   // TradeCorp + quests (drawn placeholders until the art exists)
-    slot:         'art/slot.png',   // slot frame: inventory, equipment, abilities, inventory button
-    bananaSword:  'art/bananaSword.png',   // item icon
-    bananoSword: 'art/bananoSword.png',   // baNano Sword icon (also drawn on his back)
-    heroBananoSide: 'art/heroBananoSide.png', heroBananoDown: 'art/heroBananoDown.png', heroBananoUp: 'art/heroBananoUp.png',   // baNano Sword attacks
-    ground:       'art/ground.jpg',   // seamless street floor, no joints (repeats every 6 x 6 tiles)
-    groundSlums: 'art/groundSlums.jpg', groundFactory: 'art/groundFactory.jpg', groundLake: 'art/groundLake.jpg',   // zone floors, same repeat
-    forestTL: 'art/forestTL.webp', forestTR: 'art/forestTR.webp', forestBL: 'art/forestBL.webp', forestBR: 'art/forestBR.webp',   // big forest grove quarters (see BIG)
-    factoryTL: 'art/factoryTL.webp', factoryTR: 'art/factoryTR.webp', factoryBL: 'art/factoryBL.webp', factoryBR: 'art/factoryBR.webp',   // big factory quarters
-    lakeTL: 'art/lakeTL.webp', lakeTR: 'art/lakeTR.webp', lakeBL: 'art/lakeBL.webp', lakeBR: 'art/lakeBR.webp',   // toxic lake quarters (see LAKE)
-    decals:       'art/decals.png',   // 16 floor details, 4 x 4 cells
-    wallStraight: 'art/wallStraight.png',   // city border wall with razor wire, horizontal, joins left/right
-    wallBroken:   'art/wallBroken.png',     // same wall, middle demolished and plugged with razor wire
-    wallCorner:   'art/wallCorner.png',     // corner pillar with a camera, arms to the left and bottom
-    wallEnd:      'art/wallEnd.png',        // wall broken off on the right (next to the city exit)
-    tar:          'art/tar.png',
-    passageForestB: 'art/passageForestB.png', passageSlums: 'art/passageSlums.png',
-    passageForest: 'art/passageForest.png', passageLake: 'art/passageLake.png', passageFactory: 'art/passageFactory.png',   // passage pictures (straight right edge on the map edge)   // tar puddle flowing in from the right edge (mirrored for the left edge)
-    homedome:     'art/homedome.png',   // HomeDome apartments, front view (faces down)
-    noodleBar:    'art/noodleBar.png',   // CaaCaanTeng noodle bar, front view, closed
-    charging:     'art/charging.png',   // hover-car charging station, front view
-    food: 'art/food.png',   // noodle bowl item icon
-    dripIdle: 'art/dripIdle.png',
-    dripWalk: 'art/dripWalk.png', scavWalk: 'art/scavWalk.png',   // enemy walk cycles, 4 frames each, face left   // Drip, idle / combat stance, faces left
-    dripAttack: 'art/dripAttack.png',   // Drip attack, 4 equal cells, faces left
-    dripHurt: 'art/dripHurt.png',   // Drip hurt + defeated, 2 equal cells
-    dripPortrait: 'art/dripPortrait.png',   // Drip portrait 256x256
-    smilePatch: 'art/smilePatch.png',   // smile patch item icon
-    socialPatch: 'art/socialPatch.png',   // social patch item icon
-    personaPatch: 'art/personaPatch.png',   // persona patch item icon
-    tart: 'art/tart.png',   // tart resource icon
-    magicTart: 'art/magicTart.png',   // magic tart item + spell icon
-    scrapDealer: 'art/scrapDealer.png',   // slums scrap dealer building, front turned slightly left
-    scrap: 'art/scrap.png',
-    scavIdle: 'art/scavIdle.png', scavAttack: 'art/scavAttack.png', scavHurt: 'art/scavHurt.png',   // Toxic Scav sheets (face left)
-    scavPortrait: 'art/scavPortrait.png', scavSpray: 'art/scavSpray.png',   // portrait, toxic spray cone (points left, nozzle at the right end)
-    mutagen: 'art/mutagen.png', tarOrb: 'art/tarOrb.png', aiChip: 'art/aiChip.png',   // item icons
-    spellTech: 'art/spellTech.png',   // MutaTech crafting station (3 x 2), turned slightly like the shop
-    ruinApartment: 'art/ruinApartment.png', ruinMarket: 'art/ruinMarket.png', ruinNoodleBar: 'art/ruinNoodleBar.png',   // destroyed buildings (decorative)   // scrap resource icon
-    heroPortrait: 'art/heroPortrait.png',
+    officePC: 'art/ui/officePC.png', boss: 'art/ui/boss.png', questIcon: 'art/ui/questIcon.png', dealCall: 'art/ui/dealCall.png', dealDelivery: 'art/ui/dealDelivery.png',   // TradeCorp + quests (drawn placeholders until the art exists)
+    slot:         'art/ui/slot.png',   // slot frame: inventory, equipment, abilities, inventory button
+    bananaSword:  'art/items/weapons/bananaSword.png',   // item icon
+    beefBrisket: 'art/items/food/beefBrisket.png', dumplings: 'art/items/food/dumplings.png', nrgShot: 'art/items/food/nrgShot.png',   // food icons
+    nrgHeadset: 'art/items/armor/nrgHeadset.png', nrgShirt: 'art/items/armor/nrgShirt.png', nrgSneakers: 'art/items/armor/nrgSneakers.png',   // armor icons
+    bananoSword: 'art/items/weapons/bananoSword.png',   // baNano Sword icon (also drawn on his back)
+    heroBananoSide: 'art/hero/heroBananoSide.png', heroBananoDown: 'art/hero/heroBananoDown.png', heroBananoUp: 'art/hero/heroBananoUp.png',   // baNano Sword attacks
+    ground:       'art/world/ground/ground.jpg',   // seamless street floor, no joints (repeats every 6 x 6 tiles)
+    groundSlums: 'art/world/ground/groundSlums.jpg', groundFactory: 'art/world/ground/groundFactory.jpg', groundLake: 'art/world/ground/groundLake.jpg',   // zone floors, same repeat
+    forestTL: 'art/world/big/forestTL.webp', forestTR: 'art/world/big/forestTR.webp', forestBL: 'art/world/big/forestBL.webp', forestBR: 'art/world/big/forestBR.webp',   // big forest grove quarters (see BIG)
+    factoryTL: 'art/world/big/factoryTL.webp', factoryTR: 'art/world/big/factoryTR.webp', factoryBL: 'art/world/big/factoryBL.webp', factoryBR: 'art/world/big/factoryBR.webp',   // big factory quarters
+    lakeTL: 'art/world/big/lakeTL.webp', lakeTR: 'art/world/big/lakeTR.webp', lakeBL: 'art/world/big/lakeBL.webp', lakeBR: 'art/world/big/lakeBR.webp',   // toxic lake quarters (see LAKE)
+    decals:       'art/world/ground/decals.png',   // 16 floor details, 4 x 4 cells
+    wallStraight: 'art/world/walls/wallStraight.png',   // city border wall with razor wire, horizontal, joins left/right
+    wallBroken:   'art/world/walls/wallBroken.png',     // same wall, middle demolished and plugged with razor wire
+    wallCorner:   'art/world/walls/wallCorner.png',     // corner pillar with a camera, arms to the left and bottom
+    wallEnd:      'art/world/walls/wallEnd.png',        // wall broken off on the right (next to the city exit)
+    tar:          'art/world/passages/tar.png',
+    passageForestB: 'art/world/passages/passageForestB.png', passageSlums: 'art/world/passages/passageSlums.png',
+    passageForest: 'art/world/passages/passageForest.png', passageLake: 'art/world/passages/passageLake.png', passageFactory: 'art/world/passages/passageFactory.png',   // passage pictures (straight right edge on the map edge)   // tar puddle flowing in from the right edge (mirrored for the left edge)
+    homedome:     'art/buildings/homedome.png',   // HomeDome apartments, front view (faces down)
+    noodleBar:    'art/buildings/noodleBar.png',   // CaaCaanTeng noodle bar, front view, closed
+    charging:     'art/buildings/charging.png',   // hover-car charging station, front view
+    food: 'art/items/food/food.png',   // noodle bowl item icon
+    dripIdle: 'art/enemies/drip/dripIdle.png',
+    dripWalk: 'art/enemies/drip/dripWalk.png', scavWalk: 'art/enemies/scav/scavWalk.png',   // enemy walk cycles, 4 frames each, face left   // Drip, idle / combat stance, faces left
+    dripAttack: 'art/enemies/drip/dripAttack.png',   // Drip attack, 4 equal cells, faces left
+    dripHurt: 'art/enemies/drip/dripHurt.png',   // Drip hurt + defeated, 2 equal cells
+    dripPortrait: 'art/enemies/drip/dripPortrait.png',   // Drip portrait 256x256
+    smilePatch: 'art/items/patches/smilePatch.png',   // smile patch item icon
+    socialPatch: 'art/items/patches/socialPatch.png',   // social patch item icon
+    personaPatch: 'art/items/patches/personaPatch.png',   // persona patch item icon
+    tart: 'art/items/loot/tart.png',   // tart resource icon
+    magicTart: 'art/items/loot/magicTart.png',   // magic tart item + spell icon
+    scrapDealer: 'art/buildings/scrapDealer.png',   // slums scrap dealer building, front turned slightly left
+    scrap: 'art/items/loot/scrap.png',
+    scavIdle: 'art/enemies/scav/scavIdle.png', scavAttack: 'art/enemies/scav/scavAttack.png', scavHurt: 'art/enemies/scav/scavHurt.png',   // Toxic Scav sheets (face left)
+    scavPortrait: 'art/enemies/scav/scavPortrait.png', scavSpray: 'art/enemies/scav/scavSpray.png',   // portrait, toxic spray cone (points left, nozzle at the right end)
+    mutagen: 'art/items/loot/mutagen.png', tarOrb: 'art/items/loot/tarOrb.png', aiChip: 'art/items/loot/aiChip.png',   // item icons
+    spellTech: 'art/buildings/spellTech.png',   // MutaTech crafting station (3 x 2), turned slightly like the shop
+    ruinApartment: 'art/buildings/ruinApartment.png', ruinMarket: 'art/buildings/ruinMarket.png', ruinNoodleBar: 'art/buildings/ruinNoodleBar.png',   // destroyed buildings (decorative)   // scrap resource icon
+    heroPortrait: 'art/hero/heroPortrait.png',
   };
   const ART = Object.fromEntries(Object.entries(ART_SRC).map(([k, src]) => { const im = new Image(); im.src = src; return [k, im]; }));
   const ready = im => im && im.complete && im.naturalWidth > 0;
@@ -1200,7 +1213,8 @@
     const newDeals = () => [0, 1, 2].map(() => rollDeal(hero.level, stats.charisma, foodCost(FOOD)));
     let deals = null;   // rolled below, once prices exist (older saves' deals are replaced)
     let dealsDone = saved.dealsDone ?? 0;   // how many work deals the hero has taken this run
-    const foodCost = name => foodCostAt(name, dealsDone);
+    let foodBought = saved.foodBought ?? 0;   // pieces of food bought in the shop (all kinds): drives food prices
+    const foodCost = name => foodCostAt(name, foodBought);
     const shown = (name, p) => name in FOOD_CLIMB ? Math.ceil(foodCost(name) - 1e-9) : p;   // food: from the deals count, rounded up
     let promotion = saved.promotion ?? 0;
     let kills = saved.kills ?? 0;              // enemies slain this run (leaderboard: Top Slayers)
@@ -1212,6 +1226,10 @@
     let cheatsUnlocked = false;             // after the right password, for this page visit
     const inventory = renameItems(saved.inventory);   // [{ name, kind, class }] — no bonuses while here
     const equipped = renameItems(saved.equipped);      // equipped items — their bonuses apply
+    const equipSum = key => equipped.reduce((t, it) => t + ((itemDef(it.name) || {})[key] || 0), 0);   // e.g. hpRegen, speed
+    if (!saved.itemsV2 && equipped.some(it => it.name === 'Banana sword')) stats.strength -= 1;   // saves from when the sword gave +4 STR (now +3)
+    capExtra = () => { const ex = {}; for (const it of equipped) for (const [st, n] of Object.entries((itemDef(it.name) || {}).capGain || {})) ex[st] = (ex[st] || 0) + n; return ex; };
+    recalcCaps();
     let bag = saved.bag ?? null;   // worn bag's name (BackBag, BackBag X) or null: no bag = no inventory slots
     const invSlots = () => bag ? ((itemDef(bag) || {}).slots || 0) : 0;
     const fullMsg = () => bag ? 'Inventory full.' : 'You have no bag: buy a BackBag at the ATB-Market (Other tab).';
@@ -1284,7 +1302,7 @@
       if (!ui) return [];
       if (ui.kind === 'shop') return [...SHOP_ITEMS, ...BAG_ITEMS()].filter(it => it.tab === SHOP_TABS[tabOf()].key).map(it => {
         const gains = Object.entries(it.gain);
-        const owned = (it.kind || it.class === 'bag') && (carried().some(x => x.name === it.name) || bag === it.name);
+        const owned = (it.kind || it.slot || it.class === 'bag') && (carried().some(x => x.name === it.name) || bag === it.name);
         return {
           left: it.patch ? `${it.name}  lvl ${levels[it.name]}` : it.name,
           shopItem: { it, owned, price: shown(it.name, prices[it.name]) },   // drawn as a big tile (drawShopRow)
@@ -1295,9 +1313,23 @@
             const buyLvl = it.buyLevel || it.minLevel;   // shop level lock (buyLevel: needed to buy only, not to equip)
             if (buyLvl && hero.level < buyLvl) return `Reach level ${buyLvl} to ${it.patch ? 'install' : 'buy'} ${it.name}.`;
             if (it.kind && carried().some(x => x.kind === it.kind)) return `You can only carry one ${it.kind}.`;
-            const carriesIt = it.kind || it.class === 'bag';   // goes into the bag (a first bag is worn straight away)
+            const carriesIt = it.kind || it.slot || it.class === 'bag';   // goes into the bag (a first bag is worn straight away)
             if (carriesIt && !(it.class === 'bag' && !bag) && inventory.length >= invSlots()) return fullMsg();
             if (stats.money < price) return `Not enough money for ${it.name}.`;
+            if (it.class === 'food' && stats.energy >= CAPS.energy) {   // full of energy: offer to keep it for later
+              const fits = inventory.some(x => x.name === it.name && (x.count || 1) < (it.stack || 1)) || inventory.length < invSlots();
+              if (!fits) return bag ? `Your energy is full, and your ${bag} has no room for ${it.name}.` : 'Your energy is full, and you have no bag to keep food in.';
+              askConfirm({ title: 'Energy is full', icon: '⚡', text: `Your energy is full. Put <b>${it.name}</b> in your inventory for later?`, yes: 'Put in bag', no: 'Cancel' }).then(ok => {
+                if (!ok) return;
+                const p = shown(it.name, prices[it.name]); let msg;
+                if (stats.money < p) msg = `Not enough money for ${it.name}.`;
+                else if (addItem(it.name, 1) > 0) msg = fullMsg();
+                else { stats.money -= p; foodBought++; msg = `${it.name} is in your inventory (I).`; }
+                if (ui && ui.kind === 'shop') ui.msg = msg;
+                renderStats();
+              });
+              return 'Your energy is full.';
+            }
             // refuse only if nothing it gives can go up (food still helps when only energy or only health is full)
             if (gains.length && gains.every(([st]) => st in CAPS && stats[st] >= CAPS[st]))
               return gains.length > 1 ? 'You are already full.' : `Your ${gains[0][0]} is already full (${CAPS[gains[0][0]]}).`;
@@ -1312,6 +1344,7 @@
               return `Got the ${it.name}. Equip it in your inventory (I, Space).`;
             }
             for (const [st, n] of gains) stats[st] = capped(st, stats[st] + n);
+            if (it.class === 'food') foodBought++;
             if (it.gain.charisma) deals = newDeals();
             if (it.class !== 'food') prices[it.name] = raisePrice(price);
             if (it.patch) { levels[it.name]++; return `Installed ${it.name} lvl ${levels[it.name]}. Next: ${prices[it.name]}$.`; }
@@ -1417,7 +1450,7 @@
       return [];
     }
     function newGame() {
-      clearLbBuffs(); Object.assign(stats, START_STATS); dealsDone = 0; promotion = 0; kills = 0; runCheated = false; Object.assign(prices, startPrices()); deals = newDeals();
+      clearLbBuffs(); Object.assign(stats, START_STATS); dealsDone = 0; foodBought = 0; promotion = 0; kills = 0; runCheated = false; Object.assign(prices, startPrices()); deals = newDeals();
       discovered.clear();
       quests.length = 0;
       areaName = '0:0'; spawnAllDrips();
@@ -1481,7 +1514,7 @@
     // ---- saving -------------------------------------------------------------------
     // everything a run needs; drip/fights/timers restart when loaded
     function snapshot() {
-      return { x: player.x, y: player.y, fx: facing.x, fy: facing.y, stats: statsNoBuffs(), deals, prices: { ...prices }, dealsDone, promotion, kills, cheated: runCheated, quests: quests.map(q => ({ ...q })),
+      return { x: player.x, y: player.y, fx: facing.x, fy: facing.y, stats: statsNoBuffs(), deals, prices: { ...prices }, dealsDone, foodBought, itemsV2: true, promotion, kills, cheated: runCheated, quests: quests.map(q => ({ ...q })),
                inventory: inventory.map(it => ({ ...it })), equipped: equipped.map(it => ({ ...it })), skills: [...skills],
                areaName, restReadyAt, levels: { ...levels }, manaCap: CAP_BASE.mana, energyCap: CAP_BASE.energy, level: hero.level, exp: hero.exp, strengthLevel: hero.level, bag, discovered: [...discovered], enemies: saveEnemies() };
     }
@@ -1491,14 +1524,16 @@
       hero.level = Math.min(MAX_LEVEL, s.level || 1); hero.exp = s.exp || 0; recalcCaps();
       clearLbBuffs(); Object.assign(stats, START_STATS, s.stats || {});
       if (s.strengthLevel === undefined) stats.strength += levelStrength(hero.level) - levelStrength(1);   // saves from before strength grew with level
-      deals = s.deals && s.deals.every(d => d && d.type) ? s.deals : null; dealsDone = s.dealsDone || 0; promotion = s.promotion || 0; kills = s.kills || 0; runCheated = !!s.cheated;
+      deals = s.deals && s.deals.every(d => d && d.type) ? s.deals : null; dealsDone = s.dealsDone || 0; foodBought = s.foodBought || 0; promotion = s.promotion || 0; kills = s.kills || 0; runCheated = !!s.cheated;
       quests.length = 0; quests.push(...(s.quests || []));
       for (const k in prices) delete prices[k]; for (const k in levels) delete levels[k];
       Object.assign(prices, startPrices(), renameKeys(s.prices)); Object.assign(levels, startLevels(), renameKeys(s.levels));
       inventory.length = 0; inventory.push(...renameItems(s.inventory));
       bag = s.bag !== undefined ? s.bag : !inventory.length ? null : inventory.length <= 2 ? 'BackBag' : 'BackBag X';   // saves from before bags: a bag that fits what they carry
       if (s.bag === undefined && bag === 'BackBag X') stats.charisma += 1;
-      equipped.length = 0; equipped.push(...renameItems(s.equipped));
+      equipped.length = 0; equipped.push(...renameItems(s.equipped)); recalcCaps();
+      if (!s.itemsV2 && equipped.some(it => it.name === 'Banana sword')) stats.strength -= 1;   // the sword gave +4 STR before (now +3)
+      fixEquipSlots();
       skills.length = 0; skills.push(...(s.skills || []).map(newName));
       if (!deals) deals = newDeals();
       restReadyAt = s.restReadyAt || 0; rootedUntil = 0; slowUntil = 0; floaters.length = 0; closePanels();
@@ -1759,7 +1794,7 @@
 
     // side panels: inventory (bottom right) and hero (middle left) can be open at the same time.
     // Keys go to the focused one: the last one opened (H / I on an open but unfocused panel focuses it; a click too).
-    // Like other windows they pause the game and stop the hero from walking. Esc closes everything.
+    // Like other windows they pause the game and stop the hero from walking. X/Esc closes everything.
     const panels = { inventory: null, hero: null };   // each: { cursor, msg } or null
     let focus = null;                                 // 'inventory' | 'hero' | null
     const anyOpen = () => !!ui || !!panels.inventory || !!panels.hero;
@@ -1824,17 +1859,29 @@
       equipSelected(item, def, pn);
     }
     // Space on an equipped slot in the hero panel: the item goes back to the backpack and its bonuses are removed
+    function fixEquipSlots() {   // older saves (3 free slots): anything that doesn't fit its own slot goes back to the bag
+      const seen = new Set();
+      for (const it of [...equipped]) {
+        const def = itemDef(it.name), sl = slotOf(def);
+        if (sl >= 0 && !seen.has(sl)) { seen.add(sl); continue; }
+        equipped.splice(equipped.indexOf(it), 1); if (def) takeOffGains(def); inventory.push(it);
+      }
+    }
+    const inSlot = i => equipped.find(it => slotOf(itemDef(it.name)) === i) || null;   // what's worn in equipment slot i
+    function takeOffGains(def) {   // remove an equipped item's bonuses (stats, max HP / NRG)
+      for (const [st, n] of Object.entries(def.gain || {})) stats[st] -= n;
+      recalcCaps(); for (const st in CAPS) stats[st] = capped(st, stats[st]);
+    }
     function unequipSelected(pn) {
-      const item = equipped[pn.cursor];
+      const item = inSlot(pn.cursor);
       if (!item) { pn.msg = 'Nothing equipped in this slot.'; return; }
       if (inventory.length >= invSlots()) { pn.msg = fullMsg(); return; }
       const def = itemDef(item.name) || { gain: {} };
-      equipped.splice(pn.cursor, 1);
+      equipped.splice(equipped.indexOf(item), 1);
       inventory.push(item);
-      const gains = Object.entries(def.gain);
-      for (const [st, n] of gains) stats[st] -= n;
+      const gains = [...Object.entries(def.gain), ...Object.entries(def.capGain || {})];
+      takeOffGains(def);   // max HP / NRG drop back
       if (def.gain.charisma) deals = newDeals();
-      pn.cursor = Math.min(pn.cursor, Math.max(0, equipped.length - 1));
       pn.msg = `Unequipped the ${item.name}: ${gains.map(([st, n]) => `-${n} ${STAT_SHORT[st] || st}`).join(' ')}`;
       renderStats();
     }
@@ -1842,13 +1889,17 @@
       if (!def || def.class !== 'equipment') { pn.msg = `The ${item.name} can't be equipped.`; return; }
       const needLvl = def.minLevel || (rarityOf(item.name) !== 'common' ? 2 : 1);   // own level requirement, else rare+ needs level 2
       if (hero.level < needLvl) { pn.msg = `Reach level ${needLvl} to equip ${item.name}.`; return; }
-      if (equipped.length >= EQUIP_SLOTS) { pn.msg = 'No free equipment slot.'; return; }
+      const slot = slotOf(def);
+      if (slot < 0) { pn.msg = `The ${item.name} has no equipment slot.`; return; }
+      const old = inSlot(slot);   // that slot is taken: swap (the old item goes back to the bag)
       inventory.splice(pn.cursor, 1);
+      if (old) { const od = itemDef(old.name) || { gain: {} }; equipped.splice(equipped.indexOf(old), 1); takeOffGains(od); inventory.push(old); }
       equipped.push(item);
-      const gains = Object.entries(def.gain);
-      for (const [st, n] of gains) stats[st] += n;
+      const gains = [...Object.entries(def.gain), ...Object.entries(def.capGain || {})];
+      for (const [st, n] of Object.entries(def.gain)) stats[st] += n;
+      recalcCaps(); for (const [st, n] of Object.entries(def.capGain || {})) stats[st] = capped(st, stats[st] + n);   // max goes up, and so does the current value
       if (def.gain.charisma) deals = newDeals();
-      pn.msg = `Equipped the ${item.name}: ${gains.map(([st, n]) => `+${n} ${STAT_SHORT[st] || st}`).join(' ')}`;
+      pn.msg = `Equipped the ${item.name}: ${gains.map(([st, n]) => `+${n} ${STAT_SHORT[st] || st}`).join(' ')}${old ? ` (${old.name} back in the bag)` : ''}`;
       renderStats();
     }
 
@@ -2436,7 +2487,7 @@
     }
     let heroHealthT = 0;      // game time when the hero's next health point is due
     // regen per minute grows with level (health × 1.06, mana × 1.09 per level); fractions are saved up until they make a whole point
-    const healthRegen = () => levelMult('healthRegen', hero.level), manaRegen = () => levelMult('manaRegen', hero.level);
+    const healthRegen = () => levelMult('healthRegen', hero.level) + equipSum('hpRegen'), manaRegen = () => levelMult('manaRegen', hero.level);
     let healthRegenBuf = 0, manaRegenBuf = 0;
     function updateHeroHealth() {
       if (stats.health <= 0 || stats.health >= CAPS.health) { heroHealthT = gameTime + HERO_HEALTH_REGEN_MS; return; }
@@ -2512,7 +2563,7 @@
     const COMBO_MS = 60;         // short wait so W+D pressed together counts as one diagonal step
     const MOVE_MS = 180;         // time to glide from one tile to the next (steady speed)
     let stepMs = MOVE_MS;        // this step's duration: longer while injured
-    const currentStepMs = () => (hasState('injured') ? MOVE_MS / STATES.injured.speed : MOVE_MS) / (1 + lbSpeed()) / (gameTime < slowUntil ? 1 - DRONE.slow : 1);   // Top-1 buffs: +10% speed each
+    const currentStepMs = () => (hasState('injured') ? MOVE_MS / STATES.injured.speed : MOVE_MS) / (1 + lbSpeed() + equipSum('speed')) / (gameTime < slowUntil ? 1 - DRONE.slow : 1);   // Top-1 buffs: +10% speed each
     let comboTimer = null;
     // glide state: player.x/y is the tile we are on or heading to; from* is where the glide started
     let moving = false, fromX = player.x, fromY = player.y, moveStart = 0;
@@ -3283,7 +3334,7 @@
       nameLines.forEach((l, i) => ctx.fillText(l, nameX, sy + 22 + i * 32));
       ctx.font = '18px ' + MONO; ctx.fillStyle = '#8a8a8a';
       const buyLvl = it.buyLevel || it.minLevel, locked = buyLvl && hero.level < buyLvl;
-      const sub = locked ? `needs lvl ${buyLvl}` : it.patch ? `patch · installed lvl ${levels[it.name]}` : it.class === 'equipment' ? `${it.rarity || 'common'} equipment` : it.class === 'bag' ? (bag === it.name ? 'worn now' : `${it.rarity || 'common'} bag`) : 'used at once';
+      const sub = locked ? `needs lvl ${buyLvl}` : it.patch ? `patch · installed lvl ${levels[it.name]}` : it.class === 'equipment' ? `${it.rarity || 'common'} · ${EQUIP_SLOT_KEYS[slotOf(it)] || 'equipment'}` : it.class === 'bag' ? (bag === it.name ? 'worn now' : `${it.rarity || 'common'} bag`) : 'used at once';
       if (locked) ctx.fillStyle = '#e5484d';
       ctx.fillText(sub, nameX, sy + big - 12);
       // price, right side
@@ -3295,9 +3346,7 @@
       const mx = nameX + nameW + 24, mw = priceX - 150 - mx;
       let bx = mx; ctx.textAlign = 'left'; ctx.font = '600 24px ' + MONO;
       // short stat names, no icons: the colour tells the stat
-      const parts = [...(it.slots ? [[`${it.slots} SLOTS`, '#f2f2f2']] : []), ...Object.entries(it.gain || {}).map(([st, n]) => [`+${n} ${STAT_SHORT[st] || st}`, STAT_COLOR[st] || '#fff'])];
-      if (it.attackMs) parts.push([`${secs(it.attackMs)}s ATK SPD`, '#ffe600']);
-      if (it.meleeArea) parts.push([`+${Math.round((it.meleeArea - 1) * 100)}% AOE`, '#00e5ff']);
+      const parts = bonusParts(it);
       if (it.patch) parts.push(['per install', '#8a8a8a']);
       const room = priceX - 140 - mx, gapW = 22;   // keep clear of the price; shrink the line if it's too long
       for (let size = 24; size > 14; size--) { ctx.font = '600 ' + size + 'px ' + MONO;
@@ -3400,8 +3449,8 @@
       wrapText(bossLine(), tw).slice(0, 4).forEach((l, i) => ctx.fillText(l, tx, by + 62 + i * 25));
       ctx.textAlign = 'right'; ctx.fillStyle = '#ffe600'; ctx.font = '600 17px ' + MONO; ctx.fillText('Space · continue', bx + bw - 16, by + bh - 18);
     }
-    const OFFICE_SOCKETS = [0.303, 0.401, 0.500, 0.598, 0.696].map(fx => ({ x: fx, y: 0.524, size: 0.078 }));   // chip sockets in art/officePC.png
-    function drawOfficePicture(x, y, w, h) {   // the office computer with 5 chip slots (drawn until art/officePC.png exists)
+    const OFFICE_SOCKETS = [0.303, 0.401, 0.500, 0.598, 0.696].map(fx => ({ x: fx, y: 0.524, size: 0.078 }));   // chip sockets in art/ui/officePC.png
+    function drawOfficePicture(x, y, w, h) {   // the office computer with 5 chip slots (drawn until art/ui/officePC.png exists)
       ctx.fillStyle = '#0b0d14'; ctx.fillRect(x, y, w, h - 8);
       const im = ART.officePC;
       if (ready(im)) {   // the art has its own 5 chip sockets (OFFICE_SOCKETS: their centres as fractions of the picture, for drawing chips later)
@@ -3420,7 +3469,7 @@
       ctx.fillStyle = '#8a8a8a'; ctx.font = '16px ' + MONO; ctx.textAlign = 'center'; ctx.fillText('chip slots', x + w / 2, cy - 16);
       for (let i = 0; i < n; i++) drawSlot(cx0 + i * (cs + 10), cy, cs, null);
     }
-    function drawBossPicture(x, y, w, h) {   // your boss (drawn until art/boss.png exists)
+    function drawBossPicture(x, y, w, h) {   // your boss (drawn until art/ui/boss.png exists)
       ctx.fillStyle = '#0b0d14'; ctx.fillRect(x, y, w, h - 8);
       const im = ART.boss;
       if (ready(im)) {   // head and shoulders: sits on the bottom of the frame
@@ -3613,7 +3662,7 @@
       }
       ctx.fillStyle = '#8a8a8a';
       ctx.font = '22px ' + MONO;
-      ctx.fillText(hero ? 'H or Esc close' : ui.kind === 'gameover' ? 'Space start a new game' : inv ? 'A/D/W/S choose · Space equip/learn/unequip · I or Esc close' : ui.kind === 'loot' ? 'W/S choose · Space take · Esc close' : ui.kind === 'cheat' ? 'W/S choose · Space apply · P or Esc close' : ui.kind === 'scrap' ? 'W/S choose · Space buy / sell · Esc close' : ui.kind === 'work' ? 'A/D tab · W/S choose · Space accept · Esc close' : ui.kind === 'leaderboard' ? (phoneView ? 'A/D tab · ✕ close' : 'A/D tab · L or Esc close') : shop ? 'A/D tab · W/S choose · Space buy · Esc close' : ui.kind === 'quests' ? (quests.length ? 'W/S choose · Space or right-click cancel · Q/Esc close' : 'Q or Esc close') : ui.kind === 'spelltech' ? 'W/S choose · Space craft · Esc close' : ui.kind === 'rest' ? (restReadyAt > Date.now() ? (ui.back ? 'Esc back' : 'Esc close') : 'Space confirm · Esc close') : info ? (ui.back ? 'Esc back' : 'Esc close') : (ui.back ? 'W/S choose · Space select · Esc back' : 'W/S choose · Space select · Esc close'), px + 40, py + ph - 40);
+      ctx.fillText(hero ? 'H or X/Esc close' : ui.kind === 'gameover' ? 'Space start a new game' : inv ? 'A/D/W/S choose · Space equip/learn/unequip · I or X/Esc close' : ui.kind === 'loot' ? 'W/S choose · Space take · X/Esc close' : ui.kind === 'cheat' ? 'W/S choose · Space apply · P or X/Esc close' : ui.kind === 'scrap' ? 'W/S choose · Space buy / sell · X/Esc close' : ui.kind === 'work' ? 'A/D tab · W/S choose · Space accept · X/Esc close' : ui.kind === 'leaderboard' ? (phoneView ? 'A/D tab · ✕ close' : 'A/D tab · L or X/Esc close') : shop ? 'A/D tab · W/S choose · Space buy · X/Esc close' : ui.kind === 'quests' ? (quests.length ? 'W/S choose · Space or right-click cancel · Q/X/Esc close' : 'Q or X/Esc close') : ui.kind === 'spelltech' ? 'W/S choose · Space craft · X/Esc close' : ui.kind === 'rest' ? (restReadyAt > Date.now() ? (ui.back ? 'Esc back' : 'X/Esc close') : 'Space confirm · X/Esc close') : info ? (ui.back ? 'Esc back' : 'X/Esc close') : (ui.back ? 'W/S choose · Space select · Esc back' : 'W/S choose · Space select · X/Esc close'), px + 40, py + ph - 40);
     }
 
     // ---- game over ------------------------------------------------------------------------
@@ -3798,7 +3847,7 @@
       ctx.restore();
       ctx.strokeStyle = '#fff'; ctx.lineWidth = 2; rr(Math.round(x) - 1, Math.round(y) - 1, Math.round(w) + 2, Math.round(h) + 2, 13); ctx.stroke();   // frame around the map, like the window's
       ctx.fillStyle = '#8a8a8a'; ctx.font = '22px ' + MONO; ctx.textAlign = 'left';
-      ctx.fillText('M or Esc close', x, y + h + 34);
+      ctx.fillText('M or X/Esc close', x, y + h + 34);
     }
 
     function wrapText(text, maxW) {   // uses the current ctx.font
@@ -3883,7 +3932,11 @@
       ctx.strokeRect(x - 5, y - 5, size + 10, size + 10);
     }
     // an item's bonuses as [text, colour] pairs with short stat names (STR, CHSM, ATK SPD, AOE…); the colour tells the stat
-    const bonusParts = def => def ? [...(def.slots ? [[`${def.slots} SLOTS`, '#f2f2f2']] : []), ...Object.entries(def.gain || {}).map(([st, n]) => [`${n > 0 ? '+' : ''}${n} ${STAT_SHORT[st] || st}`, STAT_COLOR[st] || '#fff']),
+    const STAT_ORDER = ['health', 'strength', 'mana', 'charisma', 'energy'];
+    const statParts = def => { const all = {}; for (const src of [def.gain || {}, def.capGain || {}]) for (const [st, n] of Object.entries(src)) all[st] = (all[st] || 0) + n;
+      return Object.entries(all).sort((a, b) => STAT_ORDER.indexOf(a[0]) - STAT_ORDER.indexOf(b[0])).map(([st, n]) => [`${n > 0 ? '+' : ''}${n} ${STAT_SHORT[st] || st}`, STAT_COLOR[st] || '#fff']); };
+    const bonusParts = def => def ? [...(def.slots ? [[`${def.slots} SLOTS`, '#f2f2f2']] : []), ...statParts(def),
+      ...(def.hpRegen ? [[`+${def.hpRegen} HP REG`, STAT_COLOR.health]] : []), ...(def.speed ? [[`+${Math.round(def.speed * 100)}% SPD`, '#00e5ff']] : []),
       ...(def.attackMs ? [[`${def.attackMs > 0 ? '+' : ''}${secs(def.attackMs)}s ATK SPD`, '#ffe600']] : []),
       ...(def.meleeArea ? [[`+${Math.round((def.meleeArea - 1) * 100)}% AOE`, '#00e5ff']] : [])] : [];
     const bonusText = def => bonusParts(def).map(p => p[0]).join('  ');
@@ -3901,7 +3954,7 @@
       if (!slots) {   // no bag worn: nothing to carry things in
         ctx.fillStyle = '#8a8a8a'; ctx.font = '20px ' + MONO; ctx.textAlign = 'left'; ctx.textBaseline = 'middle';
         wrapText('No bag. Buy a BackBag at the ATB-Market (Other tab) to carry items.', w - 48).forEach((l, i) => ctx.fillText(l, x + 24, sy + 30 + i * 28));
-        ctx.font = '16px ' + MONO; ctx.fillText('I or Esc close', x + 24, y + h - 18); return;
+        ctx.font = '16px ' + MONO; ctx.fillText('I or X/Esc close', x + 24, y + h - 18); return;
       }
       for (let i = 0; i < slots; i++) {
         const sx = x0 + i * (size + gap);
@@ -3925,7 +3978,7 @@
         ctx.fillText(unit === undefined ? 'total price: —' : `total price: ${unit * n}$${n > 1 ? `  (${n} × ${unit}$)` : ''}`, x + 24, ly + 52);
       } else { ctx.fillStyle = '#8a8a8a'; ctx.fillText('empty slot', x + 24, ly); }
       ctx.fillStyle = '#8a8a8a'; ctx.font = '16px ' + MONO;
-      ctx.fillText('A/D · Space use · right-click throw · I/Esc close', x + 24, y + h - 18);
+      ctx.fillText('A/D · Space use · right-click throw · I/X/Esc close', x + 24, y + h - 18);
       ctx.textAlign = 'right'; ctx.fillStyle = rarityColor(bag); ctx.font = '600 18px ' + MONO; ctx.fillText(bag, x + w - 24, y + 34);   // the worn bag
     }
 
@@ -3943,43 +3996,47 @@
         ctx.imageSmoothingQuality = 'high'; ctx.drawImage(full, x + 24 + (bw - iw) / 2, top + (bh - ih2) / 2, iw, ih2);
       }
       const lines = [
-        ['HP', stats.health, 'health'], ['STR', stats.strength, 'strength'],
-        ['MANA', stats.mana, 'mana'], ['CHSM', stats.charisma, 'charisma'],
-        ['NRG', stats.energy, 'energy'],
+        ['HP', CAPS.health, 'health'], ['STR', stats.strength, 'strength'],   // max values (current ones are in the HUD)
+        ['MANA', CAPS.mana, 'mana'], ['CHSM', stats.charisma, 'charisma'],
+        ['NRG', CAPS.energy, 'energy'],
         ['CRIT (spells)', `${(critChance() * 100).toFixed(2)}%`, 'crit'],
         ['ATK SPD', `${secs(heroAttackMs())}s`, 'atk'],
-        ['HP REG', `${Math.round(healthRegen())}/min`, 'hregen'], ['MANA REG', `${Math.round(manaRegen())}/min`, 'mregen'],
+        ['HP REG', Math.round(healthRegen()), 'hregen', '/min'], ['MANA REG', `${Math.round(manaRegen())}/min`, 'mregen'],
+        ['MOVE SPD', Math.round((1 + lbSpeed() + equipSum('speed')) * 100), 'spd', '%'],
         ['LVL', `${hero.level}${hero.level < MAX_LEVEL ? `  (${hero.exp}/${expNeed(hero.level)})` : ' (max)'}`, 'level'],
       ];
       const bonus = {};   // equipment bonus, shown as "base +bonus" with the bonus in green
-      for (const it of equipped) for (const [st, n] of Object.entries((itemDef(it.name) || {}).gain || {})) bonus[st] = (bonus[st] || 0) + n;
+      for (const it of equipped) { const d = itemDef(it.name) || {};
+        for (const src of [d.gain || {}, d.capGain || {}]) for (const [st, n] of Object.entries(src)) bonus[st] = (bonus[st] || 0) + n;
+        if (d.hpRegen) bonus.hregen = (bonus.hregen || 0) + d.hpRegen; if (d.speed) bonus.spd = (bonus.spd || 0) + Math.round(d.speed * 100); }
       const lx = x + 24 + bw + 24, rx = x + w - 24 - 96 - 24;
       ctx.font = '20px ' + MONO; ctx.textBaseline = 'middle';
-      lines.forEach(([k, v, key], i) => {
+      lines.forEach(([k, v, key, unit = ''], i) => {
         const ly = top + 14 + i * 30, b = bonus[key] || 0;
-        ctx.textAlign = 'left'; ctx.fillStyle = STAT_COLOR[key] || (key === 'atk' ? '#ffe600' : key === 'hregen' ? STAT_COLOR.health : key === 'mregen' ? STAT_COLOR.mana : '#8a8a8a'); ctx.fillText(k, lx, ly);
+        ctx.textAlign = 'left'; ctx.fillStyle = STAT_COLOR[key] || (key === 'atk' ? '#ffe600' : key === 'hregen' ? STAT_COLOR.health : key === 'mregen' ? STAT_COLOR.mana : key === 'spd' ? '#00e5ff' : '#8a8a8a'); ctx.fillText(k, lx, ly);
         ctx.textAlign = 'right';
         if (b) {
-          const extra = ` +${b}`;
+          const extra = ` +${b}${unit}`;
           ctx.fillStyle = '#3ddc84'; ctx.fillText(extra, rx, ly);
-          ctx.fillStyle = '#fff'; ctx.fillText(String(v - b), rx - ctx.measureText(extra).width, ly);
-        } else { ctx.fillStyle = '#fff'; ctx.fillText(String(v), rx, ly); }
+          ctx.fillStyle = '#fff'; ctx.fillText(`${v - b}${unit}`, rx - ctx.measureText(extra).width, ly);
+        } else { ctx.fillStyle = '#fff'; ctx.fillText(`${v}${unit}`, rx, ly); }
       });
-      const size = 96, gap = 16, sx = x + w - 24 - size;
+      const size = 74, gap = 8, sx = x + w - 24 - size;
       for (let i = 0; i < EQUIP_SLOTS; i++) {
-        const sy = top + i * (size + gap);
-        drawSlot(sx, sy, size, equipped[i] || null);
+        const sy = top + i * (size + gap), worn = inSlot(i);
+        drawSlot(sx, sy, size, worn);
+        if (!worn) { ctx.fillStyle = 'rgba(255, 255, 255, 0.35)'; ctx.font = '600 13px ' + MONO; ctx.textAlign = 'center'; ctx.textBaseline = 'middle'; ctx.fillText(EQUIP_SLOT_KEYS[i], sx + size / 2, sy + size / 2); }
         rowRects.push({ x: sx, y: sy, w: size, h: size, i, panel: 'hero' });
         if (i === pn.cursor) selFrame(sx, sy, size, on);
       }
       ctx.textAlign = 'left'; ctx.font = '18px ' + MONO;
-      const ly = top + bh + 30, sel = equipped[pn.cursor];
+      const ly = top + bh + 30, sel = inSlot(pn.cursor);
       if (pn.msg) { ctx.fillStyle = '#f5c542'; ctx.fillText(pn.msg, x + 24, ly); }
       else if (sel) { ctx.fillStyle = rarityColor(sel.name); ctx.fillText(sel.name, x + 24, ly);
         drawParts([...bonusParts(itemDef(sel.name)), ['· Space unequip', '#cfcfcf']], x + 24 + ctx.measureText(sel.name).width + 12, ly, 10); }
-      else { ctx.fillStyle = '#8a8a8a'; ctx.fillText('empty equipment slot', x + 24, ly); }
+      else { ctx.fillStyle = '#8a8a8a'; ctx.fillText(`empty ${EQUIP_SLOT_KEYS[pn.cursor]} slot`, x + 24, ly); }
       ctx.fillStyle = '#8a8a8a'; ctx.font = '16px ' + MONO;
-      ctx.fillText('W/S choose · Space unequip · H or Esc close', x + 24, y + h - 18);
+      ctx.fillText('W/S choose · Space unequip · H or X/Esc close', x + 24, y + h - 18);
     }
 
     function toggleInventory() { if (!ui) togglePanel('inventory'); }
@@ -4204,6 +4261,7 @@
       if (k === 'm') { e.preventDefault(); if (!e.repeat && !locked()) { if (ui && ui.kind === 'map') closeWindow(); else if (!ui) openWindow('map'); } return; }
       if (k === 'h') { e.preventDefault(); if (!e.repeat && !ui) togglePanel('hero'); return; }
       if (e.key === 'Escape') { e.preventDefault(); if (!e.repeat) escPressed(); return; }
+      if (k === 'x') { e.preventDefault(); if (!e.repeat && (itemMenu || anyOpen())) escPressed(); return; }   // X: another close key (never opens the menu)
       if (k === 'l') { e.preventDefault(); if (!e.repeat && !locked()) { if (ui && ui.kind === 'leaderboard') closeWindow(); else if (!ui) openLeaderboard(); } return; }
       if (k === 'q') { e.preventDefault(); if (!e.repeat && !locked()) { if (ui && ui.kind === 'quests') closeWindow(); else if (!ui) openWindow('quests'); } return; }
       if (e.code === 'Tab') { e.preventDefault(); if (!e.repeat && !anyOpen()) cycleTarget(); return; }
@@ -4399,6 +4457,7 @@
     }, 150);
     setInterval(() => dockEl.classList.toggle('away', fillView && (!!ui || naming())), 100);   // a window is open: the floating HUD steps aside
 
+    fixEquipSlots();   // saves from before the fixed slots (weapon, head, chest, boots)
     spawnAllDrips();   // start of the game: every enemy in the world is spawned
     requestAnimationFrame(frame);
   }
