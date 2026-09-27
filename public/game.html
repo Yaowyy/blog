@@ -548,7 +548,9 @@
   const levelHealth = (base, L, shape, perLvl = HP_CURVE.growthPerLvl) => Math.round(base + (HP_CURVE.growth + perLvl * (L - 1)) * Math.pow(L - 1, shape));
   const heroHealthCap = (base, L) => { let hp = base; for (let l = 2; l <= L; l++) hp = Math.round(hp + l * 0.8); return hp; };   // hero only (enemies keep levelHealth)
   const LEVEL_EXP = { work: 1 };   // exp per work deal. Discovering a zone: |a| + |b| of its coordinates (zoneSum).
-  // Killing an enemy: base `exp` × (2 × enemy level − hero level) + (zone's |a| + |b|) / 2 (rounded down), never below 0.
+  // Killing an enemy: round(its max HP × KILL_EXP) exp, the same for every hero level (killExp).
+  const KILL_EXP = 0.4;
+  const killExp = d => Math.round(d.maxHp * KILL_EXP);
   // Enemy damage: base damage + (enemy level - hero level), never below 0 (npcDamage).
   const CAP_BASE = { ...CAPS };    // caps before the level bonus (Tar Orbs raise the mana base)
   const hero = { level: 1, exp: 0 };
@@ -2405,7 +2407,7 @@
         if (L.mutagenChance && Math.random() < L.mutagenChance) items.push({ name: 'MutaGen', count: 1 });
         if (L.aiChipChance && Math.random() < L.aiChipChance) items.push({ name: 'AI chip', count: 1 });
         drip.loot = { money: rand(L.money[0], L.money[1]), items };
-        gainExp(Math.max(0, (Array.isArray(T.exp) ? rand(T.exp[0], T.exp[1]) : T.exp || 0) * (npcLevel() * 2 - hero.level) + Math.floor(zoneSum(areaName) / 2)));   // base × (2 × his level − hero level) + half the zone's coordinate sum, at least 0
+        gainExp(killExp(drip));   // round(his max HP × 0.4), whatever the hero's level
         if (target === drip) retarget();   // next closest enemy, or no target
       }
     }
