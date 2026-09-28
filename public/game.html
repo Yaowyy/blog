@@ -257,7 +257,6 @@
   .stat.cha i { color: #b58cff; }
   .stat.gold i { color: #f5c542; }
 </style>
-
 </head><body><div id="stage"><canvas id="c" width="1680" height="1040" aria-label="Game grid, 21 by 13 tiles"></canvas>
   <!-- phone HUD (phone view only): hero face (tap = hero panel), HP / mana / XP bars, energy and money -->
   <div class="phud" id="phud">
@@ -370,7 +369,9 @@
 
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.117.1/dist/umd/supabase.js"></script>
 <script>
-  const COLS = 21, ROWS = 13, TILE = 80;   // every zone is 21 x 13 tiles
+  const COLS = 47, ROWS = 29, TILE = 80;   // every zone is 47 x 29 tiles (was 21 x 13: older content sits in the top-left 21 x 13)
+  const OLD_COLS = 21, OLD_ROWS = 13;       // the old zone size (layouts made for it) and the camera's view on computers
+  const VIEW_W = OLD_COLS * TILE, VIEW_H = OLD_ROWS * TILE;
   const WORLD_W = COLS * TILE, WORLD_H = ROWS * TILE;   // a zone in canvas pixels (the canvas itself can be another size in phone view)
   // cheat menu (P) is locked behind a password; only its SHA-256 is kept here
   const CHEAT_HASH = '97c10efe01d5c9c88704a12d361d8429b3a6aa2412290a0773109d5d2d603d5e';
@@ -548,9 +549,10 @@
   const levelHealth = (base, L, shape, perLvl = HP_CURVE.growthPerLvl) => Math.round(base + (HP_CURVE.growth + perLvl * (L - 1)) * Math.pow(L - 1, shape));
   const heroHealthCap = (base, L) => { let hp = base; for (let l = 2; l <= L; l++) hp = Math.round(hp + l * 0.8); return hp; };   // hero only (enemies keep levelHealth)
   const LEVEL_EXP = { work: 1 };   // exp per sale / delivery deal (calls: see dealExp). Discovering a zone: |a| + |b| of its coordinates (zoneSum).
-  // Killing an enemy: round(its max HP × KILL_EXP) exp, the same for every hero level (killExp).
+  // Killing an enemy: round(its max HP × KILL_EXP × level factor) exp. The level factor is the same as for enemy damage
+  // (levelDmgFactor): same level 100%, +20 points per level he's above the hero, −30 points per level below (4+ below: 0).
   const KILL_EXP = 0.4;
-  const killExp = d => Math.round(d.maxHp * KILL_EXP);
+  const killExp = (d, factor = 1) => Math.round(d.maxHp * KILL_EXP * factor);
   // Enemy damage: base damage + (enemy level - hero level), never below 0 (npcDamage).
   const CAP_BASE = { ...CAPS };    // caps before the level bonus (Tar Orbs raise the mana base)
   const hero = { level: 1, exp: 0 };
@@ -590,11 +592,11 @@
       desc: 'A curved yellow blade that hits hard and swings fast. Goes to your inventory: equip it there. One sword at a time.' },
     // armor (Armor tab): capGain raises max HP / NRG while worn, hpRegen adds health per minute, speed = move speed bonus
     { name: 'NRG Headset', tab: 'armor', price: 390, gain: { charisma: 1 }, capGain: { health: 1, energy: 3 }, hpRegen: 1, class: 'equipment', slot: 'head', art: 'nrgHeadset', rarity: 'common',
-      desc: 'Noise-cancelling headset with a charge loop. Keeps you calm, charged and talking. Goes to your inventory: equip it there.' },
+      desc: 'Noise-cancelling headset with a charge loop. Full NRG set (3 pieces): +1 HP +1 CHSM +1 NRG and a new look.' },
     { name: 'NRG Shirt', tab: 'armor', price: 590, gain: { charisma: 2 }, capGain: { health: 2, energy: 5 }, hpRegen: 1, class: 'equipment', slot: 'chest', art: 'nrgShirt', rarity: 'common',
-      desc: 'Smart fabric with woven power lines. Soaks up a hit and stores extra energy. Goes to your inventory: equip it there.' },
+      desc: 'Smart fabric with woven power lines. Full NRG set (3 pieces): +1 HP +1 CHSM +1 NRG and a new look.' },
     { name: 'NRG Sneakers', tab: 'armor', price: 390, gain: { charisma: 1 }, capGain: { health: 1, energy: 3 }, speed: 0.1, class: 'equipment', slot: 'boots', art: 'nrgSneakers', rarity: 'common',
-      desc: 'Springy sneakers with glowing soles. You walk 10% faster. Goes to your inventory: equip it there.' },
+      desc: 'Springy sneakers with glowing soles, 10% faster. Full NRG set (3 pieces): +1 HP +1 CHSM +1 NRG and a new look.' },
   ];
   // items that are never sold, only looted
   // class 'resource': stacks (up to `stack` per inventory slot), used for crafting later.
@@ -642,6 +644,12 @@
   const HERO_HEALTH_REGEN_MS = 60000;   // and 1 health every minute of game time (up to the health cap)
   // equipment slots, top to bottom on the right of the hero view (H): each takes one type only
   const EQUIP_SLOT_KEYS = ['weapon', 'head', 'chest', 'boots'], EQUIP_SLOTS = EQUIP_SLOT_KEYS.length;
+  // equipment sets: wearing every piece adds the set bonus (gain = stats, capGain = max HP / NRG) and changes the hero's look
+  // (look: recolours his jacket and shoes in every frame, see heroSkin). One piece alone does nothing extra.
+  const SETS = [
+    { name: 'NRG', items: ['NRG Headset', 'NRG Shirt', 'NRG Sneakers'], gain: { charisma: 1 }, capGain: { health: 1, energy: 1 }, look: 'nrg' },
+  ];
+  const setOf = name => SETS.find(st => st.items.includes(name)) || null;
   const slotOf = def => !def || def.class !== 'equipment' ? -1 : def.kind === 'sword' ? 0 : EQUIP_SLOT_KEYS.indexOf(def.slot);   // swords → weapon slot
   // item rarity: the colour of the item's name, and a coloured edge in its slot (not for common)
   const RARITY = { common: '#ffffff', rare: '#4ea1ff', mythical: '#b36bff', legendary: '#ff9a2e', titanic: '#ff3b3b', transcendent: '#ff5fd2' };
@@ -830,20 +838,45 @@
                   drips: type === 'slums' ? (Math.max(Math.abs(a), Math.abs(b)) >= 3 ? 2 : 1) : 0 };
     AREAS[id].foes = [];   // other enemies living here besides the Drips: { kind, spawn } (spawn tile counted from 1)
   }
+  // city layout (47 x 29), 0-based footprints in the comments. Pictures drawn turned toward the lower-left (shop, TradeCorp,
+  // MutaTech, ruined market, billboards) are mirrored on the left half so they face the centre; front-view ones never are.
   AREAS['0:0'].walls = [
-    { x: 2, y: 7, w: 2, h: 2, color: '#2e9e44', label: 'ATB-Market', opens: 'shop', art: 'shop', artW: 2.5 },
-    // CaaCaanTeng noodle bar (closed, decorative). Overlaps TradeCorp on 8/6; TradeCorp is drawn in front of it.
-    { x: 7, y: 6, w: 3, h: 2, color: '#8a3a7a', label: 'CaaCaanTeng', art: 'noodleBar', artW: 3.2 },
-    // hover-car charging station (decorative)
-    { x: 16, y: 7, w: 2, h: 2, color: '#3a4257', art: 'charging', artW: 2.3, front: true },   // drawn in front of the ruin next to it
+    { x: 21, y: 19, w: 2, h: 2, color: '#2e9e44', label: 'ATB-Market', opens: 'shop', art: 'shop', artW: 2.5 },   // 20-21, 17-18 (exception: not mirrored)
+    { x: 23, y: 18, w: 2, h: 4, color: '#f2f2f2', label: 'HomeDome', opens: 'rest', art: 'homedome', artW: 2.2 },   // 22-23, 14-17
+    // CaaCaanTeng noodle bar (closed, decorative)
+    { x: 26, y: 18, w: 3, h: 2, color: '#8a3a7a', label: 'CaaCaanTeng', art: 'noodleBar', artW: 3.2 },   // 24-26, 16-17
     // front: true draws the picture in front of other buildings (not of the hero)
-    { x: 9, y: 7, w: 2, h: 2, color: '#2f6fdb', label: 'TradeCorp', opens: 'work', art: 'work', artW: 2.5, front: true },
-    { x: 4, y: 6, w: 2, h: 4, color: '#f2f2f2', label: 'HomeDome', opens: 'rest', art: 'homedome', artW: 2.2 },
-    // collapsed apartment block (decorative ruin), right of the charging station
-    { x: 18, y: 7, w: 2, h: 2, color: '#3a4257', art: 'ruinApartment', artW: 3.2 },
-    // MutaTech: spell crafting station, 3 x 2, bottom-left tile at column 13, row 5
-    { x: 14, y: 5, w: 3, h: 2, color: '#5a3a8a', label: 'MutaTech', opens: 'spelltech', art: 'spellTech', artW: 4.0 },
+    { x: 28, y: 19, w: 2, h: 2, color: '#2f6fdb', label: 'TradeCorp', opens: 'work', art: 'work', artW: 2.5, front: true },   // 27-28, 17-18
+    // MutaTech: spell crafting station
+    { x: 34, y: 13, w: 3, h: 2, color: '#5a3a8a', label: 'MutaTech', opens: 'spelltech', art: 'spellTech', artW: 4.0 },   // 32-34, 11-12
+    // hover-car charging station (decorative), drawn in front of the ruin next to it
+    { x: 35, y: 15, w: 2, h: 2, color: '#3a4257', art: 'charging', artW: 2.3, front: true },   // 34-35, 13-14
+    { x: 37, y: 15, w: 2, h: 2, color: '#3a4257', art: 'ruinApartment', artW: 3.2 },   // 36-37, 13-14
+    { x: 40, y: 16, w: 1, h: 1, color: '#3a4257', art: 'holoBillboard', artW: 2.2 },   // 39, 15
+    { x: 19, y: 20, w: 1, h: 1, color: '#3a4257', art: 'holoBillboard', artW: 2.2, flip: true },   // 18, 19
   ];
+  // rows of closed-down buildings, wall to wall, picked once with a fixed seed so the same picture is never next to itself
+  {
+    const KINDS = [{ w: 2, h: 2, art: 'ruinApartment', artW: 3.2 }, { w: 2, h: 2, art: 'ruinMarket', artW: 2.9, turned: true },
+                   { w: 3, h: 2, art: 'ruinNoodleBar', artW: 3.6 }, { w: 3, h: 2, art: 'noodleBar', artW: 3.2 }];
+    let seed = 470029;
+    const rnd = () => ((seed = (seed * 1664525 + 1013904223) >>> 0) / 4294967296);
+    const pick = n => { const out = []; while (out.length < n) { const k = KINDS[Math.floor(rnd() * KINDS.length)]; if (!out.length || out[out.length - 1] !== k) out.push(k); } return out; };
+    // x0: first column (0-based) or 'centre' to centre the row on column cx; y1: bottom row (0-based)
+    const row = (n, y1, x0, cx) => {
+      const ks = pick(n), width = ks.reduce((t, k) => t + k.w, 0);
+      let x = x0 ?? cx - Math.floor(width / 2);
+      for (const k of ks) {
+        const cxT = x + k.w / 2;   // footprint centre, in tiles
+        AREAS['0:0'].walls.push({ w: k.w, h: k.h, art: k.art, artW: k.artW, color: '#3a4257', x: x + 1 + Math.floor(k.w / 2) - (k.w % 2 ? 0 : 1), y: y1 + 1,
+                                  flip: !!k.turned && cxT < COLS / 2 });
+        x += k.w;
+      }
+    };
+    row(5, 6, 4);           // top-left quadrant
+    row(3, 6, null, 33);    // top-right quadrant, 5 tiles above MutaTech, centred over it
+    row(4, 23, 5);          // bottom-left quadrant
+  }
   AREAS['0:0'].decals = true;   // city: the default detail mix
   AREAS['0:0'].coils = borderWalls('0:0', ['top', 'bottom', 'left', 'right']);
   AREAS['1:-1'].coils = borderWalls('1:-1', ['right', 'bottom'], 9001);   // factory entrance: walled on the right and bottom, gaps at its passages
@@ -911,7 +944,18 @@
       '.....................',
     ] },
   };
-  for (const id in LAKE) AREAS[id].lake = LAKE[id];
+  // lake / big quarters were made for 21 x 13 zones: move each to the zone corner its 4 parts meet at (TL part → the zone's
+  // bottom-right corner, TR → bottom-left, BL → top-right, BR → top-left), padding its tile map (and depth list) to the new size
+  function toCorner(p) {
+    const q = p.art.slice(-2), dx = q[1] === 'L' ? COLS - OLD_COLS : 0, dy = q[0] === 'T' ? ROWS - OLD_ROWS : 0;
+    p.x += dx * TILE; p.y += dy * TILE;
+    const blank = '.'.repeat(COLS), padX = '.'.repeat(COLS - OLD_COLS);
+    const rows = p.rows.map(r => dx ? padX + r : r + padX);
+    p.rows = dy ? [...Array(dy).fill(blank), ...rows] : [...rows, ...Array(ROWS - OLD_ROWS).fill(blank)];
+    if (p.depth) { const d = p.depth.map(v => v + dy), fill = Array(COLS - OLD_COLS).fill(-1); p.depth = dx ? [...fill, ...d] : [...d, ...fill]; }
+    return p;
+  }
+  for (const id in LAKE) AREAS[id].lake = toCorner(LAKE[id]);
   // big structures shared by 4 zones (like the lake, but standing up): the forest grove (-2:-3, -2:-2, -3:-3, -3:-2) and the
   // abandoned factory (2:-3, 2:-2, 1:-3, 1:-2). Each zone draws its quarter picture at x, y (px); rows: '#' = footprint tile
   // (blocked). The picture is drawn in 1-tile-wide columns, each sorted like a building whose bottom row is depth[column],
@@ -1038,29 +1082,15 @@
       '.....................',
     ] },
   };
-  for (const id in BIG) AREAS[id].big = BIG[id];
-  // one Toxic Scav per toxic lake zone, on the shore away from the water and the passages
-  const SCAV_SPAWNS = { '0:-2': { x: 6, y: 4 }, '-1:-1': { x: 16, y: 10 },   // 2 for the 4 lake zones (opposite corners)
-    // deep forest: 4 Scavs among its 9 zones, spread along the route (levels 7, 8, 10, 8)
-    '-7:0': { x: 11, y: 7 }, '-8:-1': { x: 8, y: 6 }, '-10:-1': { x: 14, y: 8 }, '-8:-2': { x: 11, y: 5 } };
-  for (const id in SCAV_SPAWNS) AREAS[id].foes.push({ kind: 'scav', spawn: SCAV_SPAWNS[id] });
+  for (const id in BIG) AREAS[id].big = toCorner(BIG[id]);
+  // Toxic Scavs (lake labs, deep forest) and the extra enemies of the factory entrance are placed with the scenery below
   // Mav-1K drones: 2 in each abandoned factory zone, away from the corner the big factory stands on
   const DRONE_SPAWNS = { '2:-3': [{ x: 5, y: 4 }, { x: 12, y: 4 }], '2:-2': [{ x: 10, y: 4 }, { x: 17, y: 4 }],
                          '1:-3': [{ x: 5, y: 10 }, { x: 12, y: 10 }], '1:-2': [{ x: 10, y: 10 }, { x: 17, y: 10 }] };
   for (const id in DRONE_SPAWNS) for (const sp of DRONE_SPAWNS[id]) AREAS[id].foes.push({ kind: 'drone', spawn: sp });
   // greaser 2:2: 4 Drips, one in each quarter of the zone
   for (const sp of [{ x: 6, y: 4 }, { x: 16, y: 4 }, { x: 6, y: 10 }, { x: 16, y: 10 }]) AREAS['2:2'].foes.push({ kind: 'drip', spawn: sp });
-  AREAS['0:1'].walls = [
-    { x: 17, y: 5, w: 4, h: 2, color: '#6b4a2e', label: 'Scrap Dealer', opens: 'scrap', art: 'scrapDealer', artW: 4.5 },
-    { x: 20, y: 6, w: 2, h: 2, color: '#3a4257', art: 'ruinMarket', artW: 2.9 },   // looted market (decorative ruin), right of the Scrap Dealer
-  ];
-  AREAS['1:2'].walls = [
-    { x: 11, y: 4, w: 3, h: 2, color: '#3a4257', art: 'ruinNoodleBar', artW: 3.6 },   // burned-out noodle bar (decorative ruin), top middle
-  ];
-  // slums 6:3: a long street block (abandoned shops, vending machines, apartments), columns 2–11, rows 3–5, turned slightly right
-  AREAS['6:3'].walls = [
-    { x: 6, y: 5, w: 10, h: 3, color: '#3a4257', art: 'streetBlock', artW: 10 },   // even width: x is the tile right of the centre line
-  ];
+  // slums buildings (incl. the Scrap Dealer in 0:1 and the street block) are laid out with the scenery below
   AREAS['6:3'].drips = 0;   // its 2 Drips stand clear of the street block (the default spawn 8/5 is inside it)
   for (const sp of [{ x: 6, y: 10 }, { x: 15, y: 6 }]) AREAS['6:3'].foes.push({ kind: 'drip', spawn: sp });
   const AREA_ALIAS = { city: '0:0', slums: '0:1' };   // area names used by older saves
@@ -1080,8 +1110,168 @@
   const lakeAt = (x, y) => { const l = AREAS[areaName].lake; return !!l && l.rows[y] && l.rows[y][x] === '#'; };
   const bigAt = (x, y) => { const b = AREAS[areaName].big; return !!b && b.rows[y] && b.rows[y][x] === '#'; };
   const free = (x, y) => inGrid(x, y) && !wallAt(x, y) && !coilAt(x, y) && !lakeAt(x, y) && !bigAt(x, y);
+  // scenery (picked once with a fixed seed, so every player sees the same world).
+  // Pictures drawn turned toward the lower-left (turned: 'L') are mirrored on the left half of their zone, the street block
+  // (turned right, 'R') on the right half, so they face the centre; front-view pictures are never mirrored.
+  // Mushroom patches are walkable ground decoration (A.decos); everything else blocks its footprint.
+  {
+    const SCEN = {
+      billboard: { w: 1, h: 1, art: 'holoBillboard', artW: 2.2, turned: 'L' }, shack: { w: 3, h: 2, art: 'shackStack', artW: 3.6, turned: 'L' },
+      cart: { w: 1, h: 1, art: 'foodCart', artW: 1.6, turned: 'L' }, bus: { w: 4, h: 2, art: 'burntBus', artW: 4.4, turned: 'L' },
+      gas: { w: 4, h: 3, art: 'gasStation', artW: 5.0, turned: 'L' }, hut: { w: 2, h: 2, art: 'researchHut', artW: 3.0, turned: 'L' },
+      pump: { w: 3, h: 2, art: 'pumpStation', artW: 3.8, turned: 'L' }, mush: { w: 2, h: 1, art: 'mushroomPatch', artW: 2.0, walk: true },
+      sat: { w: 3, h: 2, art: 'fallenSatellite', artW: 3.6 }, cont: { w: 3, h: 2, art: 'containerStack', artW: 3.4, turned: 'L' },
+      ruinApartment: { w: 2, h: 2, art: 'ruinApartment', artW: 3.2 }, ruinMarket: { w: 2, h: 2, art: 'ruinMarket', artW: 2.9, turned: 'L' },
+      ruinNoodle: { w: 3, h: 2, art: 'ruinNoodleBar', artW: 3.6 }, noodleBar: { w: 3, h: 2, art: 'noodleBar', artW: 3.2 },
+      scrap: { w: 4, h: 2, art: 'scrapDealer', artW: 4.5, turned: 'L', label: 'Scrap Dealer', opens: 'scrap', color: '#6b4a2e' },
+      street: { w: 10, h: 3, art: 'streetBlock', artW: 10, turned: 'R' },
+    };
+    let seed = 20260929;
+    const rnd = () => ((seed = (seed * 1664525 + 1013904223) >>> 0) / 4294967296);
+    const shuffle = a => { a = a.slice(); for (let i = a.length - 1; i > 0; i--) { const j = Math.floor(rnd() * (i + 1)); [a[i], a[j]] = [a[j], a[i]]; } return a; };
+    const zonesOf = t => Object.keys(AREAS).filter(id => ZONE_LIST[id] === t).sort();
+    const lakeT = (A, x, y) => !!(A.lake && A.lake.rows[y] && A.lake.rows[y][x] === '#');
+    const bigT = (A, x, y) => !!(A.big && A.big.rows[y] && A.big.rows[y][x] === '#');
+    const inFoot = (g, x, y, p) => x >= g.x0 - p && x <= g.x1 + p && y >= g.y0 - p && y <= g.y1 + p;
+    const MX = Math.floor(COLS / 2), MY = Math.floor(ROWS / 2);   // middle column / row (kept free between quadrants)
+    // quadrants: 0 top-left, 1 top-right, 2 bottom-left, 3 bottom-right (footprint limits, 0-based, inclusive)
+    const QUAD = [{ x0: 2, x1: MX - 2, y0: 2, y1: MY - 2 }, { x0: MX + 2, x1: COLS - 3, y0: 2, y1: MY - 2 },
+                  { x0: 2, x1: MX - 2, y0: MY + 2, y1: ROWS - 3 }, { x0: MX + 2, x1: COLS - 3, y0: MY + 2, y1: ROWS - 3 }];
+    const quadOf = (x, y) => (y > MY ? 2 : 0) + (x > MX ? 1 : 0);
+    const mirrored = (def, x0, w) => { const c = x0 + w / 2; return def.turned === 'L' ? c < COLS / 2 : def.turned === 'R' ? c > COLS / 2 : false; };
+    const makeWall = (def, x0, y1) => ({ w: def.w, h: def.h, art: def.art, artW: def.artW, color: def.color || '#3a4257', label: def.label, opens: def.opens,
+      x: x0 + 1 + Math.floor(def.w / 2) - (def.w % 2 ? 0 : 1), y: y1 + 1, flip: mirrored(def, x0, def.w), scenery: def.art });
+    // is the rectangle (plus a 1-tile ring) free of buildings, water, big pieces and the approach to passages?
+    function areaClear(A, x0, x1, y0, y1, opt = {}) {
+      if (x0 < 1 || x1 > COLS - 2 || y0 < 1 || y1 > ROWS - 2) return false;
+      for (let y = y0 - 1; y <= y1 + 1; y++) for (let x = x0 - 1; x <= x1 + 1; x++) {
+        const inside = x >= x0 && x <= x1 && y >= y0 && y <= y1;
+        if (A.walls.some(o => inFoot(foot(o), x, y, 0)) || (A.decos || []).some(o => inFoot(foot(o), x, y, 0))) return false;
+        if (A.exits.some(e => e.tiles.some(([tx, ty]) => Math.abs(tx - x) < 4 && Math.abs(ty - y) < 4))) return false;
+        if ((inside || !opt.shore) && lakeT(A, x, y)) return false;
+        if (bigT(A, x, y)) return false;
+      }
+      return true;
+    }
+    // one building at a random free spot (inside quadrant q when given)
+    function place(id, key, opt = {}) {
+      const A = AREAS[id], def = SCEN[key], q = opt.q != null ? QUAD[opt.q] : { x0: 2, x1: COLS - 3, y0: 2, y1: ROWS - 3 };
+      A.decos = A.decos || [];
+      for (let tries = 0; tries < 800; tries++) {
+        const x0 = q.x0 + Math.floor(rnd() * (q.x1 - q.x0 - def.w + 2)), y1 = q.y0 + def.h - 1 + Math.floor(rnd() * (q.y1 - q.y0 - def.h + 2));
+        const x1 = x0 + def.w - 1, y0 = y1 - def.h + 1;
+        if (x1 > q.x1 || y1 > q.y1 || !areaClear(A, x0, x1, y0, y1, opt)) continue;
+        const w = makeWall(def, x0, y1);
+        if (opt.flip != null) w.flip = opt.flip;   // an exception to the facing rule
+        if (opt.test && !opt.test(w, foot(w), A)) continue;
+        (def.walk ? A.decos : A.walls).push(w);
+        return w;
+      }
+      return null;
+    }
+    // a wall-to-wall row of the given pictures inside quadrant q; returns the placed buildings or null
+    function placeRow(id, keys, q) {
+      const A = AREAS[id], Q = QUAD[q], defs = keys.map(k => SCEN[k]);
+      const width = defs.reduce((t, d) => t + d.w, 0), depth = Math.max(...defs.map(d => d.h));
+      if (width > Q.x1 - Q.x0 + 1) return null;
+      for (let tries = 0; tries < 300; tries++) {
+        const x0 = Q.x0 + Math.floor(rnd() * (Q.x1 - Q.x0 - width + 2)), y1 = Q.y0 + depth - 1 + Math.floor(rnd() * (Q.y1 - Q.y0 - depth + 2));
+        if (y1 > Q.y1 || !areaClear(A, x0, x0 + width - 1, y1 - depth + 1, y1)) continue;
+        let x = x0; const out = [];
+        for (const d of defs) { out.push(makeWall(d, x, y1)); x += d.w; }   // all share the same front (bottom) row
+        A.walls.push(...out);
+        return out;
+      }
+      return null;
+    }
+    // n pictures from the pool, never the same one twice in a row
+    const pickRow = (pool, n) => { const out = []; while (out.length < n) { const k = pool[Math.floor(rnd() * pool.length)]; if (out[out.length - 1] !== k) out.push(k); } return out; };
+    // a row of 3-6 (fewer if it doesn't fit); `must` is put at a random spot in the row
+    function slumRow(id, q, must) {
+      for (let n = 3 + Math.floor(rnd() * 4); n >= 3; n--) for (let t = 0; t < 6; t++) {
+        const keys = pickRow(['ruinApartment', 'ruinMarket', 'ruinNoodle', 'noodleBar', 'shack'], must ? n - 1 : n);
+        if (must) keys.splice(Math.floor(rnd() * (keys.length + 1)), 0, must);
+        const r = placeRow(id, keys, q);
+        if (r) return r;
+      }
+      return null;
+    }
+    const exitQuads = id => { const c = [0, 0, 0, 0]; for (const e of AREAS[id].exits) { const [x, y] = e.tiles[Math.floor(e.tiles.length / 2)]; c[quadOf(x, y)]++; } return c; };
+    // slums and greaser: 3 rows (one per quadrant; the quadrant with the most passages stays open), 1 burnt-out bus.
+    // In about 1 of 4 slums zones one of the rows is the long street block. 0:1 has the Scrap Dealer in its top-right row.
+    const slums = zonesOf('slums');
+    const streetZones = new Set(['6:3', ...shuffle(slums.filter(id => id !== '6:3')).slice(0, Math.round(slums.length / 4) - 1)]);
+    const rowsOf = {};
+    for (const id of [...slums, ...zonesOf('greaser')]) {
+      AREAS[id].walls = [];
+      const c = exitQuads(id), most = Math.max(...c);
+      let open = shuffle([0, 1, 2, 3].filter(q => c[q] === most && !(id === '0:1' && q === 1)))[0];
+      if (open == null) open = shuffle([0, 2, 3])[0];
+      const qs = shuffle([0, 1, 2, 3].filter(q => q !== open));
+      rowsOf[id] = [];
+      if (id === '0:1') { rowsOf[id].push(slumRow(id, 1, 'scrap')); qs.splice(qs.indexOf(1), 1); }
+      if (streetZones.has(id)) {
+        for (const q of shuffle(qs)) { const r = placeRow(id, ['street'], q); if (r) { rowsOf[id].push(r); qs.splice(qs.indexOf(q), 1); break; } }
+      }
+      for (const q of qs) rowsOf[id].push(slumRow(id, q));
+      if (ZONE_LIST[id] === 'greaser') place(id, 'gas');
+      place(id, 'bus');
+    }
+    // street food carts: slums 2:4 and 6:3, right in front of one of their rows
+    for (const id of ['2:4', '6:3']) {
+      const rows = shuffle(rowsOf[id].filter(Boolean));
+      for (const r of rows) {
+        const f0 = foot(r[0]), f1 = foot(r[r.length - 1]);
+        if (place(id, 'cart', { test: (w, f) => f.y0 >= f0.y1 + 2 && f.y0 <= f0.y1 + 3 && f.x0 >= f0.x0 && f.x1 <= f1.x1 })) break;
+      }
+    }
+    // factory entrance: a row of 3-4 container stacks in each quadrant; factory: 6 stacks per zone, scattered
+    for (const id of zonesOf('factoryIn')) for (let q = 0; q < 4; q++)
+      for (let n = 3 + Math.floor(rnd() * 2); n >= 3; n--) if (placeRow(id, Array(n).fill('cont'), q)) break;
+    for (const id of zonesOf('factory')) for (let i = 0; i < 6; i++) place(id, 'cont');
+    // toxic lake: a research hut in every zone; 1 pump station, in 0:-2, right at the water with its pipes going in
+    // enemies placed with the scenery: A.extraFoes (no twins). tileOk: open ground, away from passages
+    const tileOk = (A, x, y) => x >= 1 && y >= 1 && x <= COLS - 2 && y <= ROWS - 2 && !A.walls.some(o => inFoot(foot(o), x, y, 0))
+      && !lakeT(A, x, y) && !bigT(A, x, y) && !(A.coils || []).some(c => c.x - 1 === x && c.y - 1 === y)
+      && !A.exits.some(e => e.tiles.some(([tx, ty]) => Math.abs(tx - x) < 3 && Math.abs(ty - y) < 3))
+      && !(A.extraFoes || []).some(f => f.spawn.x - 1 === x && f.spawn.y - 1 === y);
+    const addFoe = (A, kind, x, y) => (A.extraFoes = A.extraFoes || []).push({ kind, spawn: { x: x + 1, y: y + 1 } });
+    function foeSomewhere(id, kind) {
+      const A = AREAS[id];
+      for (let t = 0; t < 500; t++) { const x = 2 + Math.floor(rnd() * (COLS - 4)), y = 2 + Math.floor(rnd() * (ROWS - 4)); if (tileOk(A, x, y)) { addFoe(A, kind, x, y); return true; } }
+      return false;
+    }
+    // toxic lake: 2 research labs per zone, 1-2 Toxic Scavs in front of each
+    for (const id of zonesOf('lake')) for (let i = 0; i < 2; i++) {
+      const hut = place(id, 'hut');
+      if (!hut) continue;
+      const A = AREAS[id], f = foot(hut), spots = [];
+      for (let y = f.y1 + 1; y <= f.y1 + 2; y++) for (let x = f.x0 - 1; x <= f.x1 + 1; x++) if (tileOk(A, x, y)) spots.push([x, y]);
+      const n = 1 + (rnd() < 0.5 ? 1 : 0);
+      for (const [x, y] of shuffle(spots).slice(0, n)) addFoe(A, 'scav', x, y);
+    }
+    // 1 pump station, in 0:-2, right at the water. Exception: always mirrored, so its pipes (then at the lower-right) go into the lake
+    const pumpFaces = (w, f, A) => { for (const x of [f.x1, f.x1 + 1, f.x1 + 2]) for (let y = f.y1 + 1; y <= f.y1 + 2; y++) if (lakeT(A, x, y)) return true; return false; };
+    place('0:-2', 'pump', { shore: true, flip: true, test: pumpFaces });
+    // deep forest: the fallen satellite in -8:-1 with 6 Mav-1K drones, each 3-6 tiles from it; 2-3 Toxic Scavs in every zone
+    {
+      const id = '-8:-1', s = place(id, 'sat', { test: (w, f) => f.x0 >= 8 && f.x1 <= COLS - 9 && f.y0 >= 7 && f.y1 <= ROWS - 8 });   // room around it for the drones
+      if (s) {
+        const A = AREAS[id], f = foot(s);
+        const dist = (x, y) => Math.max(Math.max(f.x0 - x, 0, x - f.x1), Math.max(f.y0 - y, 0, y - f.y1));   // tiles from its footprint
+        for (let k = 0, t = 0; k < 6 && t < 2000; t++) {
+          const x = f.x0 - 6 + Math.floor(rnd() * (f.x1 - f.x0 + 13)), y = f.y0 - 6 + Math.floor(rnd() * (f.y1 - f.y0 + 13)), d = dist(x, y);
+          if (d >= 3 && d <= 6 && tileOk(A, x, y)) { addFoe(A, 'drone', x, y); k++; }
+        }
+      }
+    }
+    for (const id of zonesOf('deepForest')) { const n = 2 + (rnd() < 0.5 ? 1 : 0); for (let i = 0; i < n; i++) foeSomewhere(id, 'scav'); }
+    // factory entrance: 2 Drips and 1 Mav-1K drone
+    for (const id of zonesOf('factoryIn')) { foeSomewhere(id, 'drip'); foeSomewhere(id, 'drip'); foeSomewhere(id, 'drone'); }
+    for (const id of zonesOf('deepForest')) for (let q = 0; q < 4; q++) if (!place(id, 'mush', { q })) place(id, 'mush');
+  }
   const footCX = w => { const f = foot(w); return (f.x0 + f.x1 + 1) / 2; };   // footprint centre, in tiles
-  const START = { x: 8, y: 7 };   // 0-based: column 9, row 8 (just below TradeCorp)
+  const START = { x: 23, y: 18 };   // 0-based: just below HomeDome
 
   // ---- enemies ----------------------------------------------------------------
   // Drip: half human, half oil slime. Every slums zone has 1 (2 where a map coordinate is 3 or more).
@@ -1196,7 +1386,11 @@
     scavPortrait: 'art/enemies/scav/scavPortrait.png', scavSpray: 'art/enemies/scav/scavSpray.png',   // portrait, toxic spray cone (points left, nozzle at the right end)
     mutagen: 'art/items/loot/mutagen.png', tarOrb: 'art/items/loot/tarOrb.png', aiChip: 'art/items/loot/aiChip.png',   // item icons
     spellTech: 'art/buildings/spellTech.png',   // MutaTech crafting station (3 x 2), turned slightly like the shop
-    ruinApartment: 'art/buildings/ruinApartment.png', ruinMarket: 'art/buildings/ruinMarket.png', ruinNoodleBar: 'art/buildings/ruinNoodleBar.png',   // destroyed buildings (decorative)   // scrap resource icon
+    ruinApartment: 'art/buildings/ruinApartment.png', ruinMarket: 'art/buildings/ruinMarket.png', ruinNoodleBar: 'art/buildings/ruinNoodleBar.png',
+    holoBillboard: 'art/buildings/holoBillboard.png', shackStack: 'art/buildings/shackStack.png', foodCart: 'art/buildings/foodCart.png', burntBus: 'art/buildings/burntBus.png',
+    gasStation: 'art/buildings/gasStation.png', researchHut: 'art/buildings/researchHut.png', pumpStation: 'art/buildings/pumpStation.png', mushroomPatch: 'art/world/big/mushroomPatch.png',
+    fallenSatellite: 'art/buildings/fallenSatellite.png', containerStack: 'art/buildings/containerStack.png',   // scenery (decorative)
+   // destroyed buildings (decorative)   // scrap resource icon
     heroPortrait: 'art/hero/heroPortrait.png',
   };
   const ART = Object.fromEntries(Object.entries(ART_SRC).map(([k, src]) => { const im = new Image(); im.src = src; return [k, im]; }));
@@ -1251,7 +1445,29 @@
     const equipped = renameItems(saved.equipped);      // equipped items — their bonuses apply
     const equipSum = key => equipped.reduce((t, it) => t + ((itemDef(it.name) || {})[key] || 0), 0);   // e.g. hpRegen, speed
     if (!saved.itemsV2 && equipped.some(it => it.name === 'Banana sword')) stats.strength -= 1;   // saves from when the sword gave +4 STR (now +3)
-    capExtra = () => { const ex = {}; for (const it of equipped) for (const [st, n] of Object.entries((itemDef(it.name) || {}).capGain || {})) ex[st] = (ex[st] || 0) + n; return ex; };
+    const activeSets = new Set(saved.sets || []);   // sets whose bonus is in the stats right now (saved, so it's never added twice)
+    capExtra = () => { const ex = {}; for (const it of equipped) for (const [st, n] of Object.entries((itemDef(it.name) || {}).capGain || {})) ex[st] = (ex[st] || 0) + n;
+      for (const st of SETS) if (activeSets.has(st.name)) for (const [k, n] of Object.entries(st.capGain || {})) ex[k] = (ex[k] || 0) + n; return ex; };
+    const setCount = st => st.items.filter(n => equipped.some(e => e.name === n)).length;
+    // a set just got complete: add its bonus; a piece came off: take it away. Returns a note for the message ('' if nothing changed)
+    function syncSets() {
+      let note = '';
+      for (const st of SETS) {
+        const full = setCount(st) === st.items.length, on = activeSets.has(st.name);
+        if (full === on) continue;
+        const sign = full ? 1 : -1;
+        for (const [k, n] of Object.entries(st.gain || {})) stats[k] += sign * n;
+        if (full) activeSets.add(st.name); else activeSets.delete(st.name);
+        recalcCaps();
+        if (full) for (const [k, n] of Object.entries(st.capGain || {})) stats[k] = capped(k, stats[k] + n); else for (const k in CAPS) stats[k] = capped(k, stats[k]);
+        if ((st.gain || {}).charisma) deals = newDeals();
+        note += full ? ` ${st.name} set complete: ${setBonusText(st)}!` : ` ${st.name} set broken.`;
+        if (full) float(`${st.name} set!`, '#9dff5c', player.x + 0.5, player.y - 1.5);
+      }
+      renderStats(); return note;
+    }
+    const setBonusText = st => [...Object.entries(st.capGain || {}), ...Object.entries(st.gain || {})].map(([k, n]) => `+${n} ${STAT_SHORT[k] || k}`).join(' ');
+    const heroLook = () => { for (const st of SETS) if (st.look && activeSets.has(st.name)) return st.look; return null; };
     recalcCaps();
     let bag = saved.bag ?? null;   // worn bag's name (BackBag, BackBag X) or null: no bag = no inventory slots
     const invSlots = () => bag ? ((itemDef(bag) || {}).slots || 0) : 0;
@@ -1480,7 +1696,7 @@
       quests.length = 0;
       areaName = '0:0'; spawnAllDrips();
       enterArea('0:0', START.x, START.y, 1, true);
-      inventory.length = 0; equipped.length = 0; skills.length = 0; restReadyAt = 0; bag = null; Object.assign(levels, startLevels());
+      inventory.length = 0; equipped.length = 0; activeSets.clear(); skills.length = 0; restReadyAt = 0; bag = null; Object.assign(levels, startLevels());
       rootedUntil = 0; slowUntil = 0; floaters.length = 0; Object.assign(CAP_BASE, BASE_CAPS); hero.level = 1; hero.exp = 0; recalcCaps();
       ui = null; closePanels(); applyLbBuffs();
     }
@@ -1539,7 +1755,7 @@
     // ---- saving -------------------------------------------------------------------
     // everything a run needs; drip/fights/timers restart when loaded
     function snapshot() {
-      return { x: player.x, y: player.y, fx: facing.x, fy: facing.y, stats: statsNoBuffs(), deals, prices: { ...prices }, dealsDone, foodBought, itemsV2: true, promotion, kills, cheated: runCheated, quests: quests.map(q => ({ ...q })),
+      return { x: player.x, y: player.y, fx: facing.x, fy: facing.y, stats: statsNoBuffs(), deals, prices: { ...prices }, dealsDone, foodBought, itemsV2: true, sets: [...activeSets], promotion, kills, cheated: runCheated, quests: quests.map(q => ({ ...q })),
                inventory: inventory.map(it => ({ ...it })), equipped: equipped.map(it => ({ ...it })), skills: [...skills],
                areaName, restReadyAt, levels: { ...levels }, manaCap: CAP_BASE.mana, energyCap: CAP_BASE.energy, level: hero.level, exp: hero.exp, strengthLevel: hero.level, bag, discovered: [...discovered], enemies: saveEnemies() };
     }
@@ -1558,7 +1774,8 @@
       if (s.bag === undefined && bag === 'BackBag X') stats.charisma += 1;
       equipped.length = 0; equipped.push(...renameItems(s.equipped)); recalcCaps();
       if (!s.itemsV2 && equipped.some(it => it.name === 'Banana sword')) stats.strength -= 1;   // the sword gave +4 STR before (now +3)
-      fixEquipSlots();
+      activeSets.clear(); for (const n of s.sets || []) activeSets.add(n); recalcCaps();
+      fixEquipSlots(); syncSets();
       skills.length = 0; skills.push(...(s.skills || []).map(newName));
       if (!deals) deals = newDeals();
       restReadyAt = s.restReadyAt || 0; rootedUntil = 0; slowUntil = 0; floaters.length = 0; closePanels();
@@ -1915,7 +2132,7 @@
       const gains = [...Object.entries(def.gain), ...Object.entries(def.capGain || {})];
       takeOffGains(def);   // max HP / NRG drop back
       if (def.gain.charisma) deals = newDeals();
-      pn.msg = `Unequipped the ${item.name}: ${gains.map(([st, n]) => `-${n} ${STAT_SHORT[st] || st}`).join(' ')}`;
+      pn.msg = `Unequipped the ${item.name}: ${gains.map(([st, n]) => `-${n} ${STAT_SHORT[st] || st}`).join(' ')}.${syncSets()}`;
       renderStats();
     }
     const equipLevel = def => def.minLevel || (rarityOf(def.name) !== 'common' ? 2 : 1);   // own level requirement, else rare+ needs level 2
@@ -1926,7 +2143,7 @@
       for (const [st, n] of Object.entries(def.gain || {})) stats[st] += n;
       recalcCaps(); for (const [st, n] of Object.entries(def.capGain || {})) stats[st] = capped(st, stats[st] + n);
       if ((def.gain || {}).charisma) deals = newDeals();
-      renderStats(); return bonusText(def);
+      renderStats(); return bonusText(def) + syncSets();
     }
     function equipSelected(item, def, pn) {
       if (!def || def.class !== 'equipment') { pn.msg = `The ${item.name} can't be equipped.`; return; }
@@ -1942,7 +2159,7 @@
       for (const [st, n] of Object.entries(def.gain)) stats[st] += n;
       recalcCaps(); for (const [st, n] of Object.entries(def.capGain || {})) stats[st] = capped(st, stats[st] + n);   // max goes up, and so does the current value
       if (def.gain.charisma) deals = newDeals();
-      pn.msg = `Equipped the ${item.name}: ${gains.map(([st, n]) => `+${n} ${STAT_SHORT[st] || st}`).join(' ')}${old ? ` (${old.name} back in the bag)` : ''}`;
+      pn.msg = `Equipped the ${item.name}: ${gains.map(([st, n]) => `+${n} ${STAT_SHORT[st] || st}`).join(' ')}${old ? ` (${old.name} back in the bag)` : ''}.${syncSets()}`;
       renderStats();
     }
 
@@ -2074,6 +2291,9 @@
 
     // every zone's Drips, kept for the whole game (zone id -> list); `drips` is the current zone's list
     let zoneDrips = {};
+    const TWIN_OFFSETS = [[COLS - OLD_COLS - 2, 2], [3, ROWS - OLD_ROWS - 1], [COLS - OLD_COLS - 4, ROWS - OLD_ROWS - 2]];
+    const twinCache = new Map();   // the same spawn object every time (makeDrip recognises an enemy's old copy by its spawn)
+    function twinSpawn(sp, o) { const k = `${sp.x},${sp.y},${o}`; if (!twinCache.has(k)) twinCache.set(k, { x: Math.min(COLS - 1, sp.x + o[0]), y: Math.min(ROWS - 1, sp.y + o[1]) }); return twinCache.get(k); }
     function spawnAllDrips() {   // start of a game (new game, load, page open): every enemy is spawned
       zoneDrips = {};
       for (const id in AREAS) {
@@ -2081,6 +2301,10 @@
         const nd = AREAS[id].drips || 0;
         for (let i = 0; i < nd; i++) zoneDrips[id].push(makeDrip(DRIP.spawns[nd - 1][i], id, 'drip'));
         for (const f of AREAS[id].foes) zoneDrips[id].push(makeDrip(f.spawn, id, f.kind));
+        // bigger zones: every enemy gets a twin in the new space (right, bottom or bottom-right of the old 21 x 13 area)
+        const first = zoneDrips[id].slice();
+        first.forEach((d, i) => { const o = TWIN_OFFSETS[i % TWIN_OFFSETS.length]; zoneDrips[id].push(makeDrip(twinSpawn(d.spawn, o), id, d.kind)); });
+        for (const f of AREAS[id].extraFoes || []) zoneDrips[id].push(makeDrip(f.spawn, id, f.kind));   // no twins (e.g. the satellite's drones)
       }
       drips = zoneDrips[areaName] || []; drip = null;
     }
@@ -2398,10 +2622,20 @@
     function drawMeleeFlash() {
       const t = gameTime - heroAttackStart;
       if (t < 0 || t > MELEE.flashMs) return;
-      const a = meleeArea(), ang = Math.atan2(a.dy, a.dx);
-      ctx.save(); ctx.globalAlpha = 0.06 * (1 - t / MELEE.flashMs); ctx.fillStyle = hasMeleeWeapon() ? '#ffe600' : '#ffffff';
-      ctx.beginPath(); ctx.moveTo(a.ox * TILE, a.oy * TILE);
-      ctx.arc(a.ox * TILE, a.oy * TILE, a.r * TILE, ang - Math.PI / 2, ang + Math.PI / 2); ctx.closePath(); ctx.fill(); ctx.restore();
+      const a = meleeArea(), ang = Math.atan2(a.dy, a.dx), ox = a.ox * TILE, oy = a.oy * TILE, R = a.r * TILE;
+      // colour by weapon: white with fists, yellow with the Banana sword, neon green with the baNano Sword
+      const w = equipped.find(e => MELEE_KINDS.includes(e.kind)), rgb = !w ? '255, 255, 255' : w.name === 'baNano Sword' ? '157, 255, 92' : '255, 230, 0';
+      const base = 0.06 * (1 - t / MELEE.flashMs);
+      // corners dimmed: full in front, fading to about half toward both ends of the flat side (a conic gradient around the hero)
+      ctx.save(); ctx.globalAlpha = base;
+      if (ctx.createConicGradient) {
+        const g = ctx.createConicGradient(ang - Math.PI, ox, oy);
+        g.addColorStop(0, `rgba(${rgb}, 0.45)`); g.addColorStop(0.25, `rgba(${rgb}, 0.45)`); g.addColorStop(0.5, `rgba(${rgb}, 1)`);
+        g.addColorStop(0.75, `rgba(${rgb}, 0.45)`); g.addColorStop(1, `rgba(${rgb}, 0.45)`);
+        ctx.fillStyle = g;
+      } else ctx.fillStyle = `rgb(${rgb})`;   // older browsers: even colour
+      ctx.beginPath(); ctx.moveTo(ox, oy); ctx.arc(ox, oy, R, ang - Math.PI / 2, ang + Math.PI / 2); ctx.closePath(); ctx.fill();
+      ctx.restore();
     }
 
     function damageDrip(dmg, text, color) {
@@ -2431,7 +2665,7 @@
         if (L.mutagenChance && Math.random() < L.mutagenChance) items.push({ name: 'MutaGen', count: 1 });
         if (L.aiChipChance && Math.random() < L.aiChipChance) items.push({ name: 'AI chip', count: 1 });
         drip.loot = { money: rand(L.money[0], L.money[1]), items };
-        gainExp(killExp(drip));   // round(his max HP × 0.4), whatever the hero's level
+        gainExp(killExp(drip, levelDmgFactor(npcLevel() - hero.level)));   // round(his max HP × 0.4 × level factor)
         if (target === drip) retarget();   // next closest enemy, or no target
       }
     }
@@ -2734,7 +2968,7 @@
       renderStats();
     }
     const GROUND_REPEAT = 6;   // tiles per texture repeat
-    const groundScale = () => Math.min(2, Math.max(1, Math.ceil(PX * worldCam(0, 0).z * 4) / 4));
+    const groundScale = () => Math.min(1.25, Math.max(1, Math.ceil(PX * worldCam(0, 0).z * 4) / 4));   // capped: a whole 47 x 29 zone at 2x would be too big for phones
     function buildGround() {
       const im = ART[ZONE_TYPES[AREAS[areaName].type].floor];
       if (!ready(im)) return null;
@@ -2893,9 +3127,9 @@
     const mobUI = () => phoneView || fillView;   // phone-style HUD (phones and, since the bottom panel went, computers too)
     const viewBottom = () => canvas.height - (fillView ? dockH : 0);   // lowest canvas y not covered by the HUD
     function worldCam(rx, ry) {
-      if (!phoneView && !fillView) return { z: canvas.width / WORLD_W, ox: 0, oy: 0 };
+      if (!phoneView && !fillView) return { z: canvas.width / VIEW_W, ox: 0, oy: 0 };
       const land = canvas.width >= canvas.height;
-      const z = fillView ? Math.max(canvas.width / WORLD_W, canvas.height / WORLD_H)   // computers: the zone covers the window
+      const z = fillView ? Math.max(canvas.width / VIEW_W, canvas.height / VIEW_H)   // computers: a 21 x 13 tile view covers the window
         : Math.max(land ? canvas.height / (viewTiles * TILE) : canvas.width / (viewTiles * TILE), canvas.width / WORLD_W, canvas.height / WORLD_H);
       const vw = canvas.width / z, vh = canvas.height / z, hx = (rx + 0.5) * TILE, hy = (ry + 0.5) * TILE;
       const pad = 0;
@@ -2928,7 +3162,15 @@
       ctx.stroke();
       }
 
-      // tile the hero is facing: a soft, blurred yellow triangle (3%) with its tip toward the hero, widening away from him
+      // full NRG set: a small soft circle of neon-green light on the ground under the hero (gently pulsing)
+      if (activeSets.has('NRG')) {
+        const gx = (rx + 0.5) * TILE, gy = (ry + 0.92) * TILE, pulse = 0.85 + 0.15 * Math.sin(performance.now() / 450);
+        ctx.save(); ctx.translate(gx, gy); ctx.scale(1, 0.42);
+        const gr = ctx.createRadialGradient(0, 0, 0, 0, 0, TILE * 0.5);
+        gr.addColorStop(0, `rgba(157, 255, 92, ${0.45 * pulse})`); gr.addColorStop(0.55, `rgba(157, 255, 92, ${0.18 * pulse})`); gr.addColorStop(1, 'rgba(157, 255, 92, 0)');
+        ctx.fillStyle = gr; ctx.beginPath(); ctx.arc(0, 0, TILE * 0.5, 0, Math.PI * 2); ctx.fill(); ctx.restore();
+      }
+      // tile the hero is facing: a soft, blurred triangle (3%) with its tip toward the hero, widening away from him (colour: markerColor)
       ctx.save();
       ctx.translate((rx + facing.x + 0.5) * TILE, (ry + facing.y + 0.5) * TILE);
       ctx.rotate(Math.atan2(facing.y, facing.x));
@@ -2950,6 +3192,7 @@
       }
       for (const e of drips) if (e.kind === 'drone' && !e.dead) { drip = e; drawDroneShadow(e); }   // drones' shadows on the ground, under buildings
 
+      for (const d of AREAS[areaName].decos || []) drawWall(d);   // walkable ground decoration (mushroom patches)
       // depth sort: things higher on screen first, so whatever is lower is drawn in front
       // buildings: split around the hero by their bottom row; among buildings, "front" ones are drawn last
       const order = (a, b) => (a.y + (a.front ? 10 : 0)) - (b.y + (b.front ? 10 : 0));
@@ -3041,15 +3284,18 @@
     const NEON = { building: { color: '#ffdc00', alpha: 0.1 }, enemy: { color: '#ff3b3b', alpha: 0.1 }, target: { color: '#ffffff', alpha: 0.1 } };
     // blurred triangle for the facing marker, built once: tip at the left (toward the hero), wide side at the right.
     // The blur is a shadow cast by a triangle drawn off to the side, so it works in every browser.
-    let facingMarkerCanvas = null;
-    function facingMarker() {
-      if (facingMarkerCanvas) return facingMarkerCanvas;
+    // colour of the facing triangle: white with fists, yellow with the Banana sword, neon green with the baNano Sword or the full NRG set
+    const markerColor = () => equipped.some(e => e.name === 'baNano Sword') || activeSets.has('NRG') ? '#9dff5c'
+      : equipped.some(e => e.name === 'Banana sword') ? '#ffdc00' : '#ffffff';
+    const facingMarkerCanvas = {};   // one blurred triangle per colour
+    function facingMarker(color = markerColor()) {
+      if (facingMarkerCanvas[color]) return facingMarkerCanvas[color];
       const S = Math.round(TILE * 1.4), c = document.createElement('canvas'); c.width = c.height = S;
       const g = c.getContext('2d'), off = S * 4, h = TILE * 0.42;
-      g.shadowColor = '#ffdc00'; g.shadowBlur = 16; g.shadowOffsetX = off;
-      g.fillStyle = '#ffdc00';
+      g.shadowColor = color; g.shadowBlur = 16; g.shadowOffsetX = off;
+      g.fillStyle = color;
       g.beginPath(); g.moveTo(S / 2 - h - off, S / 2); g.lineTo(S / 2 + h - off, S / 2 - h * 0.95); g.lineTo(S / 2 + h - off, S / 2 + h * 0.95); g.closePath(); g.fill();
-      return (facingMarkerCanvas = c);
+      return (facingMarkerCanvas[color] = c);
     }
     const facingEnemy = () => !anyOpen() && !drip.dead && meleeTargets().includes(drip);   // is the enemy being drawn inside the hero's melee area?
     // the building the hero faces and can use (it has something to open)
@@ -3060,10 +3306,13 @@
       if (a) {
         ctx.imageSmoothingQuality = 'high';
         const x = footCX(w) * TILE - a.dw / 2, y = (f.y1 + 1) * TILE - a.dh;
-        ctx.drawImage(a.im, x, y, a.dw, a.dh);
+        if (w.flip) { ctx.save(); ctx.translate(x + a.dw, y); ctx.scale(-1, 1); ctx.drawImage(a.im, 0, 0, a.dw, a.dh); ctx.restore(); }
+        else ctx.drawImage(a.im, x, y, a.dw, a.dh);
         if (w === facedBuilding()) {   // interactable: yellow neon outline
           ctx.save(); ctx.globalAlpha = NEON.building.alpha;
-          ctx.drawImage(outlineOf(a.im, 0, 0, a.im.naturalWidth, a.im.naturalHeight, a.dw, a.dh, NEON.building.color), x - OUTLINE_PAD, y - OUTLINE_PAD);
+          const ol = outlineOf(a.im, 0, 0, a.im.naturalWidth, a.im.naturalHeight, a.dw, a.dh, NEON.building.color);
+          if (w.flip) { ctx.translate(x + a.dw + OUTLINE_PAD, y - OUTLINE_PAD); ctx.scale(-1, 1); ctx.drawImage(ol, 0, 0); }   // mirrored like the picture
+          else ctx.drawImage(ol, x - OUTLINE_PAD, y - OUTLINE_PAD);
           ctx.restore();
         }
       } else {
@@ -3321,8 +3570,60 @@
     // hero sprite: feet on the bottom-centre of his tile, mirrored when facing left.
     // While attacking: the punch or sword sheet for the facing direction. With a sword equipped (and not attacking)
     // the sword is drawn on his back: behind him in the side and front views, over the backpack in the back view.
+    // ---- set looks: the hero's sheets recoloured once per look (cached). Cyan trim turns neon green everywhere on him (arm lights,
+    // hair streak, every pose); below the neck (the bottom 58% of his height) dark navy cloth also turns graphite.
+    // Outlines, skin, the black hair and the metal arm stay as they are.
+    const LOOKS = { nrg: { trim: [157, 255, 92], cloth: v => [v * 1.35 + 16, v * 1.4 + 18, v * 1.45 + 24] } };
+    const skinCache = {};
+    function skinned(key) {
+      const img = ART[key], look = heroLook();
+      if (!look || !ready(img)) return img;
+      const ck = look + ':' + key; if (skinCache[ck]) return skinCache[ck];
+      const L = LOOKS[look], W = img.naturalWidth, H = img.naturalHeight;
+      const cv = document.createElement('canvas'); cv.width = W; cv.height = H;
+      const g = cv.getContext('2d'); g.drawImage(img, 0, 0);
+      let data; try { data = g.getImageData(0, 0, W, H); } catch { return (skinCache[ck] = img); }   // pictures from another site can't be read: keep the normal look
+      const px = data.data;
+      let feet = H - 1, tall = 277;   // sheet px: where his soles are, and his height (all hero sheets share the 280 px scale)
+      if (ATTACK_CELLS[key]) feet = ATTACK_CELLS[key].cellH - ATTACK_CELLS[key].foot - 2;
+      const lying = key === 'heroFall' || key === 'heroDefeated';   // he's not upright: keep the cloth recolour away from his head instead
+      let heads = null;
+      if (lying) {   // head = the densest patch of skin (his face) in each frame; hair lies within ~80 px of it
+        const cw = key === 'heroFall' ? DEATH.fall.cellW : W, n = Math.max(1, Math.round(W / cw)); heads = [];
+        for (let c = 0; c < n; c++) {
+          const bins = {}; let best = null;
+          for (let y = 0; y < H; y += 2) for (let x = c * cw; x < (c + 1) * cw; x += 2) {
+            const i = (y * W + x) * 4, r = px[i], gg = px[i + 1], bb = px[i + 2];
+            if (px[i + 3] > 200 && r > 190 && gg > 140 && gg < 215 && bb > 90 && bb < 175 && r - bb > 60) {
+              const k2 = (x / 40 | 0) + ',' + (y / 40 | 0); bins[k2] = (bins[k2] || 0) + 1;
+              if (!best || bins[k2] > bins[best]) best = k2;
+            }
+          }
+          heads.push(best ? best.split(',').map(v => (+v + 0.5) * 40) : null);
+        }
+      }
+      if (key === 'heroFull') {   // a single big picture: use its own outline
+        let top = H, bot = 0;
+        for (let y = 0; y < H; y++) for (let x = 0; x < W; x += 3) if (px[(y * W + x) * 4 + 3] > 40) { if (y < top) top = y; bot = y; }
+        feet = bot; tall = Math.max(1, bot - top);
+      }
+      for (let y = 0; y < H; y++) {
+        const upright = (feet - y) / tall <= 0.58;   // cloth recolour below the neck only (the hair stays black); trim everywhere
+        for (let x = 0; x < W; x++) {
+          const i = (y * W + x) * 4, r = px[i], gr = px[i + 1], b = px[i + 2];
+          if (px[i + 3] < 10 || Math.max(r, gr, b) < 36) continue;   // empty or outline (kept dark)
+          if (gr > 140 && b > 140 && r < 120) { const v = Math.max(gr, b) / 255; px[i] = L.trim[0] * v; px[i + 1] = L.trim[1] * v; px[i + 2] = L.trim[2] * v; continue; }
+          const body = !lying ? upright : (() => { const hd = heads[Math.min(heads.length - 1, Math.floor(x / (W / heads.length)))]; return !hd || Math.hypot(x - hd[0], y - hd[1]) > 80; })();
+          if (body && Math.max(r, gr, b) < 110 && b >= r + 20) {   // navy cloth only (the greyer pants are less blue and stay)
+ const c = L.cloth((r + gr + b) / 3); px[i] = c[0]; px[i + 1] = c[1]; px[i + 2] = c[2]; }
+        }
+      }
+      g.putImageData(data, 0, 0);
+      cv.naturalWidth = W; cv.naturalHeight = H; cv.complete = true;   // so it can stand in for the image everywhere
+      return (skinCache[ck] = cv);
+    }
     function drawHeroSprite(rx, ry) {
-      const im = ART.heroSprite, walk = ART.heroWalk;
+      const im = skinned('heroSprite'), walk = skinned('heroWalk');
       if (!ready(im)) {   // fallback until the image loads
         ctx.fillStyle = '#808080'; ctx.fillRect(Math.round(rx * TILE), Math.round(ry * TILE), TILE, TILE); return;
       }
@@ -3336,7 +3637,7 @@
       if (ui && ui.kind === 'gameover' && ready(ART.heroFall)) {   // dying: fall frames over 2 s, then he stays down
         const c = DEATH.fall, f = Math.min(3, Math.floor(deathT() / (DEATH.fallMs / 4)));
         if (lookX < 0) ctx.scale(-1, 1);
-        ctx.drawImage(ART.heroFall, f * c.cellW, 0, c.cellW, c.cellH, -c.ax * k, -(c.cellH - c.foot - 2) * k, c.cellW * k, c.cellH * k);
+        ctx.drawImage(skinned('heroFall'), f * c.cellW, 0, c.cellW, c.cellH, -c.ax * k, -(c.cellH - c.foot - 2) * k, c.cellW * k, c.cellH * k);
         ctx.restore(); return;
       }
       const since = gameTime - heroAttackStart;
@@ -3344,12 +3645,12 @@
       if (key && ready(ART[key])) {   // attack frame
         const c = ATTACK_CELLS[key], f = Math.min(3, Math.floor(since / (HERO_ATTACK_ANIM_MS / 4)));
         if (heroAttackDir === 'side' && lookX < 0) ctx.scale(-1, 1);
-        ctx.drawImage(ART[key], f * c.cellW, 0, c.cellW, c.cellH, -c.ax * k, -(c.cellH - c.foot - 2) * k, c.cellW * k, c.cellH * k);
+        ctx.drawImage(skinned(key), f * c.cellW, 0, c.cellW, c.cellH, -c.ax * k, -(c.cellH - c.foot - 2) * k, c.cellW * k, c.cellH * k);
         ctx.restore(); return;
       }
       // straight down / up use the front / back walk (never mirrored); everything else uses the side walk
       const view = moving && moveDir.x === 0 ? (moveDir.y > 0 ? 'down' : 'up') : 'side';
-      const vert = view === 'down' ? ART.heroWalkDown : view === 'up' ? ART.heroWalkUp : null;
+      const vert = view === 'down' ? skinned('heroWalkDown') : view === 'up' ? skinned('heroWalkUp') : null;
       const sheet = vert && ready(vert) ? vert : walk;
       if (lookX < 0 && sheet === walk) ctx.scale(-1, 1);
       const sword = hasSword() && ready(ART[(swordDef() || {}).art]);
@@ -3393,7 +3694,7 @@
       nameLines.forEach((l, i) => ctx.fillText(l, nameX, sy + 22 + i * 32));
       ctx.font = '18px ' + MONO; ctx.fillStyle = '#8a8a8a';
       const buyLvl = it.buyLevel || it.minLevel, locked = buyLvl && hero.level < buyLvl;
-      const sub = locked ? `needs lvl ${buyLvl}` : it.patch ? `patch · installed lvl ${levels[it.name]}` : it.class === 'equipment' ? `${it.rarity || 'common'} · ${EQUIP_SLOT_KEYS[slotOf(it)] || 'equipment'}` : it.class === 'bag' ? (bag === it.name ? 'worn now' : `${it.rarity || 'common'} bag`) : 'used at once';
+      const sub = locked ? `needs lvl ${buyLvl}` : it.patch ? `patch · installed lvl ${levels[it.name]}` : it.class === 'equipment' ? `${it.rarity || 'common'} · ${EQUIP_SLOT_KEYS[slotOf(it)] || 'equipment'}${setOf(it.name) ? ` · ${setOf(it.name).name} set` : ''}` : it.class === 'bag' ? (bag === it.name ? 'worn now' : `${it.rarity || 'common'} bag`) : 'used at once';
       if (locked) ctx.fillStyle = '#e5484d';
       ctx.fillText(sub, nameX, sy + big - 12);
       // price, right side
@@ -3755,7 +4056,7 @@
       const a = Math.max(0, Math.min(1, (t - DEATH.showAt) / DEATH.showMs));
       if (!a) return;
       ctx.save(); ctx.globalAlpha = a;
-      const im = ART.heroDefeated, cx = canvas.width / 2;
+      const im = skinned('heroDefeated'), cx = canvas.width / 2;   // recoloured too in a set look
       let y = 150;
       if (ready(im)) { const w = 640, h = w * im.naturalHeight / im.naturalWidth; ctx.imageSmoothingQuality = 'high'; ctx.drawImage(im, cx - w / 2, y, w, h); y += h + 40; }
       ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
@@ -4024,6 +4325,15 @@
     const bonusText = def => bonusParts(def).map(p => p[0]).join('  ');
     // draw coloured parts in a row from x (current font); returns the x after the last one
     function drawParts(parts, x, y, gap = 14) { ctx.textAlign = 'left'; for (const [t, c] of parts) { ctx.fillStyle = c; ctx.fillText(t, x, y); x += ctx.measureText(t).width + gap; } return x; }
+    // like drawParts, but a part that doesn't fit on the line starts the next line
+    function drawPartsWrapped(parts, x, y, maxW, lineH, gap = 14) {
+      ctx.textAlign = 'left'; let cx = x, cy = y;
+      for (const [t, c] of parts) {
+        const tw = ctx.measureText(t).width;
+        if (cx > x && cx + tw > x + maxW) { cx = x; cy += lineH; }
+        ctx.fillStyle = c; ctx.fillText(t, cx, cy); cx += tw + gap;
+      }
+    }
     function secs(ms) { return String(+(ms / 1000).toFixed(2)); }   // -140 -> "-0.14", -100 -> "-0.1"
 
     // inventory: bottom right, just above the info bar. Backpack slots only (equipped items are in the hero panel).
@@ -4070,9 +4380,15 @@
       const x = 16, y = Math.max(12, (viewBottom() - h) / 2), top = y + 64;
       panelFrame(x, y, w, h, heroName || DEFAULT_NAME, on);
       if (!ui) drawCloseX(x + w - 54, y + 10, 'hero');
+      {   // set progress next to the close button: "NRG set 2/3", green with ✓ when complete
+        let sx2 = x + w - 70; ctx.textAlign = 'right'; ctx.textBaseline = 'middle'; ctx.font = '600 18px ' + MONO;
+        for (const st of SETS) { const n = setCount(st); if (!n) continue; const full = n === st.items.length;
+          ctx.fillStyle = full ? '#9dff5c' : '#8a8a8a'; const t = `${st.name} set ${n}/${st.items.length}${full ? ' ✓' : ''}`;
+          ctx.fillText(t, sx2, y + 34); sx2 -= ctx.measureText(t).width + 16; }
+      }
       const bw = 180, bh = 320;
       ctx.fillStyle = '#1B2233'; ctx.fillRect(x + 24, top, bw, bh);
-      const full = ART.heroFull;
+      const full = skinned('heroFull');
       if (ready(full)) {   // full-body art, fitted into the box
         const ih = bh - 24, iw = Math.min(bw - 16, ih * full.naturalWidth / full.naturalHeight), ih2 = iw * full.naturalHeight / full.naturalWidth;
         ctx.imageSmoothingQuality = 'high'; ctx.drawImage(full, x + 24 + (bw - iw) / 2, top + (bh - ih2) / 2, iw, ih2);
@@ -4088,6 +4404,7 @@
         ['LVL', `${hero.level}${hero.level < MAX_LEVEL ? `  (${hero.exp}/${expNeed(hero.level)})` : ' (max)'}`, 'level'],
       ];
       const bonus = {};   // equipment bonus, shown as "base +bonus" with the bonus in green
+      for (const st of SETS) if (activeSets.has(st.name)) for (const src of [st.gain || {}, st.capGain || {}]) for (const [k, n] of Object.entries(src)) bonus[k] = (bonus[k] || 0) + n;   // set bonus shows green too
       for (const it of equipped) { const d = itemDef(it.name) || {};
         for (const src of [d.gain || {}, d.capGain || {}]) for (const [st, n] of Object.entries(src)) bonus[st] = (bonus[st] || 0) + n;
         if (d.hpRegen) bonus.hregen = (bonus.hregen || 0) + d.hpRegen; if (d.speed) bonus.spd = (bonus.spd || 0) + Math.round(d.speed * 100); }
@@ -4113,9 +4430,9 @@
       }
       ctx.textAlign = 'left'; ctx.font = '18px ' + MONO;
       const ly = top + bh + 30, sel = inSlot(pn.cursor);
-      if (pn.msg) { ctx.fillStyle = '#f5c542'; ctx.fillText(pn.msg, x + 24, ly); }
-      else if (sel) { ctx.fillStyle = rarityColor(sel.name); ctx.fillText(sel.name, x + 24, ly);
-        drawParts([...bonusParts(itemDef(sel.name)), ['· Space unequip', '#cfcfcf']], x + 24 + ctx.measureText(sel.name).width + 12, ly, 10); }
+      const maxW = w - 48;   // everything under the stats wraps inside the panel (2 lines at most)
+      if (pn.msg) { ctx.fillStyle = '#f5c542'; wrapText(pn.msg, maxW).slice(0, 2).forEach((l, i) => ctx.fillText(l, x + 24, ly + i * 22)); }
+      else if (sel) drawPartsWrapped([[sel.name, rarityColor(sel.name)], ...bonusParts(itemDef(sel.name))], x + 24, ly, maxW, 22, 10);
       else { ctx.fillStyle = '#8a8a8a'; ctx.fillText(`empty ${EQUIP_SLOT_KEYS[pn.cursor]} slot`, x + 24, ly); }
       ctx.fillStyle = '#8a8a8a'; ctx.font = '16px ' + MONO;
       ctx.fillText('W/S choose · Space unequip · H or X/Esc close', x + 24, y + h - 18);
@@ -4455,9 +4772,9 @@
       document.documentElement.classList.toggle('fill', fillView);
       touchEl.hidden = !phoneView && !fillView;   // desktop keeps the layer for its menu row (the joystick and buttons are hidden by CSS)
       MENU_LABELS.forEach(([el, ph, desk]) => { el.textContent = fillView ? desk : ph; });
-      let W = WORLD_W, H = WORLD_H;
+      let W = VIEW_W, H = VIEW_H;
       if (phoneView) { if (vw >= vh) { H = 1040; W = Math.round(1040 * vw / vh); } else { W = 1240; H = Math.round(1240 * vh / vw); } }
-      else if (fillView) { if (vw / vh >= COLS / ROWS) { H = WORLD_H; W = Math.round(WORLD_H * vw / vh); } else { W = WORLD_W; H = Math.round(WORLD_W * vh / vw); } }
+      else if (fillView) { if (vw / vh >= OLD_COLS / OLD_ROWS) { H = VIEW_H; W = Math.round(VIEW_H * vw / vh); } else { W = VIEW_W; H = Math.round(VIEW_W * vh / vw); } }
       if (canvas.width !== W || canvas.height !== H) { canvas.width = W; canvas.height = H; }
       requestAnimationFrame(() => {   // sizes that depend on the laid-out page
         const k = canvas.clientWidth / canvas.width;   // CSS px per canvas px
@@ -4539,11 +4856,10 @@
     }, 150);
     setInterval(() => dockEl.classList.toggle('away', fillView && (!!ui || naming())), 100);   // a window is open: the floating HUD steps aside
 
-    fixEquipSlots();   // saves from before the fixed slots (weapon, head, chest, boots)
+    fixEquipSlots(); syncSets();   // saves from before the fixed slots (weapon, head, chest, boots); set bonuses for older saves
     spawnAllDrips();   // start of the game: every enemy in the world is spawned
     requestAnimationFrame(frame);
   }
 
   window.claude?.hot?.ready ? window.claude.hot.ready(start) : start(window.claude?.hot?.data ?? {});
 </script>
-</body></html>
