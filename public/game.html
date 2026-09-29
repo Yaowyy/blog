@@ -843,10 +843,15 @@
   AREAS['0:0'].walls = [
     { x: 21, y: 19, w: 2, h: 2, color: '#2e9e44', label: 'ATB-Market', opens: 'shop', art: 'shop', artW: 2.5 },   // 20-21, 17-18 (exception: not mirrored)
     { x: 23, y: 18, w: 2, h: 4, color: '#f2f2f2', label: 'HomeDome', opens: 'rest', art: 'homedome', artW: 2.2 },   // 22-23, 14-17
-    // CaaCaanTeng noodle bar (closed, decorative)
-    { x: 26, y: 18, w: 3, h: 2, color: '#8a3a7a', label: 'CaaCaanTeng', art: 'noodleBar', artW: 3.2 },   // 24-26, 16-17
+    // CaaCaanTeng noodle bar (closed, decorative: no name shown when faced)
+    { x: 26, y: 18, w: 3, h: 2, color: '#8a3a7a', art: 'noodleBar', artW: 3.2 },   // 24-26, 16-17
+    // the Rogue: quest giver (the tutorial), below-left of the ATB-Market; turns toward the hero when he is within 2 tiles. artH: drawn this many tiles tall (hero: 1.75)
+    { x: 20, y: 20, w: 1, h: 1, color: '#2a1f3d', label: 'Rogue', opens: 'rogue', art: 'npcRogue', artH: 1.75, npc: true, facesRight: true },   // 19, 19
     // front: true draws the picture in front of other buildings (not of the hero)
     { x: 28, y: 19, w: 2, h: 2, color: '#2f6fdb', label: 'TradeCorp', opens: 'work', art: 'work', artW: 2.5, front: true },   // 27-28, 17-18
+    // TechVersity (decorative for now): 6 x 3, U-shaped. open: tiles inside the footprint you can walk on ([column, row] from its
+    // top-left): the two back corners and the 2-tile courtyard in front of the entrance. Front view: never mirrored.
+    { x: 27, y: 13, w: 6, h: 3, color: '#3a4257', label: 'TechVersity', art: 'techVersity', artW: 6.2, open: [[0, 0], [5, 0], [2, 2], [3, 2]] },   // 24-29, 10-12, 2 tiles left of MutaTech
     // MutaTech: spell crafting station
     { x: 34, y: 13, w: 3, h: 2, color: '#5a3a8a', label: 'MutaTech', opens: 'spelltech', art: 'spellTech', artW: 4.0 },   // 32-34, 11-12
     // hover-car charging station (decorative), drawn in front of the ruin next to it
@@ -1104,7 +1109,7 @@
   const foot = w => { const ww = w.w || 1, hh = w.h || 1, x0 = w.x - 1 - Math.floor(ww / 2) + (ww % 2 ? 0 : 1);
     return { x0, x1: x0 + ww - 1, y0: w.y - hh, y1: w.y - 1 }; };
   // where buildings overlap, the one you can open wins (e.g. TradeCorp over CaaCaanTeng on column 8)
-  const wallAt = (x, y) => { const hits = WALLS.filter(w => { const f = foot(w); return x >= f.x0 && x <= f.x1 && y >= f.y0 && y <= f.y1; });
+  const wallAt = (x, y) => { const hits = WALLS.filter(w => { const f = foot(w); return x >= f.x0 && x <= f.x1 && y >= f.y0 && y <= f.y1 && !(w.open && w.open.some(([ox, oy]) => f.x0 + ox === x && f.y0 + oy === y)); });
     return hits.find(w => w.opens) || hits[0]; };
   const inGrid = (x, y) => x >= 0 && x < COLS && y >= 0 && y < ROWS;
   const lakeAt = (x, y) => { const l = AREAS[areaName].lake; return !!l && l.rows[y] && l.rows[y][x] === '#'; };
@@ -1385,6 +1390,7 @@
     scavIdle: 'art/enemies/scav/scavIdle.png', scavAttack: 'art/enemies/scav/scavAttack.png', scavHurt: 'art/enemies/scav/scavHurt.png',   // Toxic Scav sheets (face left)
     scavPortrait: 'art/enemies/scav/scavPortrait.png', scavSpray: 'art/enemies/scav/scavSpray.png',   // portrait, toxic spray cone (points left, nozzle at the right end)
     mutagen: 'art/items/loot/mutagen.png', tarOrb: 'art/items/loot/tarOrb.png', aiChip: 'art/items/loot/aiChip.png',   // item icons
+    npcRogue: 'art/npc/rogue.png', roguePortrait: 'art/npc/roguePortrait.png', startScreen: 'art/ui/startScreen.jpg', techVersity: 'art/buildings/techVersity.png',   // quest giver in the city, standing, facing the viewer
     spellTech: 'art/buildings/spellTech.png',   // MutaTech crafting station (3 x 2), turned slightly like the shop
     ruinApartment: 'art/buildings/ruinApartment.png', ruinMarket: 'art/buildings/ruinMarket.png', ruinNoodleBar: 'art/buildings/ruinNoodleBar.png',
     holoBillboard: 'art/buildings/holoBillboard.png', shackStack: 'art/buildings/shackStack.png', foodCart: 'art/buildings/foodCart.png', burntBus: 'art/buildings/burntBus.png',
@@ -1471,6 +1477,26 @@
     recalcCaps();
     const PILE_MS = 600000, PILE_FADE_MS = 3000;
     const piles = (saved.piles || []).map(p => ({ ...p, until: p.left }));   // { zone, x, y, money, bag, gear, items, until } (until: game time)
+    // tutorial, given by the Rogue: tut = 0 not started, 1..TUT.length the active task, TUT_READY all done (talk to her to complete
+    // the quest and get the reward), TUT_DONE finished or skipped. Tasks follow each other by themselves.
+    const TUT = [
+      { ev: 'deal', task: 'Take a deal at TradeCorp.', target: 'work',
+        tip: 'Deals cost energy (⚡) and pay money and exp. Take any call.' },
+      { ev: 'food', task: 'Buy Cheap noodles at the ATB-Market.', target: 'shop',
+        tip: 'Food gives your energy back. Its price climbs a little the more food you buy.' },
+      { ev: 'rest', task: 'Rest at HomeDome.', target: 'rest',
+        tip: 'Resting brings back 40% of your HP, energy and mana for 1$, then needs 5 minutes.' },
+      { ev: 'hero', task: 'Open your Hero window (H).', target: null,
+        tip: 'It shows your stats and what you wear. Level up to grow stronger.' },
+      { ev: 'talk', task: 'Go back to the Rogue and talk to her.', target: 'rogue',
+        tip: 'She has something for you.' },
+    ];
+    const TUT_READY = TUT.length + 1, TUT_DONE = TUT.length + 2;   // all tasks done (reward waiting) / quest completed or skipped
+    const TUT_REWARD = { money: 10, exp: 25 };
+    let walkedOnce = false;   // this visit: has the hero taken a step yet? (the walking hint stays until he has)
+    let tut = saved.tut ?? 0;
+    let hintText = '', hintUntil = 0;   // a short line at the top of the screen (real time)
+    const showHint = (text, ms = 8000) => { hintText = text; hintUntil = performance.now() + ms; };
     let bag = saved.bag ?? null;   // worn bag's name (BackBag, BackBag X) or null: no bag = no inventory slots
     const invSlots = () => bag ? ((itemDef(bag) || {}).slots || 0) : 0;
     const fullMsg = () => bag ? 'Inventory full.' : 'You have no bag: buy a BackBag at the ATB-Market (Other tab).';
@@ -1566,7 +1592,7 @@
                 const p = shown(it.name, prices[it.name]); let msg;
                 if (stats.money < p) msg = `Not enough money for ${it.name}.`;
                 else if (addItem(it.name, 1) > 0) msg = fullMsg();
-                else { stats.money -= p; foodBought++; msg = `${it.name} is in your inventory (I).`; }
+                else { stats.money -= p; foodBought++; tutEvent('food'); msg = `${it.name} is in your inventory (I).`; }
                 if (ui && ui.kind === 'shop') ui.msg = msg;
                 renderStats();
               });
@@ -1587,7 +1613,7 @@
               return `Got the ${it.name}. Equip it in your inventory (I, Space).`;
             }
             for (const [st, n] of gains) stats[st] = capped(st, stats[st] + n);
-            if (it.class === 'food') foodBought++;
+            if (it.class === 'food') { foodBought++; tutEvent('food'); }
             if (it.gain.charisma) deals = newDeals();
             if (it.class !== 'food') prices[it.name] = raisePrice(price);
             if (it.patch) { levels[it.name]++; return `Installed ${it.name} lvl ${levels[it.name]}. Next: ${prices[it.name]}$.`; }
@@ -1601,7 +1627,11 @@
         if (tab === 'boss') return PROMOTIONS.map((pr, i) => ({ side: 'promo', data: pr, idx: i, left: pr.name, right: '', act() { return earnPromotion(i); } }));
         return deals.map(d => ({ deal: d, left: '', right: '', act() { return takeDeal(d); } }));
       }
-      if (ui.kind === 'quests') return quests.map((q, i) => ({ quest: q, left: q.name, right: '', act() { const b = rowRects.find(r => !r.panel && r.i === i); openQuestMenu(i, b ? b.x + b.w - 320 : 700, b ? b.y + b.h - 10 : 400); } }));
+      if (ui.kind === 'quests') {   // the Rogue's tutorial (if running) is listed first; it can't be cancelled and doesn't count toward the limit
+        const tq = tutQuest(), off = tq ? 1 : 0;
+        return [...(tq ? [{ quest: tq, left: tq.name, right: '', act() { return 'The Rogue\'s lessons move on by themselves as you do each task.'; } }] : []),
+          ...quests.map((q, i) => ({ quest: q, left: q.name, right: '', act() { const b = rowRects.find(r => !r.panel && r.i === i + off); openQuestMenu(i, b ? b.x + b.w - 320 : 700, b ? b.y + b.h - 10 : 400); } }))];
+      }
       if (ui.kind === 'cancelQuest') return [   // "are you sure?" for cancelling a quest (same as throwing an item away)
         { left: 'Yes', right: '', act() { const q = quests[ui.questIdx], back = ui.back, name = ui.questName; if (q && q.name === name) quests.splice(ui.questIdx, 1);
           openWindow('quests', Math.max(0, Math.min(back.cursor, quests.length - 1))); ui.msg = `Quest cancelled: ${name}.`; } },
@@ -1637,7 +1667,7 @@
         { left: 'No', right: '', act() { ui = null; } },
       ];
       if (ui.kind === 'restart') return [
-        { left: 'yes', right: '', act() { newGame(); autosave(true); } },
+        { left: 'yes', right: '', act() { newGame(); autosave(true); showStartScreen(); } },
         { left: 'no', right: '', act() { goBack(); } },
       ];
       if (ui.kind === 'logout') return [
@@ -1664,6 +1694,18 @@
           };
         });
       }
+      if (ui.kind === 'rogue') {
+        if (tut === 0) return [
+          { left: 'teach me', right: '', act() { tut = 1; ui = null; showHint(`${TUT[0].task} ${TUT[0].tip}`); } },
+          { left: 'not now', right: '', act() { ui = null; } }];
+        if (tut <= TUT.length) return [{ left: 'got it', right: '', act() { ui = null; } }];
+        if (tut === TUT_READY) return [{ left: 'complete quest', right: `+${TUT_REWARD.money}$ +${TUT_REWARD.exp} exp`, act() {
+          tut = TUT_DONE; stats.money += TUT_REWARD.money; gainExp(TUT_REWARD.exp); renderStats();
+          ui = null; showHint(`Quest complete: Rogue's lessons. +${TUT_REWARD.money}$ and +${TUT_REWARD.exp} exp.`);
+          float(`+${TUT_REWARD.money}$ +${TUT_REWARD.exp} exp`, '#9b5cff', player.x + 0.5, player.y - 1.2);
+        } }];
+        return [{ left: 'any work for me?', right: '', act() { return 'Not yet. Quests are coming soon.'; } }];
+      }
       if (ui.kind === 'loot') return lootRows();
       if (ui.kind === 'cheat') return cheatRows();
       if (ui.kind === 'spelltech') return RECIPES.map(r => ({ craft: r, left: r.make, right: '', act() { return craft(r); } }));
@@ -1675,6 +1717,7 @@
         return [{
         rest: {}, left: `rest for ${REST.price}$?`, right: Object.entries(restGain()).map(([st, n]) => `+${n} ${ICON[st]}`).join('  '),
         act() {
+          tutEvent('rest');   // trying counts, even when already rested
           if (stats.money < REST.price) return `Not enough money to rest (${REST.price}$).`;
           const up = Object.entries(restGain()).map(([st, n]) => [st, capped(st, stats[st] + n) - stats[st]]).filter(([, d]) => d > 0);
           if (!up.length) return 'You are already fully rested.';
@@ -1688,6 +1731,9 @@
       }];
       }
       if (ui.kind === 'gameover') return [{ left: 'respawn', right: '', act() { respawn(); } }];
+      if (ui.kind === 'start') return [
+        { left: 'yes, show me around', right: '', act() { ui = null; tut = 0; showHint('Someone near the ATB-Market wants a word.'); } },
+        { left: 'no, I know my way', right: '', act() { ui = null; tut = TUT_DONE; } }];
       if (ui.kind === 'controls') return (phoneView ? PHONE_CONTROLS : CONTROLS).map(([key, what]) => ({ left: key, right: what, act() {} }));
       if (ui.kind === 'leaderboard') return (LB.rows[LB_TABS[tabOf()].key] || []).map((e, i) => ({ lb: e, rank: i + 1, tab: LB_TABS[tabOf()], left: e.hero_name, right: '', act() { return ''; } }));
       return [];
@@ -1698,10 +1744,12 @@
       quests.length = 0;
       areaName = '0:0'; spawnAllDrips();
       enterArea('0:0', START.x, START.y, 1, true);
-      inventory.length = 0; equipped.length = 0; activeSets.clear(); skills.length = 0; restReadyAt = 0; bag = null; piles.length = 0; Object.assign(levels, startLevels());
+      inventory.length = 0; equipped.length = 0; activeSets.clear(); skills.length = 0; restReadyAt = 0; bag = null; piles.length = 0; tut = 0; Object.assign(levels, startLevels());
       rootedUntil = 0; slowUntil = 0; floaters.length = 0; Object.assign(CAP_BASE, BASE_CAPS); hero.level = 1; hero.exp = 0; recalcCaps();
       ui = null; closePanels(); applyLbBuffs();
     }
+    // start screen: only when a brand-new run begins (a new game, or a first login with no save), never after dying
+    function showStartScreen() { closePanels(); ui = { kind: 'start', cursor: 0, msg: '' }; held.clear(); tapped.clear(); }
 
     // ---- leaderboard ----------------------------------------------------------------
     // Supabase table "leaderboard": one row per account with the best exp / deals / kills it ever reached (the server keeps the
@@ -1759,7 +1807,7 @@
     function snapshot() {
       return { x: player.x, y: player.y, fx: facing.x, fy: facing.y, stats: statsNoBuffs(), deals, prices: { ...prices }, dealsDone, foodBought, itemsV2: true, sets: [...activeSets], promotion, kills, cheated: runCheated, quests: quests.map(q => ({ ...q })),
                inventory: inventory.map(it => ({ ...it })), equipped: equipped.map(it => ({ ...it })), skills: [...skills],
-               areaName, restReadyAt, levels: { ...levels }, manaCap: CAP_BASE.mana, energyCap: CAP_BASE.energy, level: hero.level, exp: hero.exp, strengthLevel: hero.level, bag, discovered: [...discovered], enemies: saveEnemies(),
+               areaName, restReadyAt, levels: { ...levels }, manaCap: CAP_BASE.mana, energyCap: CAP_BASE.energy, level: hero.level, exp: hero.exp, strengthLevel: hero.level, bag, tut, tutV: 2, discovered: [...discovered], enemies: saveEnemies(),
                piles: piles.map(p => ({ ...p, gear: p.gear.map(it => ({ ...it })), items: p.items.map(it => ({ ...it })), left: Math.max(0, p.until - gameTime), until: undefined })) };
     }
     function applySave(s) {
@@ -1782,6 +1830,8 @@
       skills.length = 0; skills.push(...(s.skills || []).map(newName));
       if (!deals) deals = newDeals();
       piles.length = 0; for (const p of s.piles || []) piles.push({ ...p, until: gameTime + (p.left || 0) });
+      tut = s.tut ?? 0;
+      if (s.tutV !== 2 && tut >= 5) tut = TUT_DONE;   // saves from the 4-task tutorial: 5 meant finished
       restReadyAt = s.restReadyAt || 0; rootedUntil = 0; slowUntil = 0; floaters.length = 0; closePanels();
       discovered.clear(); for (const id of s.discovered || ['0:0']) discovered.add(AREA_ALIAS[id] || id);
       const sa = AREA_ALIAS[s.areaName] || s.areaName, area = AREAS[sa] ? sa : '0:0';
@@ -1928,12 +1978,16 @@
       stats.energy -= r.energy; renderStats();
       return `Crafted ${r.count} ${r.make}.`;
     }
-    const TITLES = { spelltech: 'MutaTech', shop: 'ATB-Market', work: 'TradeCorp', menu: 'Menu', controls: 'Controls', hero: 'Hero', inventory: 'Inventory', gameover: 'Game over', loot: 'Loot · Drip', rest: 'HomeDome', cheat: 'Cheats (testing)', scrap: 'Scrap Dealer',
+    const TITLES = { rogue: 'Rogue', spelltech: 'MutaTech', shop: 'ATB-Market', work: 'TradeCorp', menu: 'Menu', controls: 'Controls', hero: 'Hero', inventory: 'Inventory', gameover: 'Game over', loot: 'Loot · Drip', rest: 'HomeDome', cheat: 'Cheats (testing)', scrap: 'Scrap Dealer',
                      map: 'Map', settings: 'Settings', sound: 'Sound', restart: 'Restart', throw: 'Throw away', cancelQuest: 'Cancel quest', quests: 'Quests', leaderboard: 'Leaderboard', save: 'Save', load: 'Load game', logout: 'Log out', guest: 'Playing as guest' };
     // windows with a paragraph above their options
     const WINDOW_TEXT = {
+      rogue: () => tut === 0 ? '"New around here? Top of my class at TechVersity, and I don\'t keep what I learned to myself. Out here, knowing things keeps you alive. Want me to show you how the city works?"'
+        : tut <= TUT.length ? `"${TUT[tut - 1].task} ${TUT[tut - 1].tip}" (task ${tut} of ${TUT.length})`
+        : tut === TUT_READY ? '"Deals, food, rest, knowing yourself. That\'s the whole city in a nutshell. You did well, here\'s something to get you going."'
+        : '"You learn fast. Come back soon: I\'ll have real work for someone like you."',
       restart: 'Are you sure?',
-      quests: () => quests.length ? '' : 'No active quests yet. Take a Scheduled delivery at TradeCorp (Deals).',
+      quests: () => quests.length || tutQuest() ? '' : 'No active quests yet. Take a Scheduled delivery at TradeCorp (Deals).',
       cancelQuest: () => `Are you sure? ${ui.questName} will be gone forever.`,
       throw: () => `Are you sure? ${ui.throwN > 1 ? ui.throwN + ' × ' : ''}${ui.throwName} will be gone forever.`,
       sound: 'A / D (or ← →) to change, Space to step up. Each step is 20%.',
@@ -2033,17 +2087,27 @@
         if (quests.length >= MAX_QUESTS) return `You already have ${MAX_QUESTS} active quests. Cancel one first (Q).`;
         quests.push({ name: d.name, desc: d.desc, rare: d.rare, from: 'TradeCorp' });
       }
-      dealsDone++; gainExp(exp);
+      dealsDone++; gainExp(exp); tutEvent('deal');
       deals = newDeals();
       const note = promoReadyAny() ? ' A promotion is ready (My Boss).' : '';
       return (d.type === 'call' ? `Call done: -${dealCost(d)} NRG, +${d.money}$, +${exp} exp. New deals.` : d.type === 'sale' ? `Bought ${d.count} ${d.item} for ${dealCost(d)}$. New deals.`
         : `${d.name} added to your quests (Q). New deals.`) + note;
     }
+    // the running tutorial as a quest-list entry (null when it isn't running)
+    const tutQuest = () => tut >= 1 && tut <= TUT.length ? { name: `Rogue's lessons ${tut - 1}/${TUT.length}`, desc: `${TUT[tut - 1].task} ${TUT[tut - 1].tip}`,
+      from: 'Rogue', color: '#b58cff', tut: true }
+      : tut === TUT_READY ? { name: `Rogue's lessons ${TUT.length}/${TUT.length}`, desc: 'All done! Talk to the Rogue to complete the quest and get your reward.', from: 'Rogue', color: '#b58cff', tut: true } : null;
+    function tutEvent(ev) {
+      if (tut < 1 || tut > TUT.length || TUT[tut - 1].ev !== ev) return;
+      tut++;
+      if (tut <= TUT.length) showHint(`Next: ${TUT[tut - 1].task} ${TUT[tut - 1].tip}`);   // at TUT_READY her window is open: it offers the reward
+    }
     function openWindow(kind, cursor = 0, back = null) {
+      if (kind === 'rogue') tutEvent('talk');   // last task: come back and talk to her
       ui = { kind, cursor, msg: '', back };
       held.clear(); tapped.clear();
     }
-    const locked = () => !!ui && ui.kind === 'gameover';   // only "respawn" gets you out
+    const locked = () => !!ui && (ui.kind === 'gameover' || ui.kind === 'start');   // only "respawn" gets you out
     function closeWindow() { if (!locked()) { ui = null; itemMenu = null; } }
 
     // side panels: inventory (bottom right) and hero (middle left) can be open at the same time.
@@ -2054,7 +2118,7 @@
     const anyOpen = () => !!ui || !!panels.inventory || !!panels.hero;
     function togglePanel(name) {
       if (locked()) return;
-      if (!panels[name]) { panels[name] = { cursor: 0, msg: '' }; focus = name; held.clear(); tapped.clear(); }
+      if (!panels[name]) { panels[name] = { cursor: 0, msg: '' }; focus = name; held.clear(); tapped.clear(); if (name === 'hero') tutEvent('hero'); }
       else if (focus !== name) focus = name;
       else { panels[name] = null; const other = name === 'hero' ? 'inventory' : 'hero'; focus = panels[other] ? other : null; }
     }
@@ -2264,6 +2328,60 @@
     };
     const hasState = key => heroStates().some(s => s.key === key);
     // status icons: a row in the bottom-left corner of the map, just above the hero panel; timed ones show seconds left
+    // controls for someone who has never played: shown until the tutorial is done, worded for keyboard or touch
+    function controlHint() {
+      if (tut >= TUT_DONE || areaName !== '0:0') return '';
+      const touch = phoneView;
+      if (!walkedOnce) return touch ? 'Drag the joystick (bottom left) to walk.' : 'Walk with W A S D.';
+      const faced = facedBuilding();
+      if (tut === 0) return faced && faced.opens === 'rogue' ? (touch ? 'Tap A to talk to the Rogue.' : 'Press Space to talk to the Rogue.')
+        : 'Walk up to the Rogue (the purple arrow) and face her.';
+      if (tut === TUT_READY || TUT[tut - 1].ev === 'talk') return faced && faced.opens === 'rogue' ? (touch ? 'Tap A to talk to the Rogue.' : 'Press Space to talk to the Rogue.')
+        : 'Walk back to the Rogue (the purple arrow) and face her.';
+      const step = TUT[tut - 1];
+      if (step.ev === 'hero') return touch ? 'Tap your hero to open the Hero window.' : 'Press H to open the Hero window.';
+      if (faced && faced.opens === step.target) return touch ? 'Tap A to go in.' : 'Press Space to go in.';
+      return 'Walk to the purple arrow and face the door.';
+    }
+    // tutorial tracker (under the status icons) and the hint line at the top of the screen
+    function drawTutorial() {
+      if (anyOpen()) return;
+      const k = canvas.width / Math.max(1, canvas.clientWidth);   // canvas px per screen px: same readable size on desktop and phones
+      const maxW = Math.min(760 * k, canvas.width - 32 * k);
+      ctx.save();
+      if (tut >= 1 && tut <= TUT_READY) {   // task tracker, just under the stats box
+        const hb = mobUI() && phudEl.offsetHeight ? (phudEl.getBoundingClientRect().bottom - canvas.getBoundingClientRect().top) * k : 0;
+        const x = 12 * k, y = Math.max(12 * k, hb + 10 * k) + (heroStates().length ? 68 : 0);
+        ctx.font = `600 ${Math.round(15 * k)}px ${MONO}`; const t1 = tut === TUT_READY ? `Rogue · ${TUT.length}/${TUT.length} done` : `Rogue · task ${tut}/${TUT.length}`, t2 = tut === TUT_READY ? 'Talk to the Rogue for your reward.' : TUT[tut - 1].task;
+        const w = Math.max(ctx.measureText(t1).width, ctx.measureText(t2).width) + 24 * k, h = 52 * k;
+        ctx.fillStyle = 'rgba(0, 0, 0, 0.7)'; rr(x, y, w, h, 10 * k); ctx.fill();
+        ctx.strokeStyle = '#9b5cff'; ctx.lineWidth = 2 * k; ctx.stroke();
+        ctx.textAlign = 'left'; ctx.textBaseline = 'top';
+        ctx.fillStyle = '#b58cff'; ctx.fillText(t1, x + 12 * k, y + 7 * k);
+        ctx.fillStyle = '#fff'; ctx.fillText(t2, x + 12 * k, y + 29 * k);
+      }
+      const now = performance.now();
+      let bottom = Math.round(canvas.height * 0.74);
+      // a box of wrapped lines centred above `bottom`; returns its top
+      const box = (text, font, color, border, pulse) => {
+        ctx.font = font;
+        const lines = wrapText(text, maxW - 32 * k), lh = parseInt(font.match(/(\d+)px/)[1], 10) * 1.35;
+        const w = Math.max(...lines.map(l => ctx.measureText(l).width)) + 32 * k, h = lines.length * lh + 18 * k, x = (canvas.width - w) / 2, y = bottom - h;
+        ctx.globalAlpha = pulse ? 0.85 + 0.15 * Math.sin(now / 350) : 1;
+        ctx.fillStyle = 'rgba(0, 0, 0, 0.8)'; rr(x, y, w, h, Math.min(h / 2, 22 * k)); ctx.fill();
+        if (border) { ctx.strokeStyle = border; ctx.lineWidth = 2.5 * k; ctx.stroke(); }
+        ctx.fillStyle = color; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+        lines.forEach((l, i) => ctx.fillText(l, canvas.width / 2, y + 9 * k + lh * (i + 0.5)));
+        ctx.globalAlpha = 1; return y;
+      };
+      const ch = controlHint();
+      if (ch) bottom = box(ch, `700 ${Math.round(17 * k)}px ${MONO}`, '#ffdc00', '#ffdc00', true) - 8 * k;   // pulsing controls hint
+      if (hintText && now < hintUntil) {
+        ctx.save(); ctx.globalAlpha = Math.min(1, (hintUntil - now) / 600);
+        const a = ctx.globalAlpha; box(hintText, `600 ${Math.round(15 * k)}px ${MONO}`, '#fff', null, false); ctx.globalAlpha = a; ctx.restore();
+      }
+      ctx.restore();
+    }
     function drawStates() {
       const list = heroStates(), size = 56, gap = 8;
       list.forEach((s, i) => {
@@ -2975,6 +3093,8 @@
     }
     function frame(now) {
       watchNavigation();
+      const hideTouch = !!ui && ui.kind === 'start';   // start screen: no joystick or buttons over its choices
+      if (touchEl.style.visibility !== (hideTouch ? 'hidden' : '')) touchEl.style.visibility = hideTouch ? 'hidden' : '';
       const dt = !anyOpen() && !naming() ? Math.min(100, now - lastFrame) : 0;
       gameTime += dt;   // game clock pauses behind windows
       lastFrame = now;
@@ -2986,7 +3106,7 @@
       if (moving) {
         const t = (now - moveStart) / stepMs;
         if (t >= 1) {
-          moving = false;
+          moving = false; walkedOnce = true;
           pickUpPile();
           const ex = exitAt(player.x, player.y);
           if (ex) { const [nx, ny, fx, fy] = ARRIVE[ex.dir](player.x, player.y); enterArea(ex.to, nx, ny, fx, false, fy); }
@@ -3262,6 +3382,23 @@
       for (const e of drips) if (e.kind === 'drone' && !e.dead) { drip = e; drawDrone(e); }   // flying: above everything
       drawMeleeFlash();
       drawProjectiles();
+      // the Rogue: turns toward the hero when he is within 2 tiles; a '!' over her head until the tutorial starts
+      for (const w of WALLS) if (w.opens === 'rogue') {
+        const f = foot(w);
+        if (cheb(player.x, player.y, f.x0, f.y0) <= 2 && player.x !== f.x0) w.flip = (player.x < f.x0) === !!w.facesRight;
+        if (tut === 0 || tut === TUT_READY) {
+          const bob = Math.sin(performance.now() / 300) * 5, x = (f.x0 + 0.5) * TILE, y = wallTop(w) - 50 + bob;   // above the purple arrow
+          ctx.font = '800 44px ' + MONO; ctx.textAlign = 'center'; ctx.textBaseline = 'bottom';
+          ctx.lineWidth = 6; ctx.strokeStyle = '#000'; ctx.strokeText('!', x, y); ctx.fillStyle = '#ffdc00'; ctx.fillText('!', x, y);
+        }
+      }
+      // tutorial: a bobbing arrow over the building of the current task
+      const arrowAt = tut === 0 || tut === TUT_READY ? 'rogue' : tut <= TUT.length ? TUT[tut - 1].target : null;
+      if (arrowAt) for (const w of WALLS) if (w.opens === arrowAt) {
+        const x = footCX(w) * TILE, y = Math.max(60, wallTop(w) - 14) + Math.sin(performance.now() / 300) * 6;
+        ctx.fillStyle = '#9b5cff'; ctx.strokeStyle = '#000'; ctx.lineWidth = 4;
+        ctx.beginPath(); ctx.moveTo(x - 20, y - 28); ctx.lineTo(x + 20, y - 28); ctx.lineTo(x, y); ctx.closePath(); ctx.stroke(); ctx.fill();
+      }
       drawFloaters();
       // name of the tile the yellow highlight is on
       const looked = wallAt(Math.round(rx) + facing.x, Math.round(ry) + facing.y);
@@ -3290,6 +3427,7 @@
 
       rowRects = [];
       drawStates();
+      drawTutorial();
       if (!(ui && ui.kind === 'map')) { drawMinimap(rx, ry); if (!mobUI()) { drawQuestButton(); drawLbButton(); } else { lbBtn = null; if (fillView) drawQuestButton(); else questBtn = null; } }
       drawPanels();
       if (!ui) drawItemMenu();
@@ -3313,9 +3451,10 @@
     function artSize(w) {
       const im = ART[w.art];
       if (!w.art || !ready(im)) return null;
+      if (w.artH) { const dh = w.artH * TILE; return { im, dw: dh * im.naturalWidth / im.naturalHeight, dh }; }   // people: sized by height
       const dw = (w.artW || w.w || 1) * TILE; return { im, dw, dh: dw * im.naturalHeight / im.naturalWidth };
     }
-    function wallTop(w) { const a = artSize(w), f = foot(w); return a ? (f.y1 + 1) * TILE - a.dh : f.y0 * TILE; }
+    function wallTop(w) { const a = artSize(w), f = foot(w); return a ? (f.y1 + 1) * TILE - a.dh : w.artH ? (f.y1 + 1) * TILE - w.artH * TILE : f.y0 * TILE; }
     // neon outline around a picture's silhouette: a ring just outside it plus a soft glow. Built once per picture/size/colour.
     const outlineCache = new Map();
     const OUTLINE_PAD = 14;
@@ -3385,6 +3524,11 @@
           else ctx.drawImage(ol, x - OUTLINE_PAD, y - OUTLINE_PAD);
           ctx.restore();
         }
+      } else if (w.npc) {   // no picture yet: a simple hooded figure with a cyan visor
+        const cx = footCX(w) * TILE, by = (f.y1 + 1) * TILE - 6, hgt = (w.artH || 1.75) * TILE;
+        ctx.fillStyle = w.color; ctx.beginPath(); ctx.ellipse(cx, by - hgt * 0.32, TILE * 0.26, hgt * 0.34, 0, 0, Math.PI * 2); ctx.fill();
+        ctx.beginPath(); ctx.arc(cx, by - hgt * 0.78, TILE * 0.2, 0, Math.PI * 2); ctx.fill();
+        ctx.fillStyle = '#00e5ff'; ctx.fillRect(cx - TILE * 0.13, by - hgt * 0.8, TILE * 0.26, 5);
       } else {
         ctx.fillStyle = w.color;
         ctx.fillRect(f.x0 * TILE, f.y0 * TILE, (f.x1 - f.x0 + 1) * TILE, (f.y1 - f.y0 + 1) * TILE);
@@ -3950,8 +4094,8 @@
       ctx.fillText(`${Number(e[r.tab.col]).toLocaleString('en')} ${r.tab.unit}`, x + w - 20, y + h / 2);
     }
     function drawQuestRow(q, x, y, w, h) {
-      glyphSlot(x + 12, y + 8, h - 16, 'questIcon', '!', q.rare ? RARITY.rare : '#ffe600');
-      ctx.textAlign = 'left'; ctx.textBaseline = 'middle'; ctx.fillStyle = q.rare ? RARITY.rare : '#fff'; ctx.font = '600 24px ' + MONO;
+      glyphSlot(x + 12, y + 8, h - 16, 'questIcon', '!', q.color || (q.rare ? RARITY.rare : '#ffe600'));
+      ctx.textAlign = 'left'; ctx.textBaseline = 'middle'; ctx.fillStyle = q.color || (q.rare ? RARITY.rare : '#fff'); ctx.font = '600 24px ' + MONO;
       ctx.fillText(q.name, x + h + 10, y + 24);
       ctx.font = '17px ' + MONO; ctx.fillStyle = '#cfcfcf';
       wrapText(q.desc, w - h - 30).slice(0, 2).forEach((l, i) => ctx.fillText(l, x + h + 10, y + 52 + i * 22));
@@ -3972,8 +4116,9 @@
       questBtn = { x, y, w: size, h: size };
       ctx.save(); ctx.globalAlpha = 0.85;
       glyphSlot(x, y, size, 'questIcon', '!', '#ffe600');
-      if (quests.length) { ctx.fillStyle = '#e5484d'; ctx.beginPath(); ctx.arc(x + size - 6, y + 6, 12, 0, Math.PI * 2); ctx.fill();
-        ctx.fillStyle = '#fff'; ctx.font = '700 15px ' + MONO; ctx.textAlign = 'center'; ctx.textBaseline = 'middle'; ctx.fillText(String(quests.length), x + size - 6, y + 7); }
+      const nq = quests.length + (tutQuest() ? 1 : 0);
+      if (nq) { ctx.fillStyle = '#e5484d'; ctx.beginPath(); ctx.arc(x + size - 6, y + 6, 12, 0, Math.PI * 2); ctx.fill();
+        ctx.fillStyle = '#fff'; ctx.font = '700 15px ' + MONO; ctx.textAlign = 'center'; ctx.textBaseline = 'middle'; ctx.fillText(String(nq), x + size - 6, y + 7); }
       ctx.fillStyle = '#fff'; ctx.font = '600 14px ' + MONO; ctx.textAlign = 'right'; ctx.textBaseline = 'top'; ctx.fillText('Q quests', x + size, y + size + 6);
       ctx.restore();
     }
@@ -4011,6 +4156,7 @@
     function drawWindow() {
       if (ui.kind === 'map') { drawBigMap(); return; }
       if (ui.kind === 'gameover') { drawGameOver(); return; }
+      if (ui.kind === 'start') { drawStartScreen(); return; }
       const list = rows();
       const info = ui.kind === 'controls';          // read-only list, nothing to select
       const rowH = info ? 38 : ui.kind === 'shop' || ui.kind === 'work' || ui.kind === 'rest' ? 150 : ui.kind === 'quests' || ui.kind === 'leaderboard' ? 96 : ui.kind === 'loot' || ui.kind === 'scrap' ? 88 : ui.kind === 'cheat' ? 50 : ui.kind === 'spelltech' ? 262 : 64;   // shop and loot rows are taller for the item pictures
@@ -4040,6 +4186,10 @@
       ctx.textAlign = 'left';
       ctx.font = '600 40px ' + MONO;
       ctx.fillText(hero ? (heroName || DEFAULT_NAME) : ui.kind === 'loot' && lootTarget ? `Loot · ${ET(lootTarget).name}` : ui.kind === 'quests' ? `Quests ${quests.length}/${MAX_QUESTS}` : TITLES[ui.kind], px + 40, py + 56);
+      if (ui.kind === 'rogue' && ready(ART.roguePortrait)) {   // her portrait stands on the window's top edge, left of the close button
+        const im = ART.roguePortrait, h = 200, w = h * im.naturalWidth / im.naturalHeight;
+        ctx.imageSmoothingQuality = 'high'; ctx.drawImage(im, px + pw - w - 80, py - h + 6, w, h);
+      }
       if (ui.kind === 'shop' || ui.kind === 'work' || ui.kind === 'scrap' || ui.kind === 'rest') {   // wallet in the corner
         ctx.textAlign = 'right';
         ctx.font = '26px ' + MONO;
@@ -4119,6 +4269,34 @@
     }
 
     // ---- game over ------------------------------------------------------------------------
+    // start screen: the key art (art/ui/startScreen.jpg, until then a dark backdrop), the title and the tutorial question
+    function drawStartScreen() {
+      const k = canvas.width / Math.max(1, canvas.clientWidth), cx = canvas.width / 2, im = ART.startScreen;
+      ctx.fillStyle = '#05060a'; ctx.fillRect(0, 0, canvas.width, canvas.height);
+      if (ready(im)) {   // cover the screen, keep the picture's shape
+        const s = Math.max(canvas.width / im.naturalWidth, canvas.height / im.naturalHeight), w = im.naturalWidth * s, h = im.naturalHeight * s;
+        const fx = Math.min(0, Math.max(canvas.width - w, canvas.width / 2 - 0.4 * w));   // keep the two characters (left of centre) in view on tall screens
+        ctx.imageSmoothingQuality = 'high'; ctx.drawImage(im, fx, (canvas.height - h) / 2, w, h);
+      }
+      const g = ctx.createLinearGradient(0, canvas.height * 0.55, 0, canvas.height);   // darker at the bottom, where the text sits
+      g.addColorStop(0, 'rgba(0, 0, 0, 0)'); g.addColorStop(1, 'rgba(0, 0, 0, 0.85)');
+      ctx.fillStyle = g; ctx.fillRect(0, 0, canvas.width, canvas.height);
+      ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+      ctx.font = `800 ${Math.round(46 * k)}px ${MONO}`; ctx.lineWidth = 8 * k; ctx.strokeStyle = '#000';
+      const ty = Math.min(canvas.height * 0.72, canvas.height - 200 * k);   // below the characters' feet
+      ctx.strokeText('NEON HUSTLE', cx, ty); ctx.shadowColor = '#ff2bd6'; ctx.shadowBlur = 24 * k; ctx.fillStyle = '#fff'; ctx.fillText('NEON HUSTLE', cx, ty); ctx.shadowBlur = 0;
+      ctx.font = `600 ${Math.round(17 * k)}px ${MONO}`; ctx.fillStyle = '#e8e8e8';
+      wrapText('First time in the city? The Rogue can show you around.', canvas.width - 48 * k).forEach((l, i) => ctx.fillText(l, cx, ty + (42 + i * 24) * k));
+      rows().forEach((r, i) => {
+        const y = ty + (96 + i * 48) * k, w = Math.min(canvas.width - 48 * k, 360 * k), h = 40 * k, x = cx - w / 2, on = i === ui.cursor;
+        ctx.fillStyle = on ? 'rgba(155, 92, 255, 0.35)' : 'rgba(0, 0, 0, 0.6)'; rr(x, y - h / 2, w, h, h / 2); ctx.fill();
+        ctx.strokeStyle = on ? '#b58cff' : '#555'; ctx.lineWidth = 2 * k; ctx.stroke();
+        ctx.fillStyle = on ? '#fff' : '#bbb'; ctx.font = `700 ${Math.round(17 * k)}px ${MONO}`; ctx.fillText((on ? '> ' : '') + r.left, cx, y + 1);
+        rowRects.push({ x, y: y - h / 2, w, h, i });
+      });
+      ctx.fillStyle = '#8a8a8a'; ctx.font = `${Math.round(13 * k)}px ${MONO}`;
+      ctx.fillText(phoneView ? 'tap a choice' : 'W/S choose · Space select', cx, ty + 176 * k);
+    }
     function drawGameOver() {
       const t = deathT();
       ctx.fillStyle = `rgba(0, 0, 0, ${Math.min(1, t / DEATH.dimMs)})`;   // the world dims to black
@@ -4673,11 +4851,13 @@
       const latest = Object.values(slots || {}).sort((a, b) => new Date(b.at) - new Date(a.at))[0];
       const guestRun = account && store.get(GUEST_RUN);
       if (guestRun) store.set(GUEST_RUN, null);
+      if (!user) { showStartScreen(); return; }   // guest: always a fresh run
       if (!account || account.id !== user.id) return;
       if (guestRun && guestRun.state && !latest && Date.now() - guestRun.at < 7 * 24 * 3600 * 1000) {   // a brand-new account takes over the guest run
         applySave(guestRun.state); await writeSlot(1);
         float('guest run saved', '#3ddc84', player.x + 0.5, player.y - 0.8);
       } else if (latest) { applySave(latest.state); float('welcome back', '#3ddc84', player.x + 0.5, player.y - 0.8); }
+      else showStartScreen();   // a new account's first run
       lastAutosave = Date.now();
       refreshLeaderboard();
     }
@@ -4762,7 +4942,8 @@
       if (!anyOpen() || naming()) return;
       if (ui && ui.kind === 'quests') {
         const row = rowRects.find(b => !b.panel && cx >= b.x && cx <= b.x + b.w && cy >= b.y && cy <= b.y + b.h);
-        if (row && quests[row.i]) openQuestMenu(row.i, cx, cy);
+        const qi = row ? row.i - (tutQuest() ? 1 : 0) : -1;
+        if (row && quests[qi]) openQuestMenu(qi, cx, cy);
         return;
       }
       const slot = !ui && panels.inventory && rowRects.find(b => b.panel === 'inventory' && cx >= b.x && cx <= b.x + b.w && cy >= b.y && cy <= b.y + b.h);
