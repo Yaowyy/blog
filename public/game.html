@@ -738,7 +738,7 @@
   };
   // passages between neighbouring zones: [zone, zone, where along the shared edge (0 = top/left end, 1 = bottom/right end)]
   const PASSAGES = [
-    ['0:0', '0:1', 0.59], ['1:1', '0:1', 0.59], ['1:0', '1:1', 0.8], ['1:1', '1:2', 0.2], ['1:2', '1:3', 0.82],
+    ['0:0', '0:1', 0.83], ['1:1', '0:1', 0.59], ['1:0', '1:1', 0.8], ['1:1', '1:2', 0.2], ['1:2', '1:3', 0.82],
     ['2:1', '1:1', 0.2], ['2:3', '1:3', 0.84], ['2:3', '2:4', 0.2], ['3:3', '2:3', 0.14],
     ['1:-1', '1:0', 0.17], ['1:-2', '1:-1', 0.49], ['1:-1', '0:-1', 0.12],
     ['0:-2', '0:-1', 0.3], ['0:-2', '-1:-2', 0.1], ['0:-1', '-1:-1', 0.8], ['-1:-2', '-1:-1', 0.79],
@@ -838,49 +838,54 @@
                   drips: type === 'slums' ? (Math.max(Math.abs(a), Math.abs(b)) >= 3 ? 2 : 1) : 0 };
     AREAS[id].foes = [];   // other enemies living here besides the Drips: { kind, spawn } (spawn tile counted from 1)
   }
-  // city layout (47 x 29), 0-based footprints in the comments. Pictures drawn turned toward the lower-left (shop, TradeCorp,
-  // MutaTech, ruined market, billboards) are mirrored on the left half so they face the centre; front-view ones never are.
-  AREAS['0:0'].walls = [
-    { x: 21, y: 19, w: 2, h: 2, color: '#2e9e44', label: 'ATB-Market', opens: 'shop', art: 'shop', artW: 2.5 },   // 20-21, 17-18 (exception: not mirrored)
-    { x: 23, y: 18, w: 2, h: 4, color: '#f2f2f2', label: 'HomeDome', opens: 'rest', art: 'homedome', artW: 2.2 },   // 22-23, 14-17
-    // CaaCaanTeng noodle bar (closed, decorative: no name shown when faced)
-    { x: 26, y: 18, w: 3, h: 2, color: '#8a3a7a', art: 'noodleBar', artW: 3.2 },   // 24-26, 16-17
-    // the Rogue: quest giver (the tutorial), below-left of the ATB-Market; turns toward the hero when he is within 2 tiles. artH: drawn this many tiles tall (hero: 1.75)
-    { x: 20, y: 20, w: 1, h: 1, color: '#2a1f3d', label: 'Rogue', opens: 'rogue', art: 'npcRogue', artH: 1.75, npc: true, facesRight: true },   // 19, 19
-    // front: true draws the picture in front of other buildings (not of the hero)
-    { x: 28, y: 19, w: 2, h: 2, color: '#2f6fdb', label: 'TradeCorp', opens: 'work', art: 'work', artW: 2.5, front: true },   // 27-28, 17-18
-    // TechVersity (decorative for now): 6 x 3, U-shaped. open: tiles inside the footprint you can walk on ([column, row] from its
-    // top-left): the two back corners and the 2-tile courtyard in front of the entrance. Front view: never mirrored.
-    { x: 27, y: 13, w: 6, h: 3, color: '#3a4257', label: 'TechVersity', art: 'techVersity', artW: 6.2, open: [[0, 0], [5, 0], [2, 2], [3, 2]] },   // 24-29, 10-12, 2 tiles left of MutaTech
-    // MutaTech: spell crafting station
-    { x: 34, y: 13, w: 3, h: 2, color: '#5a3a8a', label: 'MutaTech', opens: 'spelltech', art: 'spellTech', artW: 4.0 },   // 32-34, 11-12
-    // hover-car charging station (decorative), drawn in front of the ruin next to it
-    { x: 35, y: 15, w: 2, h: 2, color: '#3a4257', art: 'charging', artW: 2.3, front: true },   // 34-35, 13-14
-    { x: 37, y: 15, w: 2, h: 2, color: '#3a4257', art: 'ruinApartment', artW: 3.2 },   // 36-37, 13-14
-    { x: 40, y: 16, w: 1, h: 1, color: '#3a4257', art: 'holoBillboard', artW: 2.2 },   // 39, 15
-    { x: 19, y: 20, w: 1, h: 1, color: '#3a4257', art: 'holoBillboard', artW: 2.2, flip: true },   // 18, 19
-  ];
-  // rows of closed-down buildings, wall to wall, picked once with a fixed seed so the same picture is never next to itself
+  // city layout (47 x 29), from the layout sheet. Each entry: picture, footprint [x0, y0, w, h] (0-based top-left tile).
+  // turned: 'L' = drawn facing lower-left, 'R' = lower-right; such pictures are mirrored when needed so they face the
+  // city's centre (column 24). ATB-Market is an exception (never mirrored). Front-view pictures are never mirrored.
   {
-    const KINDS = [{ w: 2, h: 2, art: 'ruinApartment', artW: 3.2 }, { w: 2, h: 2, art: 'ruinMarket', artW: 2.9, turned: true },
-                   { w: 3, h: 2, art: 'ruinNoodleBar', artW: 3.6 }, { w: 3, h: 2, art: 'noodleBar', artW: 3.2 }];
-    let seed = 470029;
-    const rnd = () => ((seed = (seed * 1664525 + 1013904223) >>> 0) / 4294967296);
-    const pick = n => { const out = []; while (out.length < n) { const k = KINDS[Math.floor(rnd() * KINDS.length)]; if (!out.length || out[out.length - 1] !== k) out.push(k); } return out; };
-    // x0: first column (0-based) or 'centre' to centre the row on column cx; y1: bottom row (0-based)
-    const row = (n, y1, x0, cx) => {
-      const ks = pick(n), width = ks.reduce((t, k) => t + k.w, 0);
-      let x = x0 ?? cx - Math.floor(width / 2);
-      for (const k of ks) {
-        const cxT = x + k.w / 2;   // footprint centre, in tiles
-        AREAS['0:0'].walls.push({ w: k.w, h: k.h, art: k.art, artW: k.artW, color: '#3a4257', x: x + 1 + Math.floor(k.w / 2) - (k.w % 2 ? 0 : 1), y: y1 + 1,
-                                  flip: !!k.turned && cxT < COLS / 2 });
-        x += k.w;
-      }
+    const B = {
+      shop: { art: 'shop', artW: 2.5, label: 'ATB-Market', opens: 'shop', color: '#2e9e44', turned: 'L', noFlip: true },
+      home: { art: 'homedome', artW: 2.2, label: 'HomeDome', opens: 'rest', color: '#f2f2f2' },
+      work: { art: 'work', artW: 2.5, label: 'TradeCorp', opens: 'work', color: '#2f6fdb', turned: 'L' },
+      muta: { art: 'spellTech', artW: 4.0, label: 'MutaTech', opens: 'spelltech', color: '#5a3a8a', turned: 'L' },
+      tech: { art: 'techVersity', artW: 6.2, label: 'TechVersity', open: [[0, 0], [5, 0], [2, 2], [3, 2]] },
+      noodle: { art: 'noodleBar', artW: 3.2, color: '#8a3a7a' },
+      car: { art: 'charging', artW: 2.3 },
+      bill: { art: 'holoBillboard', artW: 2.2, turned: 'L' },
+      billRuinA: { art: 'ruinBillboardL', artW: 2.2, turned: 'L' }, billRuinB: { art: 'ruinBillboard', artW: 2.2, turned: 'R' },
+      ruinApt: { art: 'ruinApartment', artW: 3.2 }, ruinMkt: { art: 'ruinMarket', artW: 2.9, turned: 'L' }, ruinNoodle: { art: 'ruinNoodleBar', artW: 3.6 },
+      metro: { art: 'metroStation', artW: 4.4, label: 'Metro Station', opens: 'metro', color: '#2e8bc0' },
+      bank: { art: 'credBank', artW: 3.4, label: 'CredBank', opens: 'bank', color: '#d4a017' },
+      doc: { art: 'ripperdoc', artW: 3.3, label: 'Ripperdoc Clinic', opens: 'ripperdoc', color: '#2fbf8f' },
+      metroRuin: { art: 'ruinMetro', artW: 4.4 }, bankRuin: { art: 'ruinCredBank', artW: 3.4 }, docRuin: { art: 'ruinRipperdoc', artW: 3.3 },
+      workRuin: { art: 'ruinTradeCorp', artW: 2.6 },
+      b3: { art: 'block3', artW: 3.2 }, b3a: { art: 'block3Abandoned', artW: 3.2 }, b3r: { art: 'block3Ruin', artW: 3.4, turned: 'R' },
+      b5: { art: 'block5', artW: 3.2, turned: 'L' }, b6a: { art: 'block6Abandoned', artW: 3.2, turned: 'R' }, b7: { art: 'block7', artW: 3.4 },
     };
-    row(5, 6, 4);           // top-left quadrant
-    row(3, 6, null, 33);    // top-right quadrant, 5 tiles above MutaTech, centred over it
-    row(4, 23, 5);          // bottom-left quadrant
+    const PLAN = [
+      // top row
+      ['bank', 6, 2, 3, 2], ['b3a', 10, 2, 3, 2], ['ruinNoodle', 13, 2, 3, 2], ['b3r', 16, 2, 3, 2], ['bill', 25, 4, 1, 1],
+      ['docRuin', 27, 2, 3, 2], ['b5', 30, 2, 3, 2], ['ruinApt', 33, 2, 2, 2], ['muta', 36, 2, 3, 2], ['metroRuin', 39, 1, 4, 3],
+      // middle block
+      ['doc', 6, 10, 3, 2], ['b5', 10, 10, 3, 2], ['noodle', 13, 10, 3, 2], ['shop', 19, 10, 2, 2], ['home', 21, 7, 2, 4],
+      ['b7', 23, 8, 3, 3], ['b3', 26, 9, 3, 2], ['work', 29, 10, 2, 2], ['b3r', 34, 10, 3, 2],
+      ['billRuinA', 1, 12, 1, 1], ['bill', 17, 12, 1, 1], ['billRuinB', 32, 12, 1, 1], ['billRuinB', 42, 8, 1, 1], ['ruinNoodle', 42, 13, 3, 2],
+      // bottom block
+      ['b6a', 3, 20, 3, 2], ['metro', 10, 19, 4, 3], ['workRuin', 14, 20, 2, 2], ['noodle', 16, 20, 3, 2], ['bankRuin', 21, 20, 3, 2],
+      ['tech', 25, 18, 6, 3], ['ruinMkt', 33, 20, 2, 2], ['docRuin', 35, 20, 3, 2], ['car', 42, 20, 2, 2], ['bill', 45, 21, 1, 1],
+      ['billRuinA', 20, 22, 1, 1], ['b3', 3, 25, 3, 2],
+    ];
+    AREAS['0:0'].walls = PLAN.map(([k, x0, y0, w, h]) => {
+      const d = B[k], c = x0 + w / 2, y1 = y0 + h - 1;
+      const flip = !d.noFlip && (d.turned === 'L' ? c < COLS / 2 : d.turned === 'R' ? c > COLS / 2 : false);
+      return { x: x0 + 1 + Math.floor(w / 2) - (w % 2 ? 0 : 1), y: y1 + 1, w, h, color: d.color || '#3a4257', art: d.art, artW: d.artW,
+               label: d.label, opens: d.opens, open: d.open, flip, front: k === 'work' || undefined };
+    });
+    // the Rogue: quest giver (the tutorial), next to the ATB-Market; turns toward the hero when he is within 2 tiles
+    AREAS['0:0'].walls.push({ x: 19, y: 13, w: 1, h: 1, color: '#2a1f3d', label: 'Rogue', opens: 'rogue', art: 'npcRogue', artH: 1.75, npc: true, facesRight: true });
+    // roads (always 2 tiles wide): [x0, y0, x1, y1] rectangles of road tiles, drawn with the road pieces (see drawRoads)
+    const ROADS = [[3, 5, 44, 6], [3, 7, 4, 12], [39, 7, 40, 12], [3, 13, 40, 14], [7, 15, 8, 26], [39, 15, 40, 22], [7, 23, 46, 24], [27, 21, 28, 22]];
+    const road = AREAS['0:0'].road = [...Array(ROWS)].map(() => Array(COLS).fill(false));
+    for (const [x0, y0, x1, y1] of ROADS) for (let y = y0; y <= y1; y++) for (let x = x0; x <= x1; x++) road[y][x] = true;
   }
   AREAS['0:0'].decals = true;   // city: the default detail mix
   AREAS['0:0'].coils = borderWalls('0:0', ['top', 'bottom', 'left', 'right']);
@@ -1276,7 +1281,7 @@
     for (const id of zonesOf('deepForest')) for (let q = 0; q < 4; q++) if (!place(id, 'mush', { q })) place(id, 'mush');
   }
   const footCX = w => { const f = foot(w); return (f.x0 + f.x1 + 1) / 2; };   // footprint centre, in tiles
-  const START = { x: 23, y: 18 };   // 0-based: just below HomeDome
+  const START = { x: 22, y: 11 };   // 0-based: just below HomeDome
 
   // ---- enemies ----------------------------------------------------------------
   // Drip: half human, half oil slime. Every slums zone has 1 (2 where a map coordinate is 3 or more).
@@ -1390,6 +1395,10 @@
     scavIdle: 'art/enemies/scav/scavIdle.png', scavAttack: 'art/enemies/scav/scavAttack.png', scavHurt: 'art/enemies/scav/scavHurt.png',   // Toxic Scav sheets (face left)
     scavPortrait: 'art/enemies/scav/scavPortrait.png', scavSpray: 'art/enemies/scav/scavSpray.png',   // portrait, toxic spray cone (points left, nozzle at the right end)
     mutagen: 'art/items/loot/mutagen.png', tarOrb: 'art/items/loot/tarOrb.png', aiChip: 'art/items/loot/aiChip.png',   // item icons
+    // city buildings (loaded, placed once the layout is drawn)
+    metroStation: 'art/buildings/metroStation.png', credBank: 'art/buildings/credBank.png', ripperdoc: 'art/buildings/ripperdoc.png', ruinTradeCorp: 'art/buildings/ruinTradeCorp.png', ruinBillboardL: 'art/buildings/ruinBillboardL.png', ruinBillboard: 'art/buildings/ruinBillboard.png', ruinMetro: 'art/buildings/ruinMetro.png', ruinCredBank: 'art/buildings/ruinCredBank.png', ruinRipperdoc: 'art/buildings/ruinRipperdoc.png', block5: 'art/buildings/block5.png', block7: 'art/buildings/block7.png', block6Abandoned: 'art/buildings/block6Abandoned.png', block3: 'art/buildings/block3.png', block3Ruin: 'art/buildings/block3Ruin.png', block3Abandoned: 'art/buildings/block3Abandoned.png',
+    roadPlain: 'art/world/road/roadPlain.png', roadStraight: 'art/world/road/roadStraight.png', roadCorner: 'art/world/road/roadCorner.png',
+    roadT: 'art/world/road/roadT.png', roadCross: 'art/world/road/roadCross.png', roadEnd: 'art/world/road/roadEnd.png',   // city road pieces (2 x 2 tiles)
     npcRogue: 'art/npc/rogue.png', roguePortrait: 'art/npc/roguePortrait.png', startScreen: 'art/ui/startScreen.jpg', techVersity: 'art/buildings/techVersity.png',   // quest giver in the city, standing, facing the viewer
     spellTech: 'art/buildings/spellTech.png',   // MutaTech crafting station (3 x 2), turned slightly like the shop
     ruinApartment: 'art/buildings/ruinApartment.png', ruinMarket: 'art/buildings/ruinMarket.png', ruinNoodleBar: 'art/buildings/ruinNoodleBar.png',
@@ -1694,6 +1703,7 @@
           };
         });
       }
+      if (['metro', 'bank', 'ripperdoc'].includes(ui.kind)) return [{ left: 'ok', right: '', act() { ui = null; } }];
       if (ui.kind === 'rogue') {
         if (tut === 0) return [
           { left: 'teach me', right: '', act() { tut = 1; ui = null; showHint(`${TUT[0].task} ${TUT[0].tip}`); } },
@@ -1978,10 +1988,13 @@
       stats.energy -= r.energy; renderStats();
       return `Crafted ${r.count} ${r.make}.`;
     }
-    const TITLES = { rogue: 'Rogue', spelltech: 'MutaTech', shop: 'ATB-Market', work: 'TradeCorp', menu: 'Menu', controls: 'Controls', hero: 'Hero', inventory: 'Inventory', gameover: 'Game over', loot: 'Loot · Drip', rest: 'HomeDome', cheat: 'Cheats (testing)', scrap: 'Scrap Dealer',
+    const TITLES = { rogue: 'Rogue', metro: 'Metro Station', bank: 'CredBank', ripperdoc: 'Ripperdoc Clinic', spelltech: 'MutaTech', shop: 'ATB-Market', work: 'TradeCorp', menu: 'Menu', controls: 'Controls', hero: 'Hero', inventory: 'Inventory', gameover: 'Game over', loot: 'Loot · Drip', rest: 'HomeDome', cheat: 'Cheats (testing)', scrap: 'Scrap Dealer',
                      map: 'Map', settings: 'Settings', sound: 'Sound', restart: 'Restart', throw: 'Throw away', cancelQuest: 'Cancel quest', quests: 'Quests', leaderboard: 'Leaderboard', save: 'Save', load: 'Load game', logout: 'Log out', guest: 'Playing as guest' };
     // windows with a paragraph above their options
     const WINDOW_TEXT = {
+      metro: 'The gates are down and the departure board is blank. "Opening soon," says a flickering sign.',
+      bank: 'The vault door is locked tight. A hologram says CredBank opens soon.',
+      ripperdoc: 'The ripperdoc is still unpacking chrome. "Come back soon, choom."',
       rogue: () => tut === 0 ? '"New around here? Top of my class at TechVersity, and I don\'t keep what I learned to myself. Out here, knowing things keeps you alive. Want me to show you how the city works?"'
         : tut <= TUT.length ? `"${TUT[tut - 1].task} ${TUT[tut - 1].tip}" (task ${tut} of ${TUT.length})`
         : tut === TUT_READY ? '"Deals, food, rest, knowing yourself. That\'s the whole city in a nutshell. You did well, here\'s something to get you going."'
@@ -3142,6 +3155,28 @@
     }
     const GROUND_REPEAT = 6;   // tiles per texture repeat
     const groundScale = () => Math.min(1.25, Math.max(1, Math.ceil(PX * worldCam(0, 0).z * 4) / 4));   // capped: a whole 47 x 29 zone at 2x would be too big for phones
+    // roads: 2 x 2 tile blocks starting on odd columns / rows. Each block picks a piece from which neighbour blocks are road
+    // (off the map counts as road, so a road runs out through a passage) and turns it to fit.
+    const ROAD_PIECES = ['roadPlain', 'roadStraight', 'roadCorner', 'roadT', 'roadCross', 'roadEnd'];
+    const roadAt = (x, y) => { const r = AREAS[areaName].road; return !!(r && r[y] && r[y][x]); };
+    function drawRoads(gx) {
+      const r = AREAS[areaName].road;
+      if (!r || !ROAD_PIECES.every(k => ready(ART[k]))) return;
+      const on = (x, y) => x < 0 || y < 0 || x >= COLS || y >= ROWS || !!r[y][x];
+      for (let y0 = 1; y0 < ROWS; y0 += 2) for (let x0 = 1; x0 < COLS; x0 += 2) {
+        if (!r[y0][x0]) continue;
+        const n = on(x0, y0 - 2), e = on(x0 + 2, y0), s = on(x0, y0 + 2), w = on(x0 - 2, y0), c = n + e + s + w;
+        let piece, rot = 0;   // pieces are drawn open to the east (and south / west as needed); rot = clockwise quarter turns
+        if (c === 4) piece = 'roadCross';
+        else if (c === 0) piece = 'roadPlain';
+        else if (c === 3) { piece = 'roadT'; rot = !n ? 0 : !e ? 1 : !s ? 2 : 3; }
+        else if (c === 1) { piece = 'roadEnd'; rot = e ? 0 : s ? 1 : w ? 2 : 3; }
+        else if ((e && w) || (n && s)) { piece = 'roadStraight'; rot = e ? 0 : 1; }
+        else { piece = 'roadCorner'; rot = e && s ? 0 : s && w ? 1 : w && n ? 2 : 3; }
+        gx.save(); gx.translate((x0 + 1) * TILE, (y0 + 1) * TILE); gx.rotate(rot * Math.PI / 2);
+        gx.drawImage(ART[piece], -TILE, -TILE, 2 * TILE, 2 * TILE); gx.restore();
+      }
+    }
     function buildGround() {
       const im = ART[ZONE_TYPES[AREAS[areaName].type].floor];
       if (!ready(im)) return null;
@@ -3150,6 +3185,7 @@
       const gx = g.getContext('2d'); gx.imageSmoothingQuality = 'high'; gx.scale(gs, gs);
       const B = GROUND_REPEAT * TILE;
       for (let y = 0; y < WORLD_H; y += B) for (let x = 0; x < WORLD_W; x += B) gx.drawImage(im, x, y, B, B);
+      drawRoads(gx);
       if (AREAS[areaName].decals) placeDecals(gx);
       const lake = AREAS[areaName].lake;   // toxic lake quarter, flat on the ground
       if (lake && ready(ART[lake.art])) gx.drawImage(ART[lake.art], lake.x, lake.y);
@@ -3270,7 +3306,7 @@
       const pick = () => { let r = rnd() * total; for (let i = 0; i < DECALS.length; i++) { r -= weight(DECALS[i]); if (r <= 0 && weight(DECALS[i]) > 0) return i; } return 0; };
       const placed = {};   // "x,y" -> decal index
       for (let y = 0; y < ROWS; y++) for (let x = 0; x < COLS; x++) {
-        if (rnd() >= chance || wallAt(x, y) || coilAt(x, y) || exitAt(x, y) || lakeAt(x, y) || bigAt(x, y) || (areaName === '0:0' && x === START.x && y === START.y)) continue;
+        if (rnd() >= chance || roadAt(x, y) || wallAt(x, y) || coilAt(x, y) || exitAt(x, y) || lakeAt(x, y) || bigAt(x, y) || (areaName === '0:0' && x === START.x && y === START.y)) continue;
         let i = pick(), tries = 0;
         const nearSame = k => { if (cfg.cluster) return false; for (let dy = -1; dy <= 1; dy++) for (let dx = -1; dx <= 1; dx++) if (placed[(x + dx) + ',' + (y + dy)] === k) return true; return false; };
         while (nearSame(i) && tries++ < 8) i = pick();
@@ -3319,9 +3355,10 @@
       const wantWire = !!AREAS[areaName].coils && ['wallStraight', 'wallBroken', 'wallCorner', 'wallEnd'].every(k => ready(ART[k]));
       const wantTar = AREAS[areaName].exits.length > 0 && AREAS[areaName].exits.every(e => { const st = passageStyle(areaName, e.to); return ready(st ? ART[st.art] : ART.tar); });
       const wantLake = !!AREAS[areaName].lake && ready(ART[AREAS[areaName].lake.art]);
-      if (!groundLayer || groundLayer.gs !== groundScale() || (wantDecals && !groundLayer.hasDecals) || (wantWire && !groundLayer.hasWire) || (wantTar && !groundLayer.hasTar) || (wantLake && !groundLayer.hasLake)) {
+      const wantRoad = !!AREAS[areaName].road && ROAD_PIECES.every(k => ready(ART[k]));
+      if (!groundLayer || groundLayer.gs !== groundScale() || (wantDecals && !groundLayer.hasDecals) || (wantWire && !groundLayer.hasWire) || (wantTar && !groundLayer.hasTar) || (wantLake && !groundLayer.hasLake) || (wantRoad && !groundLayer.hasRoad)) {
         groundLayer = buildGround();
-        if (groundLayer) { groundLayer.hasDecals = wantDecals; groundLayer.hasWire = wantWire; groundLayer.hasTar = wantTar; groundLayer.hasLake = wantLake; }
+        if (groundLayer) { groundLayer.hasDecals = wantDecals; groundLayer.hasWire = wantWire; groundLayer.hasTar = wantTar; groundLayer.hasLake = wantLake; groundLayer.hasRoad = wantRoad; }
       }
       if (groundLayer) ctx.drawImage(groundLayer, 0, 0, WORLD_W, WORLD_H);
 
@@ -4998,9 +5035,17 @@
     fsBtn.addEventListener('click', () => {
       const d = document, el = d.documentElement;
       if (d.fullscreenElement || d.webkitFullscreenElement) (d.exitFullscreen || d.webkitExitFullscreen).call(d);
-      else { const r = (el.requestFullscreen || el.webkitRequestFullscreen).call(el, { navigationUI: 'hide' }); r?.then?.(() => screen.orientation?.lock?.('landscape').catch(() => {})).catch(() => {}); }
+      else { const r = (el.requestFullscreen || el.webkitRequestFullscreen).call(el, { navigationUI: 'hide' });
+        r?.then?.(() => {
+          screen.orientation?.lock?.('landscape').catch(() => {});
+          // Chrome / Edge: keep Esc for the game (menu). Leaving full screen then needs Esc held down, or the Full button.
+          navigator.keyboard?.lock?.(['Escape']).catch(() => {});
+        }).catch(() => {}); }
     });
-    ['fullscreenchange', 'webkitfullscreenchange'].forEach(ev => document.addEventListener(ev, () => setTimeout(layoutView, 100)));
+    ['fullscreenchange', 'webkitfullscreenchange'].forEach(ev => document.addEventListener(ev, () => {
+      if (!document.fullscreenElement && !document.webkitFullscreenElement) navigator.keyboard?.unlock?.();
+      setTimeout(layoutView, 100);
+    }));
     const touchOn = () => settings.touch === 'on' || (settings.touch === 'auto' && (matchMedia('(pointer: coarse)').matches || navigator.maxTouchPoints > 1 && !matchMedia('(pointer: fine)').matches));
     const sendKey = (code, type = 'keydown', repeat = false) => {
       const key = { Space: ' ', Escape: 'Escape' }[code] || code.replace(/^(Key|Digit)/, '').toLowerCase();
