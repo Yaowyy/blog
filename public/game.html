@@ -633,6 +633,7 @@
   const LOOT_ITEMS = [
     { name: 'Tar',        class: 'resource', stack: 64, gain: {}, art: 'tart', value: 2, rarity: 'common' },   // value: price per piece (the Scrap Dealer pays this for resources)
     { name: 'Magic tar',  class: 'skill', gain: {}, art: 'magicTart', value: 90, rarity: 'rare' },
+    { name: 'Magic Nozzle', class: 'skill', gain: {}, art: 'magicNozzle', value: 90, rarity: 'rare', desc: 'The Pump Queen\'s fuel nozzle. Learn it: Fuel Spray.' },
     { name: 'Scrap',      class: 'resource', stack: 64, gain: {}, value: 1, art: 'scrap', rarity: 'common' },   // from selling equipment; also sold by the Scrap Dealer
     // not obtainable yet (code only; the cheat menu can give them)
     { name: 'MutaGen',    class: 'resource', stack: 32, gain: {}, value: 26, rarity: 'rare', art: 'mutagen' },
@@ -675,6 +676,9 @@
   // On hit the enemy can't move for `rootMs` and takes dot[0]–dot[1] damage every second, `ticks` times.
   const SPELLS = {
     'Magic tar': { mana: 3, range: 5, speed: 9, rootMs: 2000, dot: [1, 2], ticks: 2, tickMs: 1000 },   // root 2 s + 1-2 damage per second for 2 s
+    // Magic Nozzle (Fuel Spray): a cone of burning fuel at once, `range` tiles, `halfAngle` radians each side. Every enemy in it
+    // (hit roll each) is slowed by `slow` for `slowMs` and takes dot[0]-dot[1] damage every second, `ticks` times.
+    'Magic Nozzle': { mana: 3, cone: true, range: 3.5, halfAngle: 0.6, slow: 0.4, slowMs: 3000, dot: [1, 1], ticks: 3, tickMs: 1000 },
   };
   // critical strike (any attack: melee and spells): 0.03% per charisma point, capped at 15%. A crit adds the hero's strength to the damage.
   const CRIT_PER_CHA = 0.0003, CRIT_CAP = 0.15;
@@ -1289,12 +1293,12 @@
       return null;
     }
     const slums = zonesOf('slums');
-    const rowsOf = {};
+    const rowsOf = {}, gasOf = {};
     let rowN = 0;
     for (const id of [...slums, ...zonesOf('greaser')]) {
       AREAS[id].walls = [];
       rowsOf[id] = [];
-      if (ZONE_LIST[id] === 'greaser') place(id, 'gas');
+      if (ZONE_LIST[id] === 'greaser') gasOf[id] = place(id, 'gas');
       for (const q of [0, 1, 2, 3]) {
         rowN++;
         let row = null;
@@ -1326,7 +1330,7 @@
     const FOE_GAP = 6;
     let groupN = 0;
     const newGroup = () => ++groupN;
-    const foeTiles = f => f.kind === 'loader' ? [[0, 0], [1, 0], [0, -1], [1, -1]].map(([dx, dy]) => [f.spawn.x - 1 + dx, f.spawn.y - 1 + dy]) : [[f.spawn.x - 1, f.spawn.y - 1]];
+    const foeTiles = f => f.kind === 'loader' || f.kind === 'queen' ? [[0, 0], [1, 0], [0, -1], [1, -1]].map(([dx, dy]) => [f.spawn.x - 1 + dx, f.spawn.y - 1 + dy]) : [[f.spawn.x - 1, f.spawn.y - 1]];
     const farFromFoes = (A, tiles, group) => !(A.extraFoes || []).some(f => f.group !== group && foeTiles(f).some(([fx, fy]) => tiles.some(([x, y]) => Math.max(Math.abs(fx - x), Math.abs(fy - y)) < FOE_GAP)));
     const addFoe = (A, kind, x, y, group = newGroup()) => (A.extraFoes = A.extraFoes || []).push({ kind, spawn: { x: x + 1, y: y + 1 }, group });
     function foeSomewhere(id, kind) {
@@ -1397,15 +1401,28 @@
         const g = newGroup(); for (const [x, y] of pick) addFoe(A, 'spore', x, y, g); want--;
       }
     }
+    // the Pump Queen: on the gas station's forecourt (2 x 2, 1-2 tiles below its front, as central as fits), before the Drips so
+    // they keep their distance. No random numbers here, so the rest of the world rolls out as before.
+    for (const id in gasOf) {
+      const A = AREAS[id], w = gasOf[id];
+      if (!w) continue;
+      const f = foot(w), cx = Math.floor((f.x0 + f.x1) / 2), spots = [];
+      for (const y of [f.y1 + 3, f.y1 + 4, f.y1 + 2]) for (let dx = 0; dx <= 6; dx++) for (const x of dx ? [cx - dx, cx + dx] : [cx]) spots.push([x, y]);
+      for (const [x, y] of spots) {
+        const tiles = [[0, 0], [1, 0], [0, -1], [1, -1]].map(([dx, dy]) => [x + dx, y + dy]);
+        if (tiles.every(([tx, ty]) => tileOk(A, tx, ty)) && farFromFoes(A, tiles, -1)) { addFoe(A, 'queen', x, y); break; }
+      }
+    }
     // Drips in the slums: 4 up to 2 zones from the city, then +2 for every 2 zones further (by the farther map coordinate);
-    // the greaser district has 12. They replace the Drips placed before, have no twins, and never start behind a tall building.
+    // the greaser district has 8. They replace the Drips placed before, have no twins, and never start behind a tall building.
     for (const id of [...slums, ...zonesOf('greaser')]) {
       const A = AREAS[id], [a, b] = id.split(':').map(Number), ring = Math.max(Math.abs(a), Math.abs(b));
-      const n = ZONE_LIST[id] === 'greaser' ? 12 : ring <= 2 ? 4 : 4 + 2 * Math.ceil((ring - 2) / 2);
+      const n = ZONE_LIST[id] === 'greaser' ? 8 : ring <= 2 ? 4 : 4 + 2 * Math.ceil((ring - 2) / 2);
       A.drips = 0; A.foes = A.foes.filter(f => f.kind !== 'drip');
       for (let i = 0, t = 0; i < n && t < 3000; t++) {
         const x = 2 + Math.floor(rnd() * (COLS - 4)), y = 2 + Math.floor(rnd() * (ROWS - 4));
         if (!tileOk(A, x, y) || behindTall(id, x, y) || !farFromFoes(A, [[x, y]], -1)) continue;
+        if ((A.extraFoes || []).some(f => f.kind === 'queen' && Math.max(Math.abs(f.spawn.x - 1 - x), Math.abs(f.spawn.y - 1 - y)) < 10)) continue;   // her own Drips are enough near the Pump Queen
         addFoe(A, 'drip', x, y); i++;
       }
     }
@@ -1426,7 +1443,7 @@
   // Damage: a share of the hero's max HP at his level (see npcDamage): melee ×0.10–0.12 per hit, Magic Tar ×0.08 per tick.
   const DRIP = { name: 'Drip', exp: 2, hp: 10, atkMult: [0.10, 0.12], tarMult: 0.08, mana: 3, manaRegenMs: 4000, aggro: 4, stepMs: 1000, attackMs: 1000,
                  windupMs: 400, spell: 'Magic tar', respawnMs: [60000, 90000], lootMs: 30000, fadeMs: 2000,
-                 loot: { money: [4, 8], tar: [0, 1], magicTarChance: 0.01 },   // rolled when he dies, taken with Space
+                 loot: { money: [4, 8], tar: [0, 1], magicTarChance: 0.025 },   // rolled when he dies, taken with Space
                  spawns: [[{ x: 11, y: 7 }], [{ x: 8, y: 5 }, { x: 14, y: 9 }]] };   // spawn tiles (from 1) for 1 and for 2 Drips
   // hero melee area: a half-disc whose flat side is the front edge of the hero's tile, facing where he looks.
   // Radius 1.2 tiles covers the whole tile in front and a little beyond; a melee weapon makes the area 20% bigger
@@ -1474,10 +1491,31 @@
   const LOADER = { name: 'Overgrown Loader', size: 2, exp: 20, aggro: 4, leash: 12, stepMs: 1000, whipRange: 5, firstWhipMs: 800, whipEveryMs: 3000, whipWindupMs: 400,
                    whipMs: 800, whipMult: 0.1, rootMs: 1600, slamWindupMs: 550, slamMs: 1000, slamEveryMs: 2200, slamMult: 0.3, slamR: 2.5, homeHealPerMin: 1,
                    respawnMs: [300000, 300000], lootMs: 60000, fadeMs: 3000, loot: { money: [40, 80], zoneMoney: true, tar: [1, 3], coreChance: 0.1, aiChipChance: 0.2 } };
-  const ENEMY = { drip: DRIP, scav: SCAV, drone: DRONE, spore: SPORE, loader: LOADER };
+  // Pump Queen (the first boss, greaser 2:2): the living fuel that leaked out of the gas station's tank; every Drip is a drop of her.
+  // Blocks 2 x 2 tiles like the Loader, sits on the gas station forecourt and wakes when the hero comes within `aggro` tiles of
+  // her body. Level 2 (the zone's), but her own attacks hit like a level `dmgLevel` enemy (bossDamage).
+  // Stage 1 (the pump, 100-50% HP): walks 1 tile per 1.5 s. Hose Slap next to the hero (0.45 s wind-up, every 1.5 s).
+  //   Fuel Spray: every 6 s a cone at the hero (0.6 s warning), slows him 40% for 3 s + 3 ticks of damage.
+  //   Pumps out 2 level-2 Drips every 17 s (first 7 s after waking; they start with 1 mana), at most 4 of hers alive.
+  // At 50% HP: Ignition (1.5 s scream): she absorbs every living Drip within `absorbR` tiles (+5% max HP each), the pump shell
+  //   bursts off. Stage 2: 1 tile per second, takes 10% less damage, Hose Slap ×0.18, 1 Burning Drip every 12 s (first 5 s in; at most 3;
+  //   faster, leaves a burning trail). Pump & Ignite every 15 s (first 6 s in): 4-5 oil puddles (one under the hero), lit 1.5 s after they
+  //   land: ×0.3 to the hero if he stands in one; Drips in one start burning.
+  // Gives up when the hero is `leash`+ tiles from her home: walks home healing 100% of max HP per 30 s, back to stage 1 when full.
+  // Her Drips give no exp or loot. Comes back 10 minutes after she dies.
+  const QUEEN = { name: 'Pump Queen', size: 2, aggro: 5, leash: 14, dmgLevel: 4, dmgScale: 0.8, stepMs: [1500, 1000], headY: 2.9,
+                  slapWindupMs: 450, slapEveryMs: 1500, slapMult: [0.15, 0.18],
+                  sprayEveryMs: 6000, sprayWarnMs: 600, sprayMs: 700, sprayRange: 4.5, sprayHalfAngle: 0.45, sprayMult: 0.05, sprayTicks: 3, slow: 0.4, slowMs: 3000,
+                  summonEveryMs: [17000, 12000], summonN: [2, 1], summonMax: [4, 3], firstSummonMs: 7000, summonLevel: 2,
+                  roarMs: 1500, absorbR: 8, absorbHeal: 0.05, stage2Armor: 0.9,
+                  igniteEveryMs: 15000, firstIgniteMs: 6000, igniteThrowMs: 600, igniteFuseMs: 1500, igniteMult: 0.3, flameMs: 1200, puddles: [4, 5],
+                  burnStepMs: 650, trailMs: 2000, fireMult: 0.06, homeHealPerMin: 2,
+                  respawnMs: [600000, 600000], lootMs: 60000, fadeMs: 3000, exp: 60,
+                  loot: { money: [80, 120], tar: [5, 10], queenRare: true } };   // + Magic tar or Magic Nozzle, 50/50
+  const ENEMY = { drip: DRIP, scav: SCAV, drone: DRONE, spore: SPORE, loader: LOADER, queen: QUEEN };
   // enemy max health = round(the hero's max HP at the enemy's level × the enemy's hpMult). Every new enemy gets its own hpMult.
   // Drip ×1: 10 / 12 / 14 / 17 / 21 at lvl 1-5 · Mav-1K ×0.8: 8 / 10 / 11 / 14 / 17 · Toxic Scav ×1.8: 18 / 22 / 25 / 31 / 38
-  DRIP.hpMult = 1; DRONE.hpMult = 0.8; SCAV.hpMult = 1.8; SPORE.hpMult = 0.7; LOADER.hpMult = 3;
+  DRIP.hpMult = 1; DRONE.hpMult = 0.8; SCAV.hpMult = 1.8; SPORE.hpMult = 0.7; LOADER.hpMult = 3; QUEEN.hpMult = 122 / 12;   // Pump Queen: 122 HP at level 2
   const enemyMaxHp = (kind, zoneId) => Math.max(1, Math.round(heroHealthCap(10, zoneLevel(zoneId)) * (ENEMY[kind].hpMult ?? 1)));
   const ET = d => ENEMY[d.kind || 'drip'];   // an enemy's type (rules)
   // Scav sheets are cut to the hero's scale (277 px tall ≈ HERO_H tiles): ax = feet centre, foot = px from the cell bottom to the soles
@@ -1496,7 +1534,15 @@
   // ---- art (drawn over the tile grid; the grid still does all collision) ----
   // hero: smooth chibi art from ChatGPT, facing right; flipped for left. Feet sit on the bottom-centre of his tile.
   // art files are published next to this page in the art/ folder (not embedded), so the game file stays small
+  // Pump Queen sheets: one row of frames each, cut to 128 px per tile (like the Loader's); ax = body centre, foot = px from the
+  // cell bottom to the bottom of her puddle. Stage 1 = the pump (idle1 / walk1 / slap1 / spray1), roar = Ignition, stage 2 = the
+  // burning blob (idle2 / walk2 / slap2 / ignite2); hurt: 0 hurt pump, 1 hurt blob, 2 collapsing, 3 dead (oil slick + broken pump)
+  const QUEEN_ART = { idle1: {frames: 1, cellW: 410, cellH: 377, ax: 227.4, foot: 3}, walk1: {frames: 4, cellW: 459, cellH: 402, ax: 228.3, foot: 3}, slap1: {frames: 4, cellW: 497, cellH: 450, ax: 249.5, foot: 3}, spray1: {frames: 4, cellW: 477, cellH: 377, ax: 286.6, foot: 3}, roar: {frames: 4, cellW: 428, cellH: 380, ax: 206.4, foot: 3}, idle2: {frames: 1, cellW: 413, cellH: 416, ax: 208.1, foot: 3}, walk2: {frames: 4, cellW: 543, cellH: 463, ax: 316.8, foot: 3}, slap2: {frames: 4, cellW: 515, cellH: 452, ax: 280.1, foot: 3}, ignite2: {frames: 4, cellW: 471, cellH: 416, ax: 257.0, foot: 3}, hurt: {frames: 4, cellW: 440, cellH: 401, ax: 218.5, foot: 3} };
   const ART_SRC = {
+    queenIdle1: 'art/enemies/pumpQueen/queenIdle1.webp', queenWalk1: 'art/enemies/pumpQueen/queenWalk1.webp', queenSlap1: 'art/enemies/pumpQueen/queenSlap1.webp',
+    queenSpray1: 'art/enemies/pumpQueen/queenSpray1.webp', queenRoar: 'art/enemies/pumpQueen/queenRoar.webp', queenIdle2: 'art/enemies/pumpQueen/queenIdle2.webp',
+    queenWalk2: 'art/enemies/pumpQueen/queenWalk2.webp', queenSlap2: 'art/enemies/pumpQueen/queenSlap2.webp', queenIgnite2: 'art/enemies/pumpQueen/queenIgnite2.webp',
+    queenHurt: 'art/enemies/pumpQueen/queenHurt.webp', queenPortrait: 'art/enemies/pumpQueen/queenPortrait.webp', magicNozzle: 'art/items/skills/magicNozzle.webp',
     droneFly: 'art/enemies/drone/droneFly.webp', droneAttack: 'art/enemies/drone/droneAttack.webp', droneHurt: 'art/enemies/drone/droneHurt.webp', dronePortrait: 'art/enemies/drone/dronePortrait.webp', statusSlowed: 'art/ui/statusSlowed.webp',   // Mav-1K sheets: 4 cells 300 × 300, faces left
     trophy: "data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Cpath d='M18 12H9v5a10 10 0 0 0 10 10M46 12h9v5a10 10 0 0 1-10 10' fill='none' stroke='%23FFE600' stroke-width='4'/%3E%3Cpath d='M18 7h28v14a14 14 0 0 1-28 0z' fill='%23FFE600' stroke='%2310131C' stroke-width='3'/%3E%3Cpath d='M26 13v8' stroke='%23fff8a0' stroke-width='3' stroke-linecap='round'/%3E%3Crect x='28' y='34' width='8' height='9' fill='%23FFE600' stroke='%2310131C' stroke-width='2'/%3E%3Crect x='18' y='43' width='28' height='9' rx='2' fill='%2300E5FF' stroke='%2310131C' stroke-width='3'/%3E%3C/svg%3E",   // leaderboard button (drawn, no file)
     heroSprite:   'art/hero/heroSprite.webp',
@@ -1817,11 +1863,16 @@
       { id: 'slumProblems', name: 'Slum problems', lvl: 3, after: 'weapon', rarity: 'common', need: 5, goal: 'Kill 5 Drips.',
         talk: '"Drips are spilling out of the slums: half man, half oil slick. Thin them out. Five should do."',
         prog: () => Math.min(5, dripKills) },
+      { id: 'queen', name: 'The Queen', lvl: 3, after: 'slumProblems', rarity: 'rare', boss: true, need: 1, goal: 'Kill the Pump Queen in the greaser (2:2). Gear up first!',
+        talk: '"Every Drip is a drop of her: the Pump Queen, living fuel in the old gas station in the greaser, 2:2. She burns and she brings friends. Gear up first: a real weapon, armour, food. Then kill her."',
+        prog: () => queenKills > 0 ? 1 : 0 },
     ];
     const rogueDone = new Set(saved.rogueDone || []);       // quests handed in
-    let weaponBought = !!saved.weaponBought, dripKills = saved.dripKills || 0;
+    let weaponBought = !!saved.weaponBought, dripKills = saved.dripKills || 0, queenKills = saved.queenKills || 0;
     const rqDef = id => ROGUE_QUESTS.find(r => r.id === id);
-    const rqPay = r => questPay(r.lvl, r.rarity);
+    // a boss quest pays double its rarity's reward
+    const rqPay = r => { const p = questPay(r.lvl, r.rarity), k = r.boss ? 2 : 1; return { exp: p.exp * k, money: p.money * k }; };
+    const rqTag = r => questTag(r.lvl, r.rarity) + (r.boss ? ' · boss' : '');
     const rqComplete = q => { const r = rqDef(q.id); return !!r && r.prog() >= r.need; };
     const rogueOffers = () => tut < TUT_DONE ? [] : ROGUE_QUESTS.filter(r => hero.level >= r.lvl && !rogueDone.has(r.id) && (!r.after || rogueDone.has(r.after))
       && !quests.some(q => q.kind === 'rogue' && q.id === r.id));
@@ -2052,13 +2103,13 @@
           float(`+${r.money}$ +${r.exp} exp`, '#9b5cff', player.x + 0.5, player.y - 1.2);
         } }]; }
         const rows = [];
-        for (const q of rogueReady()) { const r = rqDef(q.id), pay = rqPay(r); rows.push({ rq: { r, mode: 'ready' }, left: `hand in: ${q.name}`, right: `${questTag(r.lvl, r.rarity)} · +${pay.exp} exp +${pay.money}$`, act() {
+        for (const q of rogueReady()) { const r = rqDef(q.id), pay = rqPay(r); rows.push({ rq: { r, mode: 'ready' }, left: `hand in: ${q.name}`, right: `${rqTag(r)} · +${pay.exp} exp +${pay.money}$`, act() {
           quests.splice(quests.indexOf(q), 1); rogueDone.add(q.id); stats.money += pay.money; gainExp(pay.exp); renderStats(); ui.cursor = 0;
           float(`+${pay.exp} exp +${pay.money}$`, '#9b5cff', player.x + 0.5, player.y - 1.2);
           const next = ROGUE_QUESTS.find(n => n.after === q.id);
           return `Quest complete: ${q.name}. +${pay.exp} exp, +${pay.money}$.${next ? ` New quest: ${next.name}${hero.level < next.lvl ? ` (at level ${next.lvl})` : ''}.` : ''}`;
         } }); }
-        for (const r of rogueOffers()) rows.push({ rq: { r, mode: 'offer' }, left: `quest: ${r.name}`, right: `${questTag(r.lvl, r.rarity)} · +${rqPay(r).exp} exp +${rqPay(r).money}$`, act() {
+        for (const r of rogueOffers()) rows.push({ rq: { r, mode: 'offer' }, left: `quest: ${r.name}`, right: `${rqTag(r)} · +${rqPay(r).exp} exp +${rqPay(r).money}$`, act() {
           if (quests.length >= MAX_QUESTS) return `You already have ${MAX_QUESTS} active quests. Cancel one first (Q).`;
           quests.push({ kind: 'rogue', id: r.id, name: r.name, from: 'Rogue', lvl: r.lvl, rarity: r.rarity }); ui.cursor = 0;
           return `${r.talk} Quest accepted: ${r.name}.`;
@@ -2106,7 +2157,7 @@
     }
     function newGame() {
       Object.assign(talents, newTalents()); ceoCalls = 0;
-      clearLbBuffs(); Object.assign(stats, START_STATS); dealsDone = 0; foodBought = 0; promotion = 0; kills = 0; dripKills = 0; weaponBought = false; rogueDone.clear(); runCheated = false; Object.assign(prices, startPrices()); deals = newDeals();
+      clearLbBuffs(); Object.assign(stats, START_STATS); dealsDone = 0; foodBought = 0; promotion = 0; kills = 0; dripKills = 0; queenKills = 0; weaponBought = false; rogueDone.clear(); runCheated = false; Object.assign(prices, startPrices()); deals = newDeals();
       discovered.clear();
       quests.length = 0;
       areaName = '0:0'; spawnAllDrips();
@@ -2174,7 +2225,7 @@
     // ---- saving -------------------------------------------------------------------
     // everything a run needs; drip/fights/timers restart when loaded
     function snapshot() {
-      return { x: player.x, y: player.y, fx: facing.x, fy: facing.y, stats: statsNoBuffs(), deals, prices: { ...prices }, dealsDone, foodBought, itemsV2: true, sets: [...activeSets], promotion, kills, dripKills, weaponBought, rogueDone: [...rogueDone], cheated: runCheated, quests: quests.map(q => q.kind === 'delivery' ? { ...q, left: Math.max(0, q.until - gameTime) } : { ...q }),
+      return { x: player.x, y: player.y, fx: facing.x, fy: facing.y, stats: statsNoBuffs(), deals, prices: { ...prices }, dealsDone, foodBought, itemsV2: true, sets: [...activeSets], promotion, kills, dripKills, queenKills, weaponBought, rogueDone: [...rogueDone], cheated: runCheated, quests: quests.map(q => q.kind === 'delivery' ? { ...q, left: Math.max(0, q.until - gameTime) } : { ...q }),
                inventory: inventory.map(it => ({ ...it })), equipped: equipped.map(it => ({ ...it })), skills: [...skills],
                weaponsV: 2, areaName, restReadyAt, levels: { ...levels }, manaCap: CAP_BASE.mana, energyCap: CAP_BASE.energy, level: hero.level, exp: hero.exp, strengthLevel: hero.level, bag, talents: JSON.parse(JSON.stringify(talents)), ceoCalls, tut, tutV: 3, tutN, tutQuiz: { ...tutQuiz }, discovered: [...discovered], enemies: saveEnemies(),
                piles: piles.map(p => ({ ...p, gear: p.gear.map(it => ({ ...it })), items: p.items.map(it => ({ ...it })), left: Math.max(0, p.until - gameTime), until: undefined })) };
@@ -2187,7 +2238,7 @@
       clearLbBuffs(); Object.assign(stats, START_STATS, s.stats || {});
       if (s.strengthLevel === undefined) stats.strength += levelStrength(hero.level) - levelStrength(1);   // saves from before strength grew with level
       deals = s.deals && s.deals.every(d => d && d.type) ? s.deals : null; dealsDone = s.dealsDone || 0; foodBought = s.foodBought || 0; promotion = s.promotion || 0; kills = s.kills || 0; runCheated = !!s.cheated;
-      dripKills = s.dripKills || 0; weaponBought = !!s.weaponBought; rogueDone.clear(); for (const id of s.rogueDone || []) rogueDone.add(id);
+      dripKills = s.dripKills || 0; queenKills = s.queenKills || 0; weaponBought = !!s.weaponBought; rogueDone.clear(); for (const id of s.rogueDone || []) rogueDone.add(id);
       quests.length = 0; quests.push(...(s.quests || []).map(q => q.kind === 'delivery' ? { ...q, until: gameTime + (q.left ?? 0) } : q));
       for (const k in prices) delete prices[k]; for (const k in levels) delete levels[k];
       Object.assign(prices, startPrices(), renameKeys(s.prices)); Object.assign(levels, startLevels(), renameKeys(s.levels));
@@ -2304,6 +2355,7 @@
         row('charisma', '+10 ✦', () => { stats.charisma += 10; deals = newDeals(); return `Charisma ${stats.charisma}.`; }),
         row('strength', '+5 ⚔', () => { stats.strength += 5; return `Strength ${stats.strength}.`; }),
         row('Magic tar', 'into inventory', () => give('Magic tar', 1)),
+        row('Magic Nozzle', 'into inventory', () => give('Magic Nozzle', 1)),
         row('Tar', '+10 into inventory', () => give('Tar', 10)),
         row('new items', 'MutaGen, Tar Orb, AI chip', () => ['MutaGen', 'Tar Orb', 'AI chip'].map(n => give(n, 1)).join(' ')),
         row('Banana sword', 'into inventory', () => { if (inventory.length >= invSlots()) return 'Inventory full.'; inventory.push({ name: 'Banana sword', kind: 'sword', class: 'equipment' }); return 'Added Banana sword.'; }),
@@ -2326,6 +2378,17 @@
             enterArea(h.id, x, y, 1);
           });
         })(),
+        row('go to Pump Queen', 'greaser 2:2', () => {   // next to her forecourt, just outside her wake-up range
+          const id = Object.keys(AREAS).find(k => (AREAS[k].extraFoes || []).some(f => f.kind === 'queen'));
+          if (!id) return 'No Pump Queen.';
+          const f = AREAS[id].extraFoes.find(q => q.kind === 'queen'); ui = null; WALLS = AREAS[id].walls;
+          let x = f.spawn.x - 1, y = f.spawn.y - 1 + 6; for (let r = 0; r < 10 && !free(x, y); r++) x++;
+          enterArea(id, x, y, 1);
+        }),
+        row('Pump Queen', 'to 51% HP (next hit: stage 2)', () => {
+          const q = drips.find(d => d.kind === 'queen' && !d.dead); if (!q) return 'She is not alive in this zone.';
+          q.hp = Math.floor(q.maxHp * 0.51) + 1; return `Pump Queen at ${q.hp}/${q.maxHp}.`;
+        }),
         row('crit', 'trigger one crit', () => { onHeroCrit(); return tal('overclock', 2) ? `Overclock x${ocStacks}.` : 'Crit triggered (System Overclock has no points).'; }),
         row('delivery', 'start a rare one', () => {
           if (quests.length >= MAX_QUESTS) return `You already have ${MAX_QUESTS} active quests.`;
@@ -2361,7 +2424,7 @@
       return all.filter(r => (CHEAT_TAB[r.left] || 'world') === tab);
     }
     const CHEAT_TAB = { money: 'hero', refill: 'hero', 'mana cap': 'hero', exp: 'hero', 'level up': 'hero', charisma: 'hero', strength: 'hero', 'take damage': 'hero', die: 'hero', 'rest cooldown': 'hero',
-      'deal types': 'items', 'promotion ready': 'items', 'Magic tar': 'items', Tar: 'items', 'new items': 'items', 'Banana sword': 'items', 'baNano Sword': 'items', delivery: 'items', deliveries: 'items', poison: 'hero', 'forest loot': 'items', 'big bags': 'items' };
+      'deal types': 'items', 'promotion ready': 'items', 'Magic tar': 'items', 'Magic Nozzle': 'items', Tar: 'items', 'new items': 'items', 'Banana sword': 'items', 'baNano Sword': 'items', delivery: 'items', deliveries: 'items', poison: 'hero', 'forest loot': 'items', 'big bags': 'items' };
     // MutaTech crafting: needs every item and the energy; the made item must fit in the inventory (after the costs are taken)
     const countOf = name => inventory.filter(it => it.name === name).reduce((t, it) => t + (it.count || 1), 0);
     function takeItems(name, n) {   // remove n of an item, from the last stacks first
@@ -2826,7 +2889,8 @@
     let lootTarget = null;   // the beaten Drip whose loot window is open
     const discovered = new Set(saved.discovered || ['0:0']);   // zones the hero has been to (the map shows the rest as fog)
     discovered.add(areaName);
-    let slowUntil = 0;    // "slowed" state (Mav-1K ram): walks 20% slower until this game time
+    let slowUntil = 0;    // "slowed" state (Mav-1K ram, Pump Queen's Fuel Spray): walks slowAmt slower until this game time
+    let slowAmt = 0.2;    // how much slower (Mav-1K 20%, Fuel Spray 40%; the stronger one wins while both last)
     let rootedUntil = 0;   // "root" state: hero can't move until this game time (an enemy's Magic Tar applies it)
     let rootTotal = 2000;  // length of the current root (for the puddle's fade)
     let rootVine = false;  // the root came from a Loader's vine whip (drawn as vines, not tar)
@@ -2960,6 +3024,11 @@
     const float = (text, color, x, y) => floaters.push({ text, color, x, y, t: gameTime });
     // enemy footprint: 1 tile, or size x size tiles for big ones (Overgrown Loader: x..x+1, y-1..y; x, y = bottom-left tile)
     const foeSize = d => ENEMY[d.kind || 'drip'].size || 1;
+    // time per tile: Burning Drips are faster, the Pump Queen walks faster in stage 2
+    const stepOf = d => d.burning ? QUEEN.burnStepMs : d.kind === 'queen' ? QUEEN.stepMs[(d.stage || 1) - 1] : ET(d).stepMs;
+    // can't take a step right now: stuck in Magic Tar, or waiting out a slow (Magic Nozzle) after the last step
+    const foeHeld = d => gameTime < (d.stunUntil || 0) || gameTime < (d.slowHold || 0);
+    const foeHeadY = d => d.kind === 'loader' ? 2.4 : d.kind === 'queen' ? QUEEN.headY : 0.9;   // floating text height over its feet row, tiles
     const occupies = (d, x, y) => x >= d.x && x < d.x + foeSize(d) && y <= d.y && y > d.y - foeSize(d);
     const footDist = (d, x, y) => { const n = foeSize(d); return Math.max(Math.max(d.x - x, 0, x - (d.x + n - 1)), Math.max(d.y - n + 1 - y, 0, y - d.y)); };   // tiles from the footprint (diagonals count as 1)
     const foeCentre = (q, d) => foeSize(d) === 2 ? { x: q.x + 1, y: q.y } : { x: q.x + 0.5, y: q.y + 0.5 };   // body centre from its (drawn) anchor tile
@@ -2970,6 +3039,10 @@
 
     // every zone's Drips, kept for the whole game (zone id -> list); `drips` is the current zone's list
     let zoneDrips = {};
+    const queenFx = [];     // Pump & Ignite oil puddles { kind: 'puddle', zone, x, y, land, fire, end, lit } and absorb streaks { kind: 'absorb', ... }
+    const fireTiles = [];   // burning trail of Burning Drips: { zone, x, y, at, until }
+    let heroFireNext = 0;   // next time fire can burn the hero (once per second while he stands in it)
+    const heroSprays = [];   // Magic Nozzle cones for drawing: { angle, t, range, half }
     const TWIN_OFFSETS = [[COLS - OLD_COLS - 2, 2], [3, ROWS - OLD_ROWS - 1], [COLS - OLD_COLS - 4, ROWS - OLD_ROWS - 2]];
     const twinCache = new Map();   // the same spawn object every time (makeDrip recognises an enemy's old copy by its spawn)
     function twinSpawn(sp, o) { const k = `${sp.x},${sp.y},${o}`; if (!twinCache.has(k)) twinCache.set(k, { x: Math.min(COLS - 1, sp.x + o[0]), y: Math.min(ROWS - 1, sp.y + o[1]) }); return twinCache.get(k); }
@@ -2991,7 +3064,7 @@
     // how long ago a Drip died and how long until he respawns. Living Drips keep their health.
     function saveEnemies() {
       const out = {};
-      for (const id in zoneDrips) out[id] = zoneDrips[id].map(d => d.dead
+      for (const id in zoneDrips) out[id] = zoneDrips[id].filter(d => !d.summoned).map(d => d.dead
         ? { dead: true, x: d.x, y: d.y, since: gameTime - d.deadAt, respawnIn: Math.max(0, d.respawnAt - gameTime), loot: d.loot || null }
         : { hp: d.hp, kind: d.kind, max: d.maxHp });
       return out;
@@ -3010,7 +3083,10 @@
     // hero enters a zone: its living Drips are back at their spawn spot, not locked on, with no mana (they keep their health)
     function settleZoneDrips(id) {
       const list = zoneDrips[id] || [];
-      list.forEach((d, i) => { if (!d.dead) { const n = makeDrip(d.spawn, id, d.kind); n.hp = d.hp; n.regenT = d.regenT; list[i] = n; } });
+      for (let i = list.length - 1; i >= 0; i--) if (list[i].summoned) list.splice(i, 1);   // the Pump Queen's Drips melt away
+      list.forEach((d, i) => { if (!d.dead) { const n = makeDrip(d.spawn, id, d.kind); n.hp = d.kind === 'queen' ? n.maxHp : d.hp; n.regenT = d.regenT; list[i] = n; } });   // the Queen resets fully
+      for (let i = queenFx.length - 1; i >= 0; i--) if (queenFx[i].zone !== id) queenFx.splice(i, 1);
+      for (let i = fireTiles.length - 1; i >= 0; i--) if (fireTiles[i].zone !== id) fireTiles.splice(i, 1);
       drips = list; drip = null;
     }
     const takenByDrip = (x, y, self, list = drips) => list.some(o => o !== self && !o.dead && occupies(o, x, y));
@@ -3037,7 +3113,7 @@
                          : { home: sx, target: sx + dir };
       return { kind, patrol, home: { x: sx, y: sy }, lowUntil: 0, cloakUntil: 0, repairNext: 0, repaired: false, returning: false, flee: null, ramAt: -1e9, ramDir: null, x: sx, y: sy, fromX: sx, fromY: sy, stepStart: -1e9, hp: enemyMaxHp(kind, zoneId), maxHp: enemyMaxHp(kind, zoneId), mana: 0, manaT: 0, spawn, nextSpray: 0, spray: null,
                aggro: false, nextAttack: 0, attackStart: -1e9, hitAt: 0, hurtStart: -1e9, dead: false, deadAt: 0, lookX: -1,
-               hidden: kind === 'spore', popStart: -1e9, act: null, nextWhip: 0 };
+               hidden: kind === 'spore', popStart: -1e9, act: null, nextWhip: 0, stage: 1 };
     }
 
     function updateDrips() {
@@ -3050,10 +3126,23 @@
           return;
         }
         if (d.loot && gameTime >= d.deadAt + ET(d).lootMs) { d.loot = null; if (lootTarget === d) lootTarget = null; }
+        if (d.summoned) return;   // the Pump Queen's Drips never come back (cleared below once they've faded)
         if (gameTime >= d.respawnAt) list[i] = makeDrip(d.spawn, id, d.kind);
       });
-      drips.forEach(d => { drip = d; updateDrip(); });   // only the hero's zone is simulated
+      for (const id in zoneDrips) if (zoneDrips[id].some(d => d.summoned && d.dead && gameTime >= d.deadAt + SUMMON_FADE_MS)) {
+        const keep = zoneDrips[id].filter(d => !(d.summoned && d.dead && gameTime >= d.deadAt + SUMMON_FADE_MS));
+        zoneDrips[id].length = 0; zoneDrips[id].push(...keep);   // same array (drips points at it)
+      }
+      for (const d of drips.slice()) {   // only the hero's zone is simulated
+        drip = d; const before = d.stepStart;
+        updateDrip();
+        if (d.stepStart !== before && !d.dead) {   // took a step this frame
+          if (gameTime < (d.slowUntil || 0)) d.slowHold = d.stepStart + stepOf(d) / (1 - (d.slowAmt || 0.4));   // slowed: the next step waits longer
+          if (d.burning) fireTiles.push({ zone: areaName, x: d.fromX, y: d.fromY, at: gameTime, until: gameTime + QUEEN.trailMs });   // burning trail
+        }
+      }
     }
+    const SUMMON_FADE_MS = 2500;   // a beaten summoned Drip lies 1.5 s, then fades out over 1 s
     function updateDrip() {
       if (!drip) return;
       const t = gameTime;
@@ -3068,6 +3157,7 @@
       if (drip.kind === 'drone') { updateDrone(); return; }
       if (drip.kind === 'spore') { updateSpore(); return; }
       if (drip.kind === 'loader') { updateLoader(); return; }
+      if (drip.kind === 'queen') { updateQueen(); return; }
       const dist = cheb(player.x, player.y, drip.x, drip.y);
       if (!drip.aggro && dist <= DRIP.aggro) { drip.aggro = true; drip.manaT = t; }
       if (!drip.aggro) { patrolStep(drip); return; }
@@ -3078,14 +3168,14 @@
       if (drip.mana >= sp.mana && Math.hypot(player.x - drip.x, player.y - drip.y) <= sp.range - 0.5 && stats.health > 0) {
         drip.mana -= sp.mana; drip.manaT = t;
         const d = dripPos(), sx = d.x + 0.5, sy = d.y + 0.5, dx = player.x + 0.5 - sx, dy = player.y + 0.5 - sy, len = Math.hypot(dx, dy) || 1;
-        projectiles.push({ x: sx, y: sy, dx: dx / len, dy: dy / len, flown: 0, spell: sp, t, enemy: true });
+        projectiles.push({ x: sx, y: sy, dx: dx / len, dy: dy / len, flown: 0, spell: sp, t, enemy: true, lvl: npcLevel() });
         drip.attackStart = t;   // casting pose
         float('Magic Tar!', '#ff2bd6', drip.x + 0.5, drip.y - 1.3);
       }
       if (player.x !== drip.x) drip.lookX = player.x > drip.x ? 1 : -1;
       if (drip.hitAt && t >= drip.hitAt) { drip.hitAt = 0; dripStrikes(); }
-      if (t - drip.stepStart < DRIP.stepMs) return;              // still gliding to the next tile
-      const stuck = t < (drip.stunUntil || 0);                   // magic tar: can still swing, can't walk
+      if (t - drip.stepStart < stepOf(drip)) return;             // still gliding to the next tile
+      const stuck = foeHeld(drip);                               // magic tar: can still swing, can't walk
       if (dist === 1) {                                         // next to the hero: attack once per second
         if (t >= drip.nextAttack && !drip.hitAt) { drip.attackStart = t; drip.hitAt = t + DRIP.windupMs; drip.nextAttack = t + DRIP.attackMs; }
         return;
@@ -3109,7 +3199,7 @@
     // A blocked tile (wall, exit, another enemy, the hero) turns him around.
     function patrolStep(d) {
       const p = d.patrol, t = gameTime;
-      if (!p || t - d.stepStart < ET(d).stepMs || t < (d.stunUntil || 0)) return;
+      if (!p || t - d.stepStart < stepOf(d) || foeHeld(d)) return;
       if (d.x === p.target) p.target = 2 * p.home - p.target;
       const dir = Math.sign(p.target - d.x);
       if (!dir) return;
@@ -3151,7 +3241,7 @@
         d.attackStart = t; d.nextSpray = t + S.sprayEveryMs;
         return;
       }
-      if (t - d.stepStart < S.stepMs || t < (d.stunUntil || 0)) return;   // gliding, or stuck in magic tar
+      if (t - d.stepStart < S.stepMs || foeHeld(d)) return;   // gliding, or stuck in magic tar
       // step to keep about `keep` tiles from the hero (closer when too far, back off when too close)
       const off = (x, y) => Math.abs(Math.hypot(player.x - x, player.y - y) - S.keep);
       let best = { nx: d.x, ny: d.y, score: off(d.x, d.y) - 0.3 };   // only move when it clearly helps
@@ -3219,7 +3309,7 @@
       }
       if (d.hitAt || t - d.attackStart < 700 || t - d.stepStart < S.stepMs) return;
       if (dist === 1) { if (t >= d.nextAttack) { d.attackStart = t; d.hitAt = t + S.windupMs; d.nextAttack = t + S.attackMs; } return; }
-      if (t < (d.stunUntil || 0)) return;
+      if (foeHeld(d)) return;
       groundStep(d, player.x, player.y);
     }
     // Poison on the hero (Sporelings): ticks every second while it lasts, stops health regen
@@ -3280,8 +3370,139 @@
         d.act = { kind: 'whip', start: t, hitAt: t + L.whipWindupMs, end: t + L.whipMs, tx: player.x, ty: player.y }; d.attackStart = t; d.nextWhip = t + L.whipEveryMs;
         return;
       }
-      if (t < (d.stunUntil || 0)) return;
+      if (foeHeld(d)) return;
       groundStep(d, player.x, player.y);
+    }
+
+    // ---- Pump Queen (see QUEEN) ----
+    // her own attacks hit like a level QUEEN.dmgLevel enemy: hero's max HP at that level × mult × level factor (vs the hero)
+    const bossDamage = mult => Math.round(heroHealthCap(10, QUEEN.dmgLevel) * mult * QUEEN.dmgScale * levelDmgFactor(QUEEN.dmgLevel - hero.level));   // dmgScale: all of it 20% smaller
+    const queenCentre = d => ({ x: d.x + 1, y: d.y });   // middle of her 2 x 2 footprint, tile units
+    function inQueenSpray(d, a) {   // the hero's tile centre inside her Fuel Spray cone?
+      const c = queenCentre(d), dx = player.x + 0.5 - c.x, dy = player.y + 0.5 - c.y, len = Math.hypot(dx, dy);
+      if (len > QUEEN.sprayRange) return false;
+      if (len < 1.4) return true;   // right next to her
+      let da = Math.atan2(dy, dx) - a.angle; da = Math.atan2(Math.sin(da), Math.cos(da));
+      return Math.abs(da) <= QUEEN.sprayHalfAngle;
+    }
+    function queenSummon(d, n, burning) {   // pumps Drips out next to her footprint (up to the stage's limit of hers alive)
+      const t = gameTime, mine = drips.filter(o => o.summoned && !o.dead && o.queen === d).length;
+      n = Math.min(n, QUEEN.summonMax[d.stage - 1] - mine);
+      if (n <= 0) return;
+      const spots = [];
+      for (let y = d.y - 2; y <= d.y + 1; y++) for (let x = d.x - 1; x <= d.x + 2; x++) {
+        if (occupies(d, x, y) || !free(x, y) || exitAt(x, y) || takenByDrip(x, y, null) || (x === player.x && y === player.y) || behindTall(areaName, x, y)) continue;
+        spots.push([x, y, Math.random()]);
+      }
+      spots.sort((a, b) => a[2] - b[2]);
+      let made = 0;
+      for (const [x, y] of spots.slice(0, n)) {
+        const m = makeDrip({ x: x + 1, y: y + 1 }, areaName, 'drip');
+        const lv = QUEEN.summonLevel, hp = Math.max(1, Math.round(heroHealthCap(10, lv) * DRIP.hpMult));   // her Drips' level (2: 12 HP)
+        Object.assign(m, { level: lv, hp, maxHp: hp, summoned: true, queen: d, burning: !!burning, aggro: true, mana: 1, manaT: t, nextAttack: t + 600, popAt: t });
+        drips.push(m); made++;
+        queenFx.push({ kind: 'absorb', zone: areaName, x: d.x + 1, y: d.y - 0.6, tx: x + 0.5, ty: y + 0.6, at: t, end: t + 350 });   // a squirt of oil to where it lands
+      }
+      if (made) float(burning ? 'Burning Drip!' : `+${made} Drip${made > 1 ? 's' : ''}`, burning ? '#ff9a2e' : '#ff2bd6', d.x + 1, d.y - QUEEN.headY - 0.4);
+    }
+    function queenIgnition(d) {   // 50% HP: the scream; the absorb and the shell bursting happen 0.9 s into it
+      const t = gameTime;
+      d.act = { kind: 'roar', start: t, hitAt: t + QUEEN.roarMs * 0.6, end: t + QUEEN.roarMs };
+      d.attackStart = t;
+      float('IGNITION!', '#ff9a2e', d.x + 1, d.y - QUEEN.headY - 0.5);
+    }
+    function queenAbsorb(d) {
+      const t = gameTime; let n = 0;
+      for (const o of drips) {
+        if (o === d || o.dead || o.kind !== 'drip' || footDist(d, o.x, o.y) > QUEEN.absorbR) continue;
+        Object.assign(o, { dead: true, deadAt: t, loot: null, absorbed: true, hitAt: 0, dot: null, respawnAt: t + rand(DRIP.respawnMs[0], DRIP.respawnMs[1]) });
+        queenFx.push({ kind: 'absorb', zone: areaName, x: o.x + 0.5, y: o.y + 0.6, tx: d.x + 1, ty: d.y - 0.6, at: t, end: t + 600 });
+        if (target === o) target = null;
+        n++;
+      }
+      const heal = Math.round(d.maxHp * QUEEN.absorbHeal * n);
+      if (heal) { d.hp = Math.min(d.maxHp, d.hp + heal); float(`absorbed ${n}: +${heal} HP`, '#3ddc84', d.x + 1, d.y - QUEEN.headY - 0.9); }
+      d.stage = 2; d.burstAt = t; d.nextIgnite = t + QUEEN.firstIgniteMs; d.nextSummon = t + 5000; d.nextAttack = t + 800;
+    }
+    function queenPuddles(d) {   // Pump & Ignite: oil puddles, one always under the hero
+      const t = gameTime, n = rand(QUEEN.puddles[0], QUEEN.puddles[1]), got = [[player.x, player.y]];
+      for (let k = 0; k < 200 && got.length < n; k++) {
+        const x = player.x - 4 + Math.floor(Math.random() * 9), y = player.y - 3 + Math.floor(Math.random() * 7);
+        if (!free(x, y) || exitAt(x, y) || occupies(d, x, y) || got.some(([gx, gy]) => cheb(gx, gy, x, y) < 2)) continue;
+        got.push([x, y]);
+      }
+      got.forEach(([x, y], i) => queenFx.push({ kind: 'puddle', zone: areaName, x, y, land: t + 80 * i, fire: t + QUEEN.igniteFuseMs, end: t + QUEEN.igniteFuseMs + QUEEN.flameMs, lit: false }));
+      float('oil!', '#ff9a2e', player.x + 0.5, player.y - 1.2);
+    }
+    function updateQueen() {
+      const Q = QUEEN, d = drip, t = gameTime, fd = footDist(d, player.x, player.y), st = d.stage || 1;
+      if (d.act) {   // an attack in progress: stands still
+        const a = d.act;
+        if (!a.done && t >= a.hitAt) {
+          a.done = true;
+          if (a.kind === 'slap' && footDist(d, player.x, player.y) <= 1 && stats.health > 0) hurtHero(bossDamage(Q.slapMult[st - 1]), '#ff9a2e');
+          if (a.kind === 'spray' && stats.health > 0 && inQueenSpray(d, a)) {   // soaked: slowed 40% for 3 s + 3 ticks of damage
+            slowAmt = t < slowUntil ? Math.max(slowAmt, Q.slow) : Q.slow; slowUntil = Math.max(slowUntil, t + Q.slowMs);
+            heroDot = { boss: true, mult: Q.sprayMult, color: '#ff9a2e', left: Q.sprayTicks, next: t + 1000, spell: { tickMs: 1000 } };
+            heroHurtStart = t; float('soaked!', '#ff9a2e', player.x + 0.5, player.y - 1.1);
+          }
+          if (a.kind === 'roar') queenAbsorb(d);
+          if (a.kind === 'ignite') queenPuddles(d);
+        }
+        if (t < a.end) return;
+        d.act = null;
+      }
+      if (d.returning) {   // walks home healing 100% of max HP per 30 s; full again at home: back to the pump (stage 1)
+        d.healBuf = (d.healBuf || 0) + (t - (d.healT || t)) * d.maxHp * Q.homeHealPerMin / 60000; d.healT = t;
+        const n = Math.floor(d.healBuf); if (n) { d.healBuf -= n; d.hp = Math.min(d.maxHp, d.hp + n); }
+        if (d.hp >= d.maxHp && d.stage === 2 && d.x === d.home.x && d.y === d.home.y) { d.stage = 1; d.woke = false; }
+        if (t - d.stepStart < stepOf(d)) return;
+        const home = (x, y) => cheb(x, y, d.home.x, d.home.y);
+        if ((d.x === d.home.x && d.y === d.home.y) || !groundStep(d, d.home.x, d.home.y, home)) { if (d.hp >= d.maxHp) { d.returning = false; d.stage = 1; d.woke = false; } }
+        return;
+      }
+      d.healT = 0;
+      if (!d.aggro) { if (fd > Q.aggro || stats.health <= 0) return; d.aggro = true; }
+      if (!d.woke) {   // wakes up: the pump display flickers on
+        d.woke = true; d.nextSpray = t + 2500; d.nextSummon = t + Q.firstSummonMs; d.nextAttack = t + 500; d.nextIgnite = t + Q.firstIgniteMs;
+        float('PUMP QUEEN', '#ff9a2e', d.x + 1, d.y - Q.headY - 0.6);
+      }
+      if (cheb(player.x, player.y, d.home.x, d.home.y) > Q.leash || stats.health <= 0) { d.aggro = false; d.returning = true; return; }
+      if (player.x + 0.5 !== d.x + 1) d.lookX = player.x + 0.5 > d.x + 1 ? 1 : -1;
+      if (t >= d.nextSummon) { queenSummon(d, Q.summonN[st - 1], st === 2); d.nextSummon = t + Q.summonEveryMs[st - 1]; }
+      if (t - d.stepStart < stepOf(d)) return;   // gliding to the next tile
+      const spray = () => { const c = queenCentre(d); d.act = { kind: 'spray', start: t, hitAt: t + Q.sprayWarnMs, end: t + Q.sprayWarnMs + Q.sprayMs, angle: Math.atan2(player.y + 0.5 - c.y, player.x + 0.5 - c.x) }; d.attackStart = t; d.nextSpray = t + Q.sprayEveryMs; };
+      if (st === 2 && t >= d.nextIgnite && fd <= 8 && stats.health > 0) {   // Pump & Ignite
+        d.act = { kind: 'ignite', start: t, hitAt: t + 300, end: t + Q.igniteThrowMs }; d.attackStart = t; d.nextIgnite = t + Q.igniteEveryMs;
+        return;
+      }
+      if (fd <= 1) {   // next to her: Hose Slap (stage 1 still sprays when it's due and the slap isn't)
+        if (t >= d.nextAttack) { d.act = { kind: 'slap', start: t, hitAt: t + Q.slapWindupMs, end: t + Q.slapWindupMs + 300 }; d.attackStart = t; d.nextAttack = t + Q.slapEveryMs; }
+        else if (st === 1 && t >= d.nextSpray) spray();
+        return;
+      }
+      if (st === 1 && t >= d.nextSpray && fd <= 4 && stats.health > 0) { spray(); return; }
+      if (foeHeld(d)) return;
+      groundStep(d, player.x, player.y);
+    }
+    // puddles catching fire, burning trails: the hero takes the blast once, then fire burns once per second while he stands in it
+    function updateQueenFx() {
+      const t = gameTime;
+      let blast = false;
+      for (let i = queenFx.length - 1; i >= 0; i--) {
+        const f = queenFx[i];
+        if (t >= f.end) { queenFx.splice(i, 1); continue; }
+        if (f.kind !== 'puddle' || f.lit || t < f.fire) continue;
+        f.lit = true;
+        if (f.zone !== areaName) continue;
+        if (player.x === f.x && player.y === f.y && stats.health > 0) blast = true;
+        for (const o of drips) if (!o.dead && o.kind === 'drip' && !o.burning && o.x === f.x && o.y === f.y) { o.burning = true; float('burning!', '#ff9a2e', o.x + 0.5, o.y - 1.3); }
+      }
+      if (blast) { hurtHero(bossDamage(QUEEN.igniteMult), '#ff6a00'); heroFireNext = t + 1000; float('IGNITED!', '#ff6a00', player.x + 0.5, player.y - 1.3); if (stats.health <= 0) return; }
+      for (let i = fireTiles.length - 1; i >= 0; i--) if (t >= fireTiles[i].until) fireTiles.splice(i, 1);
+      const onFire = fireTiles.some(f => f.zone === areaName && f.x === player.x && f.y === player.y && t - f.at > 150)
+        || queenFx.some(f => f.kind === 'puddle' && f.lit && f.zone === areaName && f.x === player.x && f.y === player.y);
+      if (onFire && t >= heroFireNext && stats.health > 0) { heroFireNext = t + 1000; hurtHero(bossDamage(QUEEN.fireMult), '#ff6a00'); }
     }
 
     // ---- Mav-1K drone (see DRONE) ----
@@ -3303,7 +3524,7 @@
     }
     function dronePatrol(d) {
       const p = d.patrol, t = gameTime;
-      if (t - d.stepStart < DRONE.stepMs || t < (d.stunUntil || 0)) return;
+      if (t - d.stepStart < DRONE.stepMs || foeHeld(d)) return;
       if (d.x === p.target) p.target = p.target === p.a ? p.b : p.a;
       const dir = Math.sign(p.target - d.x);
       if (!dir) return;
@@ -3326,7 +3547,7 @@
       if (d.aggro && Math.hypot(player.x - d.x, player.y - d.y) >= D.leash) { d.aggro = false; d.returning = true; d.hitAt = 0; }   // gives up
       if (!d.aggro && dist <= D.aggro && stats.health > 0) { d.aggro = true; d.returning = false; }
       if (d.returning) {   // back to its spawn spot, then patrols again
-        if (t - d.stepStart < D.stepMs || t < (d.stunUntil || 0)) return;
+        if (t - d.stepStart < D.stepMs || foeHeld(d)) return;
         if ((d.x === d.home.x && d.y === d.home.y) || !droneStep(d, d.home.x, d.home.y)) {
           d.returning = false; d.patrol.a = Math.max(1, Math.min(COLS - 2, d.x + 2 * (d.patrol.a > d.patrol.b ? 1 : -1)));
           d.patrol.b = Math.max(1, Math.min(COLS - 2, d.x - (d.patrol.a > d.x ? 1 : -1))); d.patrol.target = d.patrol.a;
@@ -3337,7 +3558,7 @@
       if (d.hitAt && t >= d.hitAt) { d.hitAt = 0; droneRams(d); }
       if (d.hitAt || t < d.lowUntil) return;                        // rising for the ram, or low right after it
       if (player.x !== d.x) d.lookX = player.x > d.x ? 1 : -1;
-      if (t - d.stepStart < D.stepMs || t < (d.stunUntil || 0)) return;
+      if (t - d.stepStart < D.stepMs || foeHeld(d)) return;
       if (dist === 1) {                                              // next to the hero: rise (beep) and ram
         if (t >= d.nextAttack && stats.health > 0) { d.attackStart = t; d.hitAt = t + D.windupMs; }
         return;
@@ -3351,7 +3572,7 @@
       if (cheb(player.x, player.y, d.x, d.y) !== 1 || stats.health <= 0) return;   // the hero stepped away: missed
       hurtHero(npcDamage(D.ramMult), '#00e5ff');   // 15% of a same-level hero's max HP
       if (stats.health > 0 && Math.random() < D.slowChance) {
-        slowUntil = t + D.slowMs;   // refreshes, doesn't stack
+        slowAmt = t < slowUntil ? Math.max(slowAmt, D.slow) : D.slow; slowUntil = Math.max(slowUntil, t + D.slowMs);   // refreshes, doesn't stack
         float('slowed!', '#4ea1ff', player.x + 0.5, player.y - 1.1);
       }
     }
@@ -3379,9 +3600,9 @@
     // Damage = round(hero's max HP at the enemy's level × the attack's multiplier × level factor). Level factor: same level 100%,
     // +20 points per level the enemy is above the hero (1 above 120%, 5 above 200%), −30 points per level below
     // (1 below 70%, 2 below 40%, 3 below 10%, 4+ below 0%). Can be 0.
-    const npcLevel = () => zoneLevel(areaName);   // fights only happen in the hero's zone
+    const npcLevel = () => (drip && drip.level) || zoneLevel(areaName);   // the zone's level (fights only happen in the hero's zone); the Pump Queen's Drips have their own
     const levelDmgFactor = diff => diff >= 0 ? 1 + 0.2 * diff : Math.max(0, 1 - 0.3 * -diff);
-    const npcDamage = mult => Math.round(heroHealthCap(10, npcLevel()) * mult * levelDmgFactor(npcLevel() - hero.level));
+    const npcDamage = (mult, lvl = npcLevel()) => Math.round(heroHealthCap(10, lvl) * mult * levelDmgFactor(lvl - hero.level));
     // an enemy's hit lands on the hero (0 damage: a grey "0", no blink)
     function hurtHero(dmg, color) {
       if (dmg <= 0) { float('0', '#8a8a8a', player.x + 0.5, player.y - 0.6); return; }
@@ -3408,7 +3629,7 @@
     const hitPts = () => Math.min(HIT_CAP, Math.max(0, equipSum('hit')));
     const hitChance = (enemyLvl = npcLevel()) => enemyLvl < hero.level ? 1 : Math.max(0, Math.min(1, HIT_BASE + HIT_PER_PT * hitPts() - HIT_PER_LVL * (enemyLvl - hero.level)));
     const heroHits = () => Math.random() < hitChance();   // every enemy in a fight lives in the hero's zone, so has its level
-    function heroMissed(d) { d.aggro = true; d.returning = false; float('miss', '#8a8a8a', d.x + (foeSize(d) === 2 ? 1 : 0.5), d.y - (d.kind === 'loader' ? 2.4 : 0.9)); }
+    function heroMissed(d) { d.aggro = true; d.returning = false; float('miss', '#8a8a8a', d.x + (foeSize(d) === 2 ? 1 : 0.5), d.y - foeHeadY(d)); }
     function heroAttack() {
       if (gameTime < heroNextAttack) return;
       heroNextAttack = gameTime + heroAttackMs();
@@ -3459,13 +3680,15 @@
     }
 
     function damageDrip(dmg, text, color) {
+      if (drip.kind === 'queen' && drip.stage === 2 && dmg > 0 && text !== 'cheat') { const was = dmg; dmg = Math.max(1, Math.round(dmg * QUEEN.stage2Armor)); if (dmg !== was) text = text.replace(`-${was}`, `-${dmg}`); }   // stage 2: 10% less
       drip.hp = Math.max(0, drip.hp - dmg);
+      if (drip.kind === 'queen' && drip.hp > 0 && drip.stage === 1 && drip.hp <= drip.maxHp / 2 && !(drip.act && drip.act.kind === 'roar')) queenIgnition(drip);
       drip.hurtStart = gameTime; drip.aggro = true; drip.returning = false;
-      float(text, color, drip.x + foeSize(drip) / 2, drip.y - (drip.kind === 'loader' ? 2.4 : 0.9));
+      float(text, color, drip.x + foeSize(drip) / 2, drip.y - foeHeadY(drip));
       if (drip.kind === 'spore' && drip.hidden) revealSpore(drip);
       if (drip.kind === 'drone' && drip.hp > 0 && drip.hp <= drip.maxHp * DRONE.cloakPct && !drip.repaired) droneCloak(drip);   // once per life, at 10% HP or less
       if (drip.hp <= 0) {   // nothing is given yet: the loot waits on his puddle
-        drip.dead = true; drip.deadAt = gameTime; drip.hitAt = 0; drip.dot = null; drip.stunUntil = 0; kills++; if ((drip.kind || 'drip') === 'drip') dripKills++;
+        drip.dead = true; drip.deadAt = gameTime; drip.hitAt = 0; drip.dot = null; drip.stunUntil = 0; kills++; if ((drip.kind || 'drip') === 'drip' && !drip.summoned) dripKills++; if (drip.kind === 'queen') queenKills++;
         if (drip.kind === 'drone') {   // falls: the wreck lands on the nearest walkable tile (it may have been over a building)
           drip.cloakUntil = 0; drip.fromX = drip.x; drip.fromY = drip.y;
           if (!free(drip.x, drip.y)) {
@@ -3480,6 +3703,8 @@
         const T = ET(drip); drip.spray = null; drip.act = null;
         if (drip.kind === 'spore') sporeClouds.push({ zone: areaName, x: drip.x, y: drip.y, at: gameTime, until: gameTime + SPORE.cloudMs });   // bursts into a spore cloud
         drip.respawnAt = gameTime + rand(T.respawnMs[0], T.respawnMs[1]);   // respawn timer starts now
+        if (drip.summoned) { drip.loot = null; if (target === drip) retarget(); return; }   // the Queen's Drips: no exp, no loot
+        if (drip.kind === 'queen') { drip.act = null; float('PUMP QUEEN DEFEATED', '#ff9a2e', drip.x + 1, drip.y - 3); for (const o of drips) if (o.summoned && !o.dead) { o.dead = true; o.deadAt = gameTime; o.loot = null; } }   // her Drips melt with her
         const L = T.loot, items = [];
         const tars = L.tar ? rand(L.tar[0], L.tar[1]) : 0;
         if (tars) items.push({ name: 'Tar', count: tars });
@@ -3488,9 +3713,10 @@
         if (L.aiChipChance && Math.random() < L.aiChipChance) items.push({ name: 'AI chip', count: 1 });
         if (L.sporeSacChance && Math.random() < L.sporeSacChance) items.push({ name: 'Spore Sac', count: 1 });
         if (L.coreChance && Math.random() < L.coreChance) items.push({ name: 'Loader Core', count: 1 });
+        if (L.queenRare) items.push({ name: Math.random() < 0.5 ? 'Magic tar' : 'Magic Nozzle', count: 1 });   // Pump Queen: one rare, 50/50
         const zm = L.zoneMoney ? zoneCoords(areaName).reduce((a, b) => a + b, 0) : 0;   // Loader: + |x| + |y| of its zone
         drip.loot = { money: rand(L.money[0] + zm, L.money[1] + zm), items };
-        gainExp(killExp(drip, levelDmgFactor(npcLevel() - hero.level)));
+        gainExp(T.exp && drip.kind === 'queen' ? Math.round(T.exp * levelDmgFactor(npcLevel() - hero.level)) : killExp(drip, levelDmgFactor(npcLevel() - hero.level)));
         const vt = tal('chrome', 1);   // VampTech
         if (vt && stats.health > 0) { const n = Math.round(CAPS.health * [0.08, 0.12, 0.16, 0.20][vt - 1]); const was = stats.health; stats.health = capped('health', stats.health + n); if (stats.health > was) float(`+${stats.health - was} HP`, '#e5484d', player.x + 0.5, player.y - 1.4); renderStats(); }   // round(his max HP × 0.4 × level factor)
         if (target === drip) retarget();   // next closest enemy, or no target
@@ -3555,10 +3781,28 @@
       if (near) { dx = near.q.x - hx; dy = near.q.y - hy; }
       if (!dx && !dy) dx = lookX;
       const len = Math.hypot(dx, dy);
+      if (sp.cone) { fuelSpray(Math.atan2(dy, dx), sp); if (dx) lookX = dx > 0 ? 1 : -1; return; }
       projectiles.push({ x: hx, y: hy, dx: dx / len, dy: dy / len, flown: 0, spell: sp, t: gameTime });
       if (dx) lookX = dx > 0 ? 1 : -1;
     }
 
+    // Magic Nozzle (Fuel Spray): every enemy in the cone at once (each one rolls the hit chance)
+    function fuelSpray(angle, sp) {
+      const t = gameTime, hx = player.x + 0.5, hy = player.y + 0.5, keep = drip;
+      heroSprays.push({ angle, t, range: sp.range, half: sp.halfAngle });
+      for (const e of drips) {
+        if (e.dead || cloaked(e)) continue;
+        drip = e; const c = foeCentre(dripPos(), e), ex = c.x - hx, ey = c.y - hy, dist = Math.hypot(ex, ey) - foeR(e);
+        let da = Math.atan2(ey, ex) - angle; da = Math.atan2(Math.sin(da), Math.cos(da));
+        if (dist > sp.range || (Math.abs(da) > sp.halfAngle + Math.min(0.6, foeR(e) / Math.max(0.5, dist)) && Math.hypot(ex, ey) > 0.9)) continue;
+        if (!heroHits()) { heroMissed(e); continue; }
+        e.slowUntil = t + sp.slowMs; e.slowAmt = sp.slow;
+        e.dot = { spell: sp, left: sp.ticks, next: t + sp.tickMs };
+        e.aggro = true; e.returning = false;
+        float('soaked!', '#ff9a2e', e.x + foeSize(e) / 2, e.y - foeHeadY(e) - 0.3);
+      }
+      drip = keep;
+    }
     function updateProjectiles(dt) {
       for (let i = projectiles.length - 1; i >= 0; i--) {
         const pr = projectiles[i], step = Math.min(pr.spell.speed * dt / 1000, pr.spell.range - pr.flown);
@@ -3566,7 +3810,7 @@
         let gone = false;
         if (pr.enemy && Math.hypot(player.x + 0.5 - pr.x, player.y + 0.5 - pr.y) < 0.55) {   // an enemy's Magic Tar hits the hero
           rootedUntil = Math.max(rootedUntil, gameTime + pr.spell.rootMs); rootTotal = pr.spell.rootMs; rootVine = false;
-          heroDot = { spell: pr.spell, left: pr.spell.ticks, next: gameTime + pr.spell.tickMs };
+          heroDot = { spell: pr.spell, left: pr.spell.ticks, next: gameTime + pr.spell.tickMs, lvl: pr.lvl };
           heroHurtStart = gameTime;
           float('rooted!', '#ff2bd6', player.x + 0.5, player.y - 1.1);
           gone = true;
@@ -3592,7 +3836,8 @@
     // damage over time on the hero (enemy Magic Tar)
     function updateHeroDot() {
       while (heroDot && gameTime >= heroDot.next && stats.health > 0) {
-        hurtHero(npcDamage(DRIP.tarMult), '#ff2bd6');   // Drip's Magic Tar: 8% of a same-level hero's max HP per second
+        if (heroDot.boss) hurtHero(bossDamage(heroDot.mult), heroDot.color);   // Pump Queen's Fuel Spray
+        else hurtHero(npcDamage(DRIP.tarMult, heroDot.lvl || zoneLevel(areaName)), '#ff2bd6');   // Drip's Magic Tar: 8% of a same-level hero's max HP per second
         if (stats.health <= 0) { heroDot = null; return; }
         if (--heroDot.left <= 0) heroDot = null; else heroDot.next += heroDot.spell.tickMs;
       }
@@ -3732,7 +3977,7 @@
     const COMBO_MS = 60;         // short wait so W+D pressed together counts as one diagonal step
     const MOVE_MS = 180;         // time to glide from one tile to the next (steady speed)
     let stepMs = MOVE_MS;        // this step's duration: longer while injured
-    const currentStepMs = () => (hasState('injured') ? MOVE_MS / STATES.injured.speed : MOVE_MS) / (1 + lbSpeed() + equipSum('speed')) / (gameTime < slowUntil ? 1 - DRONE.slow : 1);   // Top-1 buffs: +10% speed each
+    const currentStepMs = () => (hasState('injured') ? MOVE_MS / STATES.injured.speed : MOVE_MS) / (1 + lbSpeed() + equipSum('speed')) / (gameTime < slowUntil ? 1 - slowAmt : 1);   // Top-1 buffs: +10% speed each
     let comboTimer = null;
     // glide state: player.x/y is the tile we are on or heading to; from* is where the glide started
     let moving = false, fromX = player.x, fromY = player.y, moveStart = 0;
@@ -3825,7 +4070,7 @@
       lastFrame = now;
       syncChef();
       if (dt) { checkDeliveries(); checkRogueQuests(); for (let i = piles.length - 1; i >= 0; i--) if (gameTime >= piles[i].until) piles.splice(i, 1);
-        updateDrips(); updateProjectiles(dt); updateHeroDot(); updatePoison(); updateHeroMana(); updateHeroHealth(); }
+        updateDrips(); updateQueenFx(); updateProjectiles(dt); updateHeroDot(); updatePoison(); updateHeroMana(); updateHeroHealth(); }
       // keys still held when Tart wears off (or a blocking enemy moves): start walking again
       if (!moving && !comboTimer && held.size && !anyOpen()) tryStep(now);
       let rx = player.x, ry = player.y;
@@ -4115,7 +4360,7 @@
         ctx.moveTo(-8, -12); ctx.lineTo(8, 0); ctx.lineTo(-8, 12); ctx.stroke(); ctx.restore();
       }
       drawPiles();
-      drawSporeClouds(); drawFoeTelegraphs();
+      drawSporeClouds(); drawFoeTelegraphs(); drawQueenGround();
       for (const e of drips) if (e.kind === 'drone' && !e.dead) { drip = e; drawDroneShadow(e); }   // drones' shadows on the ground, under buildings
 
       for (const d of AREAS[areaName].decos || []) drawWall(d);   // walkable ground decoration (mushroom patches)
@@ -4314,7 +4559,7 @@
 
     // ---- combat drawing ---------------------------------------------------------
     function dripPos() {
-      const p = Math.min(1, (gameTime - drip.stepStart) / ET(drip).stepMs);
+      const p = Math.min(1, (gameTime - drip.stepStart) / stepOf(drip));
       return { x: drip.fromX + (drip.x - drip.fromX) * p, y: drip.fromY + (drip.y - drip.fromY) * p };
     }
     // one cell of a Drip sheet, puddle centre on the tile's bottom-centre, scaled so his body is DRIP_BODY tiles
@@ -4347,7 +4592,7 @@
       ctx.restore();
     }
     // walk frame (0-3) while the enemy is gliding to the next tile, else -1
-    const walkFrame = t => { const p = (t - drip.stepStart) / ET(drip).stepMs;
+    const walkFrame = t => { const p = (t - drip.stepStart) / stepOf(drip);
       return p >= 0 && p < 1 && (drip.x !== drip.fromX || drip.y !== drip.fromY) ? Math.min(3, Math.floor(p * 4)) : -1; };
     function drawScavBody(cx, feet, t) {
       const s = drip.spray, A = SCAV_ART, neon = dripNeon();
@@ -4412,7 +4657,7 @@
       const t = gameTime;
       for (const d of drips) {
         const a = d.act;
-        if (d.dead || !a || t >= a.hitAt + 300) continue;
+        if (d.dead || !a || t >= a.hitAt + 300 || d.kind === 'queen') continue;
         const pulse = 0.5 + 0.5 * Math.sin(t / 60);
         ctx.save();
         if (a.kind === 'whip') {   // pulsing green circle (up to 40%) on the tile it will lash
@@ -4431,6 +4676,208 @@
         ctx.restore();
       }
     }
+    // ---- Pump Queen drawing: her sheets once they exist (QUEEN_ART), shapes until then ----
+    function drawQueenCell(key, frame, cx, feet, neon) {   // one frame of her sheets, puddle centre on the bottom-centre of her footprint, art faces left
+      const im = ART[key], spec = QUEEN_ART[key.replace(/^queen/, '').replace(/^./, c => c.toLowerCase())];
+      if (!spec || !ready(im)) return false;
+      drawScavCell(im, spec, Math.min(frame, spec.frames - 1), cx, feet, neon, FOE_K);
+      return true;
+    }
+    function queenFrame(t) {   // which sheet and frame to show now
+      const d = drip, a = d.act, st = d.stage || 1, p = a ? t - a.start : 0;
+      if (a && a.kind === 'roar') return ['queenRoar', Math.min(3, Math.floor(p / (QUEEN.roarMs / 4)))];
+      if (a && a.kind === 'slap') return ['queenSlap' + st, p < QUEEN.slapWindupMs - 200 ? 0 : p < QUEEN.slapWindupMs ? 1 : p < QUEEN.slapWindupMs + 150 ? 2 : 3];
+      if (a && a.kind === 'spray') return ['queenSpray1', p < QUEEN.sprayWarnMs ? 0 : p < QUEEN.sprayWarnMs + 200 ? 1 : p < a.end - a.start - 200 ? 2 : 3];
+      if (a && a.kind === 'ignite') return ['queenIgnite2', Math.min(3, Math.floor(p / 150))];
+      if (t - d.hurtStart < 250) return ['queenHurt', st - 1];
+      if (walkFrame(t) >= 0) return ['queenWalk' + st, walkFrame(t)];
+      return ['queenIdle' + st, 0];
+    }
+    function drawQueenBody(cx, feet, t) {
+      const d = drip, [key, f] = queenFrame(t);
+      if (!drawQueenCell(key, f, cx, feet, dripNeon())) drawQueenShape(cx, feet, t);
+      if (d.burstAt && t - d.burstAt < 800 && !ready(ART.queenRoar)) {   // the pump shell bursting off (her Ignition sheet shows it when it's there)
+        const k = (t - d.burstAt) / 800;
+        ctx.save(); ctx.globalAlpha = 1 - k;
+        for (let i = 0; i < 8; i++) {
+          const ang = -Math.PI * (0.1 + 0.8 * i / 7), r = k * 2.2 * TILE, x = cx + Math.cos(ang) * r, y = feet - 1.4 * TILE + Math.sin(ang) * r + k * k * 1.6 * TILE;
+          ctx.save(); ctx.translate(x, y); ctx.rotate(k * 8 + i);
+          ctx.fillStyle = i % 3 ? '#b8322e' : '#d9d2c3'; ctx.strokeStyle = '#10131C'; ctx.lineWidth = 3;
+          ctx.beginPath(); ctx.rect(-14, -10, 28, 20); ctx.fill(); ctx.stroke(); ctx.restore();
+        }
+        ctx.globalCompositeOperation = 'lighter'; ctx.globalAlpha = 0.6 * (1 - k);
+        const g = ctx.createRadialGradient(cx, feet - 1.3 * TILE, 0, cx, feet - 1.3 * TILE, 2.5 * TILE);
+        g.addColorStop(0, 'rgba(255, 154, 46, 0.9)'); g.addColorStop(1, 'rgba(255, 80, 0, 0)');
+        ctx.fillStyle = g; ctx.beginPath(); ctx.arc(cx, feet - 1.3 * TILE, 2.5 * TILE, 0, Math.PI * 2); ctx.fill();
+        ctx.restore();
+      }
+    }
+    // placeholder: stage 1 a red fuel pump sunk in a puddle of living oil (price display = face, hoses = arms);
+    // stage 2 a big burning blob of oil with the hoses still hanging off it
+    function drawQueenShape(cx, feet, t) {
+      const d = drip, st = d.stage || 1, a = d.act, T = TILE, dir = d.lookX > 0 ? 1 : -1, ink = '#10131C';
+      const roar = a && a.kind === 'roar', shake = roar ? Math.sin(t / 25) * 4 : 0, hurt = t - d.hurtStart < 200;
+      const sel = dripNeon()[0];
+      ctx.save(); ctx.translate(cx + shake, feet);
+      ctx.lineJoin = 'round'; ctx.lineCap = 'round';
+      // oil puddle she sits in
+      ctx.fillStyle = '#07080c'; ctx.beginPath(); ctx.ellipse(0, -6, 1.15 * T, 0.32 * T, 0, 0, Math.PI * 2); ctx.fill();
+      ctx.strokeStyle = 'rgba(255, 43, 214, 0.35)'; ctx.lineWidth = 3; ctx.beginPath(); ctx.ellipse(0, -6, 1.0 * T, 0.24 * T, 0, Math.PI * 1.1, Math.PI * 1.5); ctx.stroke();
+      ctx.strokeStyle = 'rgba(0, 229, 255, 0.35)'; ctx.beginPath(); ctx.ellipse(0, -6, 1.0 * T, 0.24 * T, 0, Math.PI * 0.1, Math.PI * 0.4); ctx.stroke();
+      const hose = (side, raise) => {   // a fuel hose arm ending in a nozzle; raise 0..1 lifts it for a slap / aims it for a spray
+        const sx = side * 0.5 * T, sy = -1.3 * T, ex = side * (0.8 + 0.4 * raise) * T, ey = -(0.45 + 1.5 * raise) * T;
+        ctx.strokeStyle = ink; ctx.lineWidth = 12; ctx.beginPath(); ctx.moveTo(sx, sy); ctx.quadraticCurveTo(side * (0.75 + 0.2 * raise) * T, -(0.2 + 0.9 * raise) * T, ex, ey); ctx.stroke();
+        ctx.strokeStyle = '#1d212b'; ctx.lineWidth = 6; ctx.stroke();
+        ctx.save(); ctx.translate(ex, ey); ctx.rotate(side * (0.4 + raise * 1.6));
+        ctx.fillStyle = '#c9ccd6'; ctx.strokeStyle = ink; ctx.lineWidth = 3; ctx.beginPath(); ctx.rect(-7, -4, 14, 26); ctx.fill(); ctx.stroke();
+        ctx.fillStyle = '#ff9a2e'; ctx.beginPath(); ctx.rect(-4, 20, 8, 8); ctx.fill(); ctx.stroke();
+        ctx.restore();
+      };
+      let lift = 0, aim = 0;
+      if (a && a.kind === 'slap') { const p = (t - a.start) / QUEEN.slapWindupMs; lift = p < 1 ? p : Math.max(0, 1 - (p - 1) * 3); }
+      if (a && (a.kind === 'spray' || a.kind === 'ignite')) aim = 0.6;
+      if (st === 1) {
+        ctx.scale(1.15, 1.12);   // the pump stands a bit taller than a Drip's hood
+        if (sel) { ctx.save(); ctx.globalAlpha = sel.alpha; ctx.strokeStyle = sel.color; ctx.lineWidth = 10; ctx.strokeRect(-0.62 * T, -2.45 * T, 1.24 * T, 2.35 * T); ctx.restore(); }
+        hose(-dir, aim * 0.4);
+        // pump body
+        ctx.fillStyle = hurt ? '#ff6b6b' : '#b8322e'; ctx.strokeStyle = ink; ctx.lineWidth = 5;
+        ctx.beginPath(); ctx.roundRect ? ctx.roundRect(-0.55 * T, -2.35 * T, 1.1 * T, 2.2 * T, 10) : ctx.rect(-0.55 * T, -2.35 * T, 1.1 * T, 2.2 * T); ctx.fill(); ctx.stroke();
+        ctx.fillStyle = 'rgba(0, 0, 0, 0.25)'; ctx.fillRect(0.25 * T, -2.3 * T, 0.27 * T, 2.12 * T);
+        ctx.fillStyle = '#d9d2c3'; ctx.fillRect(-0.5 * T, -2.3 * T, 1.0 * T, 0.28 * T); ctx.strokeRect(-0.5 * T, -2.3 * T, 1.0 * T, 0.28 * T);   // top sign
+        ctx.fillStyle = '#ff2bd6'; ctx.fillRect(-0.4 * T, -2.21 * T, 0.8 * T, 0.08 * T);
+        // cracked price display: the face, two amber digit-eyes
+        ctx.fillStyle = '#0b0d12'; ctx.fillRect(-0.42 * T, -1.92 * T, 0.84 * T, 0.5 * T); ctx.strokeRect(-0.42 * T, -1.92 * T, 0.84 * T, 0.5 * T);
+        const on = d.aggro ? 0.75 + 0.25 * Math.sin(t / (roar ? 30 : 140)) : 0.25;
+        ctx.fillStyle = `rgba(255, 176, 32, ${on})`; ctx.shadowColor = '#ffb020'; ctx.shadowBlur = d.aggro ? 14 : 0;
+        ctx.fillRect(-0.3 * T, -1.82 * T, 0.18 * T, 0.26 * T); ctx.fillRect(0.12 * T, -1.82 * T, 0.18 * T, 0.26 * T);
+        ctx.shadowBlur = 0;
+        ctx.strokeStyle = 'rgba(217, 210, 195, 0.6)'; ctx.lineWidth = 2; ctx.beginPath(); ctx.moveTo(-0.1 * T, -1.92 * T); ctx.lineTo(0.02 * T, -1.7 * T); ctx.lineTo(-0.06 * T, -1.5 * T); ctx.stroke();
+        // oil oozing from the top and down the sides
+        ctx.fillStyle = '#07080c';
+        for (const [x, len] of [[-0.45, 0.9], [-0.15, 0.5], [0.3, 1.2], [0.48, 0.7]]) { const l = len + 0.08 * Math.sin(t / 300 + x * 9); ctx.beginPath(); ctx.ellipse(x * T, (-2.3 + l / 2) * T, 0.07 * T, l / 2 * T, 0, 0, Math.PI * 2); ctx.fill(); }
+        hose(dir, lift || aim);
+      } else {
+        // the burning blob
+        const wob = 1 + 0.03 * Math.sin(t / 180), w = 1.05 * T * wob, h = 1.35 * T / wob;
+        if (sel) { ctx.save(); ctx.globalAlpha = sel.alpha; ctx.strokeStyle = sel.color; ctx.lineWidth = 10; ctx.beginPath(); ctx.ellipse(0, -h - 0.05 * T, w + 6, h + 6, 0, 0, Math.PI * 2); ctx.stroke(); ctx.restore(); }
+        hose(-dir, aim * 0.5);
+        ctx.fillStyle = hurt ? '#3a1a1a' : '#0b0c10'; ctx.strokeStyle = ink; ctx.lineWidth = 5;
+        ctx.beginPath(); ctx.ellipse(0, -h - 0.05 * T, w, h, 0, 0, Math.PI * 2); ctx.fill(); ctx.stroke();
+        const core = ctx.createRadialGradient(0, -1.2 * T, 4, 0, -1.2 * T, 0.75 * T);
+        core.addColorStop(0, 'rgba(255, 230, 120, 0.95)'); core.addColorStop(0.35, 'rgba(255, 120, 20, 0.8)'); core.addColorStop(1, 'rgba(255, 60, 0, 0)');
+        ctx.fillStyle = core; ctx.beginPath(); ctx.arc(0, -1.2 * T, 0.75 * T, 0, Math.PI * 2); ctx.fill();
+        ctx.fillStyle = 'rgba(255, 255, 255, 0.18)'; ctx.beginPath(); ctx.ellipse(-0.45 * T, -2.1 * T, 0.18 * T, 0.09 * T, -0.5, 0, Math.PI * 2); ctx.fill();   // glossy shine
+        ctx.fillStyle = '#ffb020'; ctx.shadowColor = '#ff9a2e'; ctx.shadowBlur = 16;   // eyes
+        ctx.fillRect(-0.32 * T, -2.15 * T, 0.18 * T, 0.12 * T); ctx.fillRect(0.14 * T, -2.15 * T, 0.18 * T, 0.12 * T); ctx.shadowBlur = 0;
+        ctx.fillStyle = '#b8322e'; ctx.strokeStyle = ink; ctx.lineWidth = 3;   // a broken bit of the pump stuck in her
+        ctx.save(); ctx.translate(0.55 * T, -0.7 * T); ctx.rotate(0.5); ctx.fillRect(-12, -16, 24, 32); ctx.strokeRect(-12, -16, 24, 32); ctx.restore();
+        ctx.globalCompositeOperation = 'lighter';   // flames on top
+        for (let i = 0; i < 5; i++) {
+          const x = (-0.5 + i * 0.25) * T, fl = (0.3 + 0.12 * Math.sin(t / 70 + i * 2)) * T, y = -2.55 * T + Math.abs(i - 2) * 0.12 * T;
+          ctx.fillStyle = i % 2 ? 'rgba(255, 154, 46, 0.85)' : 'rgba(255, 220, 90, 0.75)';
+          ctx.beginPath(); ctx.moveTo(x - 0.1 * T, y + 0.1 * T); ctx.quadraticCurveTo(x, y - fl, x + 0.1 * T, y + 0.1 * T); ctx.fill();
+        }
+        ctx.globalCompositeOperation = 'source-over';
+        hose(dir, lift || aim);
+      }
+      if (roar) {   // the scream: rings of heat
+        const p = (t - a.start) / QUEEN.roarMs;
+        ctx.strokeStyle = `rgba(255, 154, 46, ${1 - p})`; ctx.lineWidth = 6;
+        for (const r of [p, (p + 0.5) % 1]) { ctx.beginPath(); ctx.ellipse(0, -1.4 * T, (0.8 + r * 1.8) * T, (0.6 + r * 1.3) * T, 0, 0, Math.PI * 2); ctx.stroke(); }
+      }
+      ctx.restore();
+    }
+    function drawQueenDead(cx, feet, neon) {   // beaten: a flat oil slick with the broken pump in it
+      if (drawQueenCell('queenHurt', 3, cx, feet, neon)) return;
+      const T = TILE, ink = '#10131C';
+      ctx.save(); ctx.translate(cx, feet);
+      ctx.fillStyle = '#07080c'; ctx.beginPath(); ctx.ellipse(0, -10, 1.2 * T, 0.38 * T, 0, 0, Math.PI * 2); ctx.fill();
+      ctx.rotate(-0.12); ctx.fillStyle = '#7a2420'; ctx.strokeStyle = ink; ctx.lineWidth = 4;   // the pump lying on its side
+      ctx.fillRect(-0.85 * T, -0.62 * T, 1.6 * T, 0.55 * T); ctx.strokeRect(-0.85 * T, -0.62 * T, 1.6 * T, 0.55 * T);
+      ctx.fillStyle = '#0b0d12'; ctx.fillRect(0.35 * T, -0.55 * T, 0.32 * T, 0.4 * T);
+      ctx.restore();
+      if (neon) { ctx.save(); ctx.globalAlpha = neon.alpha; ctx.strokeStyle = neon.color; ctx.lineWidth = 4; ctx.beginPath(); ctx.ellipse(cx, feet - 10, 1.25 * T, 0.42 * T, 0, 0, Math.PI * 2); ctx.stroke(); ctx.restore(); }
+    }
+    // a Burning Drip: orange glow and little flames over the oil
+    function drawBurning(cx, feet, t) {
+      ctx.save(); ctx.globalCompositeOperation = 'lighter';
+      const g = ctx.createRadialGradient(cx, feet - 50, 4, cx, feet - 50, 70);
+      g.addColorStop(0, 'rgba(255, 140, 30, 0.35)'); g.addColorStop(1, 'rgba(255, 60, 0, 0)');
+      ctx.fillStyle = g; ctx.beginPath(); ctx.arc(cx, feet - 50, 70, 0, Math.PI * 2); ctx.fill();
+      for (let i = 0; i < 4; i++) {
+        const x = cx - 24 + i * 16, fl = 26 + 10 * Math.sin(t / 60 + i * 1.7), y = feet - DRIP_BODY * TILE + 22 + Math.abs(i - 1.5) * 8;
+        ctx.fillStyle = i % 2 ? 'rgba(255, 154, 46, 0.9)' : 'rgba(255, 225, 100, 0.8)';
+        ctx.beginPath(); ctx.moveTo(x - 9, y); ctx.quadraticCurveTo(x, y - fl, x + 9, y); ctx.fill();
+      }
+      ctx.restore();
+    }
+    const drawFlame = (x, y, s, t, seed) => {   // one flickering flame, base at (x, y), px
+      for (const [k, c] of [[1, 'rgba(255, 90, 0, 0.75)'], [0.65, 'rgba(255, 170, 40, 0.85)'], [0.35, 'rgba(255, 240, 150, 0.9)']]) {
+        const h = s * k * (1 + 0.18 * Math.sin(t / 55 + seed)), w = s * 0.42 * k;
+        ctx.fillStyle = c; ctx.beginPath(); ctx.moveTo(x - w, y); ctx.quadraticCurveTo(x - w * 0.6, y - h * 0.6, x + Math.sin(t / 90 + seed) * w * 0.4, y - h); ctx.quadraticCurveTo(x + w * 0.6, y - h * 0.6, x + w, y); ctx.fill();
+      }
+    };
+    // on the ground under everyone: her Fuel Spray (warning, then the spray), oil puddles and fire, oil streaks, the hero's Fuel Spray
+    function drawQueenGround() {
+      const t = gameTime, T = TILE;
+      for (const d of drips) {
+        const a = d.act;
+        if (d.dead || d.kind !== 'queen' || !a || a.kind !== 'spray') continue;
+        const c = queenCentre(d), R = QUEEN.sprayRange * T, h = QUEEN.sprayHalfAngle, x = c.x * T, y = c.y * T;
+        ctx.save();
+        ctx.beginPath(); ctx.moveTo(x, y); ctx.arc(x, y, R, a.angle - h, a.angle + h); ctx.closePath();
+        if (t < a.hitAt) {   // warning: pulsing orange outline
+          ctx.globalAlpha = 0.15 + 0.2 * (0.5 + 0.5 * Math.sin(t / 50)); ctx.fillStyle = '#ff9a2e'; ctx.fill();
+          ctx.globalAlpha = 0.8; ctx.strokeStyle = '#ff9a2e'; ctx.lineWidth = 4; ctx.stroke();
+        } else {   // the spray: a dark fuel cone with an orange sheen
+          const k = Math.min(1, (t - a.hitAt) / 120), fade = Math.min(1, (a.end - t) / 250);
+          const g = ctx.createRadialGradient(x, y, 0, x, y, R);
+          g.addColorStop(0, 'rgba(40, 24, 10, 0.85)'); g.addColorStop(0.7, 'rgba(255, 120, 20, 0.55)'); g.addColorStop(1, 'rgba(255, 154, 46, 0)');
+          ctx.globalAlpha = k * fade; ctx.fillStyle = g; ctx.fill();
+        }
+        ctx.restore();
+      }
+      for (const f of queenFx) {
+        if (f.zone !== areaName || t < (f.land ?? f.at)) continue;
+        ctx.save();
+        if (f.kind === 'absorb') {   // a blob of oil flying along an arc
+          const p = (t - f.at) / (f.end - f.at), x = (f.x + (f.tx - f.x) * p) * T, y = (f.y + (f.ty - f.y) * p) * T - Math.sin(p * Math.PI) * 0.8 * T;
+          ctx.fillStyle = '#07080c'; ctx.strokeStyle = '#ff2bd6'; ctx.lineWidth = 2; ctx.beginPath(); ctx.arc(x, y, 12, 0, Math.PI * 2); ctx.fill(); ctx.stroke();
+        } else {   // an oil puddle; its rim glows hotter as the fuse runs; then it burns
+          const x = (f.x + 0.5) * T, y = (f.y + 0.6) * T, grow = Math.min(1, (t - f.land) / 150);
+          ctx.fillStyle = '#07080c'; ctx.globalAlpha = f.lit ? Math.min(1, (f.end - t) / 300) : 0.92;
+          ctx.beginPath(); ctx.ellipse(x, y, 0.46 * T * grow, 0.3 * T * grow, 0, 0, Math.PI * 2); ctx.fill();
+          if (!f.lit) {
+            const heat = Math.max(0, (t - f.land) / (f.fire - f.land)), pulse = 0.5 + 0.5 * Math.sin(t / (90 - 60 * heat));
+            ctx.globalAlpha = 0.35 + 0.6 * heat * pulse; ctx.strokeStyle = heat > 0.66 ? '#ff3b1f' : '#ff9a2e'; ctx.lineWidth = 3 + 3 * heat; ctx.stroke();
+          } else {
+            const p = (t - f.fire) / (f.end - f.fire);
+            ctx.globalCompositeOperation = 'lighter'; ctx.globalAlpha = 1 - p * p;
+            if (p < 0.2) { ctx.fillStyle = 'rgba(255, 200, 80, 0.8)'; ctx.beginPath(); ctx.arc(x, y - 10, (0.4 + p * 3) * T, 0, Math.PI * 2); ctx.fill(); }   // the blast
+            for (let i = 0; i < 3; i++) drawFlame(x - 0.25 * T + i * 0.25 * T, y + 6, 0.55 * T * (i === 1 ? 1.2 : 0.9), t, f.x * 3 + f.y + i);
+          }
+        }
+        ctx.restore();
+      }
+      ctx.save(); ctx.globalCompositeOperation = 'lighter';
+      for (const f of fireTiles) {   // burning trails
+        if (f.zone !== areaName) continue;
+        ctx.globalAlpha = Math.min(1, (t - f.at) / 150, (f.until - t) / 500);
+        drawFlame((f.x + 0.5) * T, (f.y + 0.85) * T, 0.38 * T, t, f.x * 7 + f.y);
+      }
+      ctx.restore();
+      for (let i = heroSprays.length - 1; i >= 0; i--) {   // the hero's Magic Nozzle spray
+        const s = heroSprays[i], p = (t - s.t) / 400;
+        if (p >= 1 || p < 0) { heroSprays.splice(i, 1); continue; }
+        const x = (player.x + 0.5) * T, y = (player.y + 0.5) * T, R = s.range * T * Math.min(1, p * 4);
+        const g = ctx.createRadialGradient(x, y, 0, x, y, Math.max(1, R));
+        g.addColorStop(0, 'rgba(60, 30, 10, 0.7)'); g.addColorStop(0.6, 'rgba(255, 130, 30, 0.6)'); g.addColorStop(1, 'rgba(255, 180, 60, 0)');
+        ctx.save(); ctx.globalAlpha = 1 - p; ctx.fillStyle = g;
+        ctx.beginPath(); ctx.moveTo(x, y); ctx.arc(x, y, Math.max(1, R), s.angle - s.half, s.angle + s.half); ctx.closePath(); ctx.fill();
+        ctx.restore();
+      }
+    }
     function drawSporeClouds() {   // clouds left by dead Sporelings (this zone)
       const im = ART.sporeCloud, t = gameTime;
       for (const c of sporeClouds) {
@@ -4445,14 +4892,15 @@
     function drawDrip(d) {
       const t = gameTime, cx = (d.x + (foeSize(drip) === 2 ? 1 : 0.5)) * TILE, feet = (d.y + 1) * TILE - 2, T = ET(drip), scav = drip.kind === 'scav';
       if (drip.dead) {
-        const since = t - drip.deadAt;
-        if (since >= T.lootMs + T.fadeMs) return;   // body gone
-        ctx.save(); if (since > T.lootMs) ctx.globalAlpha = 1 - (since - T.lootMs) / T.fadeMs;   // 2 s fade-out
+        const since = t - drip.deadAt, lootMs = drip.summoned ? SUMMON_FADE_MS - 1000 : T.lootMs, fadeMs = drip.summoned ? 1000 : T.fadeMs;
+        if (since >= lootMs + fadeMs || drip.absorbed) return;   // body gone (or swallowed by the Pump Queen)
+        ctx.save(); if (since > lootMs) ctx.globalAlpha = 1 - (since - lootMs) / fadeMs;   // fade-out
         const lootNeon = drip.loot && lootable() === drip && !anyOpen() ? NEON.building : null;
         if (drip.kind === 'drone') drawDroneWreck(cx, feet, lootNeon);
         else if (scav) { if (ready(ART.scavHurt)) drawScavCell(ART.scavHurt, SCAV_ART.hurt, 1, cx, feet, lootNeon); }
         else if (drip.kind === 'spore') { if (ready(ART.sporelingHurt)) drawScavCell(ART.sporelingHurt, SPORE_ART.hurt, 1, cx, feet, lootNeon, FOE_K); }
         else if (drip.kind === 'loader') { if (ready(ART.loaderHurt)) drawScavCell(ART.loaderHurt, LOADER_ART.hurt, 1, cx, feet, lootNeon, FOE_K); }
+        else if (drip.kind === 'queen') drawQueenDead(cx, feet, lootNeon);
         else if (ready(ART.dripHurt)) drawDripCell(ART.dripHurt, DRIP_ART.hurt, 1, cx, feet, 1, lootNeon);
         if (drip.loot) {   // loot waiting: a pulsing gold glint over the puddle, "loot" when faced
           const k = 0.5 + 0.5 * Math.sin(performance.now() / 250), gy = feet - 52;
@@ -4472,18 +4920,25 @@
       if (scav) drawScavBody(cx, feet, t);
       else if (drip.kind === 'spore') { drawSporeBody(cx, feet, t); if (drip.hidden) return; }   // disguised: no bar, no rings
       else if (drip.kind === 'loader') drawLoaderBody(cx, feet, t);
+      else if (drip.kind === 'queen') drawQueenBody(cx, feet, t);
       else if (sinceAtk < 700 && ready(ART.dripAttack)) drawDripCell(ART.dripAttack, DRIP_ART.attack, Math.min(3, Math.floor(sinceAtk / 175)), cx, feet, 1, dripNeon());
       else if (sinceHurt < 300 && ready(ART.dripHurt)) drawDripCell(ART.dripHurt, DRIP_ART.hurt, 0, cx, feet, 1, dripNeon());
       else if (walkFrame(t) >= 0 && ready(ART.dripWalk)) drawDripCell(ART.dripWalk, DRIP_ART.walk, walkFrame(t), cx, feet, 1, dripNeon());
       else if (ready(ART.dripIdle)) drawDripCell(ART.dripIdle, DRIP_ART.idle, 0, cx, feet, 1 + 0.025 * Math.sin(t / 260), dripNeon());   // oily wobble
       else { ctx.fillStyle = '#10131C'; ctx.fillRect(d.x * TILE + 10, d.y * TILE + 10, TILE - 20, TILE - 20); }
+      if (drip.burning) drawBurning(cx, feet, t);
+      if (drip.popAt && t - drip.popAt < 300) { ctx.save(); ctx.globalAlpha = 1 - (t - drip.popAt) / 300; ctx.fillStyle = '#07080c'; ctx.beginPath(); ctx.ellipse(cx, feet - 8, 50, 18, 0, 0, Math.PI * 2); ctx.fill(); ctx.restore(); }   // just pumped out: an oil splash
+      if (t < (drip.slowUntil || 0)) {   // soaked by Magic Nozzle: a dark fuel slick at his feet
+        ctx.save(); ctx.globalAlpha = 0.55; ctx.fillStyle = '#2a170a'; ctx.strokeStyle = '#ff9a2e'; ctx.lineWidth = 2;
+        ctx.beginPath(); ctx.ellipse(cx, feet - 6, 24 * foeSize(drip) + 18, 12 + 4 * foeSize(drip), 0, 0, Math.PI * 2); ctx.fill(); ctx.stroke(); ctx.restore();
+      }
       if (t < (drip.stunUntil || 0)) {   // magic tar: glowing magenta ring pinning him down
         const k = 0.6 + 0.4 * Math.sin(t / 120);
         ctx.save(); ctx.globalAlpha = k; ctx.strokeStyle = '#ff2bd6'; ctx.lineWidth = 4;
         ctx.beginPath(); ctx.ellipse(cx, feet - 8, 46, 16, 0, 0, Math.PI * 2); ctx.stroke(); ctx.restore();
       }
       // health bar over his head
-      const bw = drip.kind === 'loader' ? 110 : 64, bx = cx - bw / 2, by = feet - (scav ? HERO_H : drip.kind === 'spore' ? 1.15 : drip.kind === 'loader' ? 2.75 : DRIP_BODY) * TILE - 18;
+      const bw = drip.kind === 'queen' ? 130 : drip.kind === 'loader' ? 110 : 64, bx = cx - bw / 2, by = feet - (scav ? HERO_H : drip.kind === 'spore' ? 1.15 : drip.kind === 'loader' ? 2.75 : drip.kind === 'queen' ? (drip.stage === 2 ? 3.25 : 2.95) : DRIP_BODY) * TILE - 18;
       ctx.fillStyle = 'rgba(0, 0, 0, 0.7)'; ctx.fillRect(bx - 2, by - 2, bw + 4, 12);
       ctx.fillStyle = '#e5484d'; ctx.fillRect(bx, by, bw * drip.hp / drip.maxHp, 8);
     }
@@ -4622,9 +5077,16 @@
       const w = 340, h = 80, x = (canvas.width - w) / 2, y = phoneView && canvas.height > canvas.width ? phudBottom() + 12 : 12;
       ctx.fillStyle = 'rgba(0, 0, 0, 0.75)'; rr(x, y, w, h, 12); ctx.fill();
       ctx.strokeStyle = 'rgba(255, 43, 214, 0.6)'; ctx.lineWidth = 2; rr(x + 1, y + 1, w - 2, h - 2, 11); ctx.stroke();
-      const T = ET(drip), pic = ART[({ scav: 'scavPortrait', drone: 'dronePortrait', spore: 'sporelingPortrait', loader: 'loaderPortrait' })[drip.kind] || 'dripPortrait'];
+      const T = ET(drip), pic = ART[({ scav: 'scavPortrait', drone: 'dronePortrait', spore: 'sporelingPortrait', loader: 'loaderPortrait', queen: 'queenPortrait' })[drip.kind] || 'dripPortrait'];
       if (ready(pic)) { ctx.imageSmoothingQuality = 'high'; ctx.drawImage(pic, x + 8, y + 8, 64, 64); }
       else if (drip.kind === 'drone') { ctx.fillStyle = '#1B2233'; ctx.fillRect(x + 8, y + 8, 64, 64); drawDroneBody(x + 40, y + 44, 0, gameTime, !!drip.hitAt, -1); }
+      else if (drip.kind === 'queen') {   // placeholder portrait: the pump's display face / the blob's eyes
+        const st2 = drip.stage === 2;
+        ctx.fillStyle = st2 ? '#0b0c10' : '#b8322e'; ctx.fillRect(x + 8, y + 8, 64, 64);
+        if (st2) { const g = ctx.createRadialGradient(x + 40, y + 56, 2, x + 40, y + 56, 30); g.addColorStop(0, 'rgba(255, 154, 46, 0.9)'); g.addColorStop(1, 'rgba(255, 60, 0, 0)'); ctx.fillStyle = g; ctx.fillRect(x + 8, y + 8, 64, 64); }
+        else { ctx.fillStyle = '#0b0d12'; ctx.fillRect(x + 14, y + 20, 52, 30); }
+        ctx.fillStyle = '#ffb020'; ctx.fillRect(x + 22, y + 26, 12, 16); ctx.fillRect(x + 46, y + 26, 12, 16);
+      }
       const tx = x + 84, bw = w - 84 - 14;
       ctx.textBaseline = 'middle';
       const lvl = npcLevel();   // level: red when stronger than the hero, grey when weaker
@@ -4648,6 +5110,7 @@
         ctx.textAlign = 'left'; ctx.font = '16px ' + MONO;
         if (drip.kind === 'drone') { ctx.fillStyle = '#00e5ff'; ctx.fillText(drip.hitAt ? 'ramming!' : gameTime < drip.lowUntil ? 'low: hit it!' : 'dive ram', tx, y + 63); }
         else if (drip.kind === 'spore') { ctx.fillStyle = '#b58cff'; ctx.fillText(drip.hitAt ? 'puffing spores!' : 'poison spores', tx, y + 63); }
+        else if (drip.kind === 'queen') { const a = drip.act; ctx.fillStyle = '#ff9a2e'; ctx.fillText(a ? ({ roar: 'IGNITION!', slap: 'hose slap!', spray: 'fuel spray!', ignite: 'pump & ignite!' })[a.kind] : drip.stage === 2 ? 'stage 2 · ignition' : 'stage 1 · the pump', tx, y + 63); }
         else if (drip.kind === 'loader') { ctx.fillStyle = '#9dff5c'; ctx.fillText(drip.act ? (drip.act.kind === 'whip' ? 'vine whip!' : 'ground slam!') : 'whip · slam', tx, y + 63); }
         else { ctx.fillStyle = '#7fff3a'; ctx.fillText(drip.spray ? 'spraying!' : 'toxic spray', tx, y + 63); }
       }
@@ -4840,7 +5303,7 @@
     // "lvl · rarity" under it on the left; the goal (and progress) in the middle; the reward and Accept / Hand in on the right.
     // Every text is wrapped or shrunk to its own column, so nothing overlaps or leaves the row.
     function drawRogueQuestRow(rq, x, y, w, h, sel) {
-      const r = rq.r, pay = questPay(r.lvl, r.rarity), col = RARITY[r.rarity] || '#fff', big = h - 40, sx = x + 20, sy = y + 20;
+      const r = rq.r, pay = rqPay(r), col = RARITY[r.rarity] || '#fff', big = h - 40, sx = x + 20, sy = y + 20;
       glyphSlot(sx, sy, big, null, rq.mode === 'ready' ? '?' : '!', r.rarity === 'common' ? '#ffe600' : col);
       const fit = (t, maxW, size, weight = '') => { let fs = size; ctx.font = `${weight}${fs}px ${MONO}`; while (fs > 12 && ctx.measureText(t).width > maxW) { fs--; ctx.font = `${weight}${fs}px ${MONO}`; } return fs; };
       const nameX = sx + big + 20, nameW = 250, rightW = 170, midX = nameX + nameW + 24, midW = x + w - 20 - rightW - 24 - midX;
@@ -4849,7 +5312,7 @@
       let fs = 28, lines;
       for (;; fs -= 2) { ctx.font = `${sel ? 700 : 600} ${fs}px ${MONO}`; lines = wrapText(r.name, nameW); if ((lines.length <= 2 && lines.every(l => ctx.measureText(l).width <= nameW)) || fs <= 16) break; }
       ctx.fillStyle = col; lines.slice(0, 2).forEach((l, i, a) => ctx.fillText(l, nameX, sy + big / 2 - 14 + (i - (a.length - 1) / 2) * (fs + 4)));
-      fit(questTag(r.lvl, r.rarity), nameW, 18); ctx.fillStyle = '#8a8a8a'; ctx.fillText(questTag(r.lvl, r.rarity), nameX, sy + big - 10);
+      fit(rqTag(r), nameW, 18); ctx.fillStyle = r.boss ? '#ff9a2e' : '#8a8a8a'; ctx.fillText(rqTag(r), nameX, sy + big - 10);
       // goal + progress (middle)
       const n = Math.min(r.need, r.prog()), done = rq.mode === 'ready';
       ctx.font = `600 22px ${MONO}`; ctx.fillStyle = '#fff';
@@ -6036,7 +6499,7 @@
       try {
         for (const d of drips) {
           if (cloaked(d)) continue;
-          drip = d; const q = dripPos(), n = foeSize(d), hgt = d.kind === 'loader' ? 2.7 : d.kind === 'spore' ? 1.2 : d.kind === 'drone' ? 2.2 : 1.8;
+          drip = d; const q = dripPos(), n = foeSize(d), hgt = d.kind === 'loader' ? 2.7 : d.kind === 'queen' ? 3.1 : d.kind === 'spore' ? 1.2 : d.kind === 'drone' ? 2.2 : 1.8;
           const x0 = (q.x - 0.15) * TILE, x1 = (q.x + n + 0.15) * TILE, y1 = (q.y + 1) * TILE, y0 = y1 - hgt * TILE;
           if (wx < x0 || wx > x1 || wy < y0 || wy > y1) continue;
           if (d.dead) { if (d.loot && lootable() === d) { spacePressed(); return true; } continue; }
@@ -6225,7 +6688,7 @@
       touchEl.querySelectorAll('.t-spell').forEach((b, i) => {
         const name = skills[i], art = name && (itemDef(name) || {}).art, src = art && ART_SRC[art];
         b.classList.toggle('filled', !!name);
-        b.innerHTML = src ? `<img src="${src}" alt="">` : String(i + 1);
+        b.innerHTML = src ? `<img src="${src}" alt="" onerror="this.replaceWith('${i + 1}')">` : String(i + 1);
       });
       const act = touchEl.querySelector('.t-act'), wsrc = sw && ART_SRC[sw.art];
       act.classList.toggle('filled', !!sw);
