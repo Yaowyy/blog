@@ -5126,7 +5126,9 @@
         ctx.textAlign = 'right';
         ctx.font = '26px ' + MONO;
         ctx.fillStyle = '#8a8a8a';
-        ctx.fillText(`${ICON.energy} ${stats.energy}   ${stats.money}$`, px + pw - 92, py + 56);
+        const wallet = `${ICON.energy} ${stats.energy}   ${stats.money}$`, wx = px + pw - 104;   // well left of the ✕ (at pw - 62)
+        for (let fs = 26; fs > 14 && ctx.measureText(wallet).width > 340; fs--) ctx.font = fs + 'px ' + MONO;
+        ctx.fillText(wallet, wx, py + 56);
       }
 
       ctx.font = '26px ' + MONO; ctx.fillStyle = '#cfcfcf'; ctx.textAlign = 'left';
@@ -5706,7 +5708,8 @@
       } else { ctx.fillStyle = '#8a8a8a'; ctx.fillText('empty slot', x + 24, ly); }
       ctx.fillStyle = '#8a8a8a'; ctx.font = '16px ' + MONO;
       ctx.fillText('A/D · Space use · right-click throw · I/X/Esc close', x + 24, y + h - 18);
-      ctx.textAlign = 'right'; ctx.fillStyle = rarityColor(bag); ctx.font = '600 18px ' + MONO; ctx.fillText(bag, x + w - 70, y + 34);   // the worn bag (left of the ✕)
+      ctx.textAlign = 'right'; ctx.fillStyle = rarityColor(bag); ctx.font = '600 18px ' + MONO; for (let fs = 18; fs > 11 && ctx.measureText(bag).width > w - 24 - 190 - 80; fs--) ctx.font = `600 ${fs}px ${MONO}`;
+      ctx.fillText(bag, x + w - 80, y + 34);   // the worn bag (left of the ✕, shrunk if it's long)
     }
 
     // hero: middle left. Full-body picture, stats, and the equipped slots (W/S choose, Space unequips).
@@ -6097,7 +6100,7 @@
       const inBox = f => cx >= f.x && cx <= f.x + f.w && cy >= f.y && cy <= f.y + f.h;
       let top = [...winFrames].reverse().find(inBox) || null;
       if (!top && ui && !winFrames.some(f => f.id === 'window')) top = { id: 'window' };   // full-screen windows (map, game over…)
-      if (!top) { if (e.pointerType === 'mouse' && e.button === 0 && !locked() && !(ui && ui.bossTalk)) closeAll(); return; }
+      if (!top) { if (e.button === 0 && !locked() && !(ui && ui.bossTalk)) closeAll(); return; }   // a click / tap outside every open window closes them all
       if (top.id === 'window') { if (ui) focus = 'window'; } else if (panels[top.id]) focus = top.id;   // a click selects that window
       const mine = b => top.id === 'window' ? !b.panel && (!b.close || b.close === 'window') : (b.panel === top.id || b.close === top.id);
       const xHit = e.button === 0 && rowRects.find(b => b.close && mine(b) && cx >= b.x && cx <= b.x + b.w && cy >= b.y && cy <= b.y + b.h);
@@ -6244,13 +6247,16 @@
       }
     }
     function moveStick(e) {
-      const dx = e.clientX - stick.cx, dy = e.clientY - stick.cy, len = Math.hypot(dx, dy), max = stick.r * 0.6;
+      const dx = e.clientX - stick.cx, dy = e.clientY - stick.cy, len = Math.hypot(dx, dy), max = stick.r * 0.85;   // the knob can travel almost to the edge
       const k = len > max ? max / len : 1;
       knobEl.style.transform = `translate(calc(-50% + ${dx * k}px), calc(-50% + ${dy * k}px))`;
       if (len < stick.r * 0.28) return setStickKeys([]);   // dead zone
-      const a = Math.atan2(dy, dx), sector = Math.round(a / (Math.PI / 4));   // 8 directions, 45° each
-      const dirs = { 0: 'd', 1: 'sd', 2: 's', 3: 'as', 4: 'a', '-4': 'a', '-3': 'aw', '-2': 'w', '-1': 'dw' };
-      setStickKeys([...(dirs[sector] || '')].sort());
+      // 8 directions, but straight ones get 60° each and diagonals only 30°: a slightly crooked push still walks straight
+      const deg = (Math.atan2(dy, dx) * 180 / Math.PI + 360) % 360, near = (deg + 45) % 90 - 45;   // angle from the nearest straight axis
+      let keys;
+      if (Math.abs(near) <= 30) keys = ['d', 's', 'a', 'w'][Math.round(deg / 90) % 4];
+      else keys = { 45: 'sd', 135: 'as', 225: 'aw', 315: 'dw' }[Math.round((deg - 45) / 90) % 4 * 90 + 45];
+      setStickKeys([...(keys || '')].sort());
     }
     const endStick = e => {
       if (!stick || e.pointerId !== stick.id) return;
