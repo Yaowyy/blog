@@ -540,6 +540,12 @@
   const MAX_LEVEL = 20;
   const EXP_NEED = (() => { const a = [100]; while (a.length < MAX_LEVEL - 1) a.push(Math.round(a[a.length - 1] * 1.4 / 10) * 10); return a; })();
   const expNeed = lvl => lvl >= MAX_LEVEL ? 0 : EXP_NEED[lvl - 1];   // exp to go from lvl to lvl + 1
+  // quest rewards: every quest has a level and a rarity. exp = (exp from its level to the next) × 0.1 × rarity multiplier,
+  // money = the same × 0.04 (rounded). Level 20 quests use the last step (19 → 20).
+  const QUEST_MULT = { common: 1, rare: 2, mythical: 3, legendary: 4 };
+  const questPay = (lvl, rarity) => { const base = EXP_NEED[Math.max(1, Math.min(MAX_LEVEL - 1, lvl)) - 1], m = QUEST_MULT[rarity] || 1;
+    return { exp: Math.round(base * 0.1 * m), money: Math.round(base * 0.04 * m) }; };
+  const questTag = (lvl, rarity) => `lvl ${lvl} · ${rarity}`;
   // each level up: max health = round(previous max + 0.8 × new level) (10 at lvl 1, 12 at 2, 14 at 3, 53 at 10, 177 at 20; see heroHealthCap),
   // +1 mana cap, +10% energy cap (compounding, shown as whole numbers), +0.1% crit chance,
   // strength × 1.12, health regen × 1.06, mana regen × 1.09 (all three kept as fractions, used / shown rounded)
@@ -712,7 +718,7 @@
                       'A tourist is lost and wants directions.', 'A gang boss wants to renegotiate. Politely.', 'A robot keeps calling to sell you insurance.'];
   const RARE_CALL_LINES = ['A corporate VIP asks for you by name.', 'A rich collector wants a private deal.'];
   const SALE_POOL = { common: ['Tar', 'Scrap', 'Cheap noodles'], rare: ['MutaGen', 'AI chip', 'Tar Orb'] };
-  const MAX_QUESTS = 3;   // active quests at the same time
+  const MAX_QUESTS = 5;   // active quests at the same time (deliveries + the Rogue's quests; her tutorial doesn't count)
   const pick = a => a[Math.floor(Math.random() * a.length)];
   function rollDeal(lvl, cha, foodPrice, force = null) {   // force: [type, rare] (cheat menu)
     let r = Math.random(), roll = DEAL_CHANCES[0];
@@ -1720,7 +1726,7 @@
         tip: 'She wants to see what you learned.' },
     ];
     const TUT_READY = TUT.length + 1, TUT_DONE = TUT.length + 2;
-    const TUT_REWARD = { money: 10, exp: 35 }, TUT_PENALTY = { money: 2, exp: 5 };   // each wrong quiz answer takes this off the reward
+    const TUT_REWARD = questPay(1, 'legendary'), TUT_PENALTY = { money: 2, exp: 5 };   // each wrong quiz answer takes this off the reward
     const TUT_QUIZ = [
       { q: 'How do you get better deals?', a: ['Take more deals in a row', 'Improve my charisma', 'Eat more noodles first'], right: 1 },
       { q: 'How do you save the game?', a: ['Walk into another zone', 'Talk to the Rogue', 'Sleep at HomeDome or save from the Menu'], right: 2 },
@@ -1758,6 +1764,34 @@
     const levels = { ...startLevels(), ...renameKeys(saved.levels) };   // installed level of each patch
     deals = saved.deals && saved.deals.every(d => d && d.type) ? saved.deals : newDeals();
     const quests = saved.quests ? saved.quests.map(q => q.kind === 'delivery' ? { ...q, until: q.left ?? 0 } : q) : [];   // active quests: { name, desc, rare, from }
+    // ---- the Rogue's quests (after her tutorial is done or skipped) -------------------------------------------------
+    // She offers every quest the hero's level allows whose `after` quest was handed in. Progress counts what's already done
+    // (zones visited, weapons owned or bought, points spent, Drips killed this run). A finished quest is handed in to her.
+    const ROGUE_QUESTS = [
+      { id: 'slums', name: 'Slums', lvl: 1, rarity: 'common', need: 1, goal: 'Discover the slums.',
+        talk: '"The city ends where the neon gets cheap. Go see the slums for yourself, east of here. Just look around and come back."',
+        prog: () => [...discovered].some(id => ['slums', 'greaser'].includes(ZONE_LIST[id])) ? 1 : 0 },
+      { id: 'techversity', name: 'Discovering TechVersity', lvl: 2, rarity: 'common', need: 1, goal: 'Spend 1 talent point at TechVersity.',
+        talk: '"Level 2 already? Every level gives you a talent point. Walk into TechVersity, next to MutaTech, and spend one."',
+        prog: () => spentPts() > 0 ? 1 : 0 },
+      { id: 'weapon', name: 'Weapon', lvl: 2, after: 'slums', rarity: 'common', need: 1, goal: 'Buy any weapon.',
+        talk: '"You saw the slums. You don\'t walk there with bare hands twice. The ATB-Market sells swords: buy one."',
+        prog: () => weaponBought || carried().some(it => it.kind === 'sword') ? 1 : 0 },
+      { id: 'slumProblems', name: 'Slum problems', lvl: 3, after: 'weapon', rarity: 'common', need: 5, goal: 'Kill 5 Drips.',
+        talk: '"Drips are spilling out of the slums: half man, half oil slick. Thin them out. Five should do."',
+        prog: () => Math.min(5, dripKills) },
+    ];
+    const rogueDone = new Set(saved.rogueDone || []);       // quests handed in
+    let weaponBought = !!saved.weaponBought, dripKills = saved.dripKills || 0;
+    const rqDef = id => ROGUE_QUESTS.find(r => r.id === id);
+    const rqPay = r => questPay(r.lvl, r.rarity);
+    const rqComplete = q => { const r = rqDef(q.id); return !!r && r.prog() >= r.need; };
+    const rogueOffers = () => tut < TUT_DONE ? [] : ROGUE_QUESTS.filter(r => hero.level >= r.lvl && !rogueDone.has(r.id) && (!r.after || rogueDone.has(r.after))
+      && !quests.some(q => q.kind === 'rogue' && q.id === r.id));
+    const rogueReady = () => quests.filter(q => q.kind === 'rogue' && rqComplete(q));
+    function checkRogueQuests() {   // a quest just got done: tell the hero once
+      for (const q of quests) if (q.kind === 'rogue' && !q.told && rqComplete(q)) { q.told = true; showHint(`Quest done: ${q.name}. Hand it in to the Rogue.`); }
+    }
     // open window: null, or { kind: 'shop' | 'work' | 'menu', cursor, msg }
     let ui = null;
     window.claude?.hot?.snapshot?.(() => ({ x: player.x, y: player.y, fx: facing.x, fy: facing.y, stats, deals, prices, dealsDone, heroName, inventory, equipped, skills, areaName, restReadyAt, levels, bag, discovered: [...discovered] }));
@@ -1856,6 +1890,7 @@
               inventory.push({ name: it.name, class: 'bag' });
               return `Got the ${it.name}. To wear it, empty your ${bag} and press Space on it (I).`;
             }
+            if (it.kind === 'sword') weaponBought = true;   // the Rogue's "Weapon" quest
             if (it.class === 'equipment') {   // no bonus until equipped
               if (noRoom) return `${bag ? `No room in your ${bag}` : 'No bag'}, so you put on the ${it.name}: ${wearDirect(it.name)}.`;
               inventory.push({ name: it.name, kind: it.kind, class: it.class });
@@ -1979,7 +2014,24 @@
           ui = null; showHint(`Quest complete: Rogue's lessons. +${r.money}$ and +${r.exp} exp.`);
           float(`+${r.money}$ +${r.exp} exp`, '#9b5cff', player.x + 0.5, player.y - 1.2);
         } }]; }
-        return [{ left: 'any work for me?', right: '', act() { return 'Not yet. Quests are coming soon.'; } }];
+        const rows = [];
+        for (const q of rogueReady()) { const r = rqDef(q.id), pay = rqPay(r); rows.push({ rq: { r, mode: 'ready' }, left: `hand in: ${q.name}`, right: `${questTag(r.lvl, r.rarity)} · +${pay.exp} exp +${pay.money}$`, act() {
+          quests.splice(quests.indexOf(q), 1); rogueDone.add(q.id); stats.money += pay.money; gainExp(pay.exp); renderStats(); ui.cursor = 0;
+          float(`+${pay.exp} exp +${pay.money}$`, '#9b5cff', player.x + 0.5, player.y - 1.2);
+          const next = ROGUE_QUESTS.find(n => n.after === q.id);
+          return `Quest complete: ${q.name}. +${pay.exp} exp, +${pay.money}$.${next ? ` New quest: ${next.name}${hero.level < next.lvl ? ` (at level ${next.lvl})` : ''}.` : ''}`;
+        } }); }
+        for (const r of rogueOffers()) rows.push({ rq: { r, mode: 'offer' }, left: `quest: ${r.name}`, right: `${questTag(r.lvl, r.rarity)} · +${rqPay(r).exp} exp +${rqPay(r).money}$`, act() {
+          if (quests.length >= MAX_QUESTS) return `You already have ${MAX_QUESTS} active quests. Cancel one first (Q).`;
+          quests.push({ kind: 'rogue', id: r.id, name: r.name, from: 'Rogue', lvl: r.lvl, rarity: r.rarity }); ui.cursor = 0;
+          return `${r.talk} Quest accepted: ${r.name}.`;
+        } });
+        if (!rows.length) rows.push({ left: 'any work for me?', right: '', act() {
+          const later = ROGUE_QUESTS.filter(r => !rogueDone.has(r.id) && !quests.some(q => q.kind === 'rogue' && q.id === r.id) && (!r.after || rogueDone.has(r.after))).sort((a, b) => a.lvl - b.lvl)[0];
+          if (quests.some(q => q.kind === 'rogue')) return '"Finish what I gave you first."';
+          return later ? `"Not yet. Come back at level ${later.lvl}."` : '"Nothing right now. Keep hustling."';
+        } });
+        return rows;
       }
       if (ui.kind === 'loot') return lootRows();
       if (ui.kind === 'cheat') return cheatRows();
@@ -1992,10 +2044,10 @@
         return [{
         rest: {}, left: `rest for ${REST.price}$?`, right: Object.entries(restGain()).map(([st, n]) => `+${n} ${ICON[st]}`).join('  '),
         act() {
-          tutEvent('rest');   // trying counts, even when already rested or on cooldown
-          if (stats.money < REST.price) return `Not enough money to rest (${REST.price}$).`;
+          if (stats.money < REST.price) return `Not enough money to rest (${REST.price}$).${tutAt('rest') ? ' Take a deal at TradeCorp first.' : ''}`;   // tutorial: only a real sleep counts
           const up = Object.entries(restGain()).map(([st, n]) => [st, capped(st, stats[st] + n) - stats[st]]).filter(([, d]) => d > 0);
-          if (!up.length) return 'You are already fully rested.';
+          if (!up.length && !tutAt('rest')) return 'You are already fully rested.';   // (the tutorial's sleep task lets him sleep anyway)
+          tutEvent('rest');
           stats.money -= REST.price;
           for (const [st, d] of up) stats[st] += d;
           restReadyAt = Date.now() + REST.cooldownMs;
@@ -2017,7 +2069,7 @@
     }
     function newGame() {
       Object.assign(talents, newTalents()); ceoCalls = 0;
-      clearLbBuffs(); Object.assign(stats, START_STATS); dealsDone = 0; foodBought = 0; promotion = 0; kills = 0; runCheated = false; Object.assign(prices, startPrices()); deals = newDeals();
+      clearLbBuffs(); Object.assign(stats, START_STATS); dealsDone = 0; foodBought = 0; promotion = 0; kills = 0; dripKills = 0; weaponBought = false; rogueDone.clear(); runCheated = false; Object.assign(prices, startPrices()); deals = newDeals();
       discovered.clear();
       quests.length = 0;
       areaName = '0:0'; spawnAllDrips();
@@ -2085,7 +2137,7 @@
     // ---- saving -------------------------------------------------------------------
     // everything a run needs; drip/fights/timers restart when loaded
     function snapshot() {
-      return { x: player.x, y: player.y, fx: facing.x, fy: facing.y, stats: statsNoBuffs(), deals, prices: { ...prices }, dealsDone, foodBought, itemsV2: true, sets: [...activeSets], promotion, kills, cheated: runCheated, quests: quests.map(q => q.kind === 'delivery' ? { ...q, left: Math.max(0, q.until - gameTime) } : { ...q }),
+      return { x: player.x, y: player.y, fx: facing.x, fy: facing.y, stats: statsNoBuffs(), deals, prices: { ...prices }, dealsDone, foodBought, itemsV2: true, sets: [...activeSets], promotion, kills, dripKills, weaponBought, rogueDone: [...rogueDone], cheated: runCheated, quests: quests.map(q => q.kind === 'delivery' ? { ...q, left: Math.max(0, q.until - gameTime) } : { ...q }),
                inventory: inventory.map(it => ({ ...it })), equipped: equipped.map(it => ({ ...it })), skills: [...skills],
                areaName, restReadyAt, levels: { ...levels }, manaCap: CAP_BASE.mana, energyCap: CAP_BASE.energy, level: hero.level, exp: hero.exp, strengthLevel: hero.level, bag, talents: JSON.parse(JSON.stringify(talents)), ceoCalls, tut, tutV: 3, tutN, tutQuiz: { ...tutQuiz }, discovered: [...discovered], enemies: saveEnemies(),
                piles: piles.map(p => ({ ...p, gear: p.gear.map(it => ({ ...it })), items: p.items.map(it => ({ ...it })), left: Math.max(0, p.until - gameTime), until: undefined })) };
@@ -2098,6 +2150,7 @@
       clearLbBuffs(); Object.assign(stats, START_STATS, s.stats || {});
       if (s.strengthLevel === undefined) stats.strength += levelStrength(hero.level) - levelStrength(1);   // saves from before strength grew with level
       deals = s.deals && s.deals.every(d => d && d.type) ? s.deals : null; dealsDone = s.dealsDone || 0; foodBought = s.foodBought || 0; promotion = s.promotion || 0; kills = s.kills || 0; runCheated = !!s.cheated;
+      dripKills = s.dripKills || 0; weaponBought = !!s.weaponBought; rogueDone.clear(); for (const id of s.rogueDone || []) rogueDone.add(id);
       quests.length = 0; quests.push(...(s.quests || []).map(q => q.kind === 'delivery' ? { ...q, until: gameTime + (q.left ?? 0) } : q));
       for (const k in prices) delete prices[k]; for (const k in levels) delete levels[k];
       Object.assign(prices, startPrices(), renameKeys(s.prices)); Object.assign(levels, startLevels(), renameKeys(s.levels));
@@ -2311,6 +2364,7 @@
         : tut === TUT_READY ? `"${tutQuiz.wrong ? `${TUT_QUIZ.length - tutQuiz.wrong} of ${TUT_QUIZ.length} right. Not bad.` : 'All three right. Top of the class!'} Here's your pay. And if you forget a key, Menu → Controls lists them all."`
         : tut === 0 ? '"New around here? Top of my class at TechVersity, and I don\'t keep what I learned to myself. Out here, knowing things keeps you alive. Want me to show you how the city works?"'
         : tut <= TUT.length ? `"${TUT[tut - 1].task}${tutProgress()} ${TUT[tut - 1].tip}" (task ${tut} of ${TUT.length})`
+        : rogueReady().length ? '"Done already? Show me."' : rogueOffers().length ? '"I\'ve got work for someone like you."'
         : '"You learn fast. Come back soon: I\'ll have real work for someone like you."',
       restart: 'Are you sure?',
       quests: () => quests.length || tutQuest() ? '' : 'No active quests yet. Take a Scheduled delivery at TradeCorp (Deals).',
@@ -2468,9 +2522,12 @@
       return { kind: 'delivery', name: rare ? 'Priority delivery' : 'Scheduled delivery', rare, from: 'TradeCorp', dest, sum,
                item: rare ? 'Dumplings' : 'Beef brisket', until: gameTime + sum * 30000, desc: '' };
     }
-    const deliveryPay = q => ({ money: q.sum * 2 * (q.rare ? 2 : 1), exp: Math.round(Math.max(20, q.sum * hero.level) * (q.rare ? 1.6 : 1)) });
+    const deliveryLvl = q => zoneLevel(q.dest);   // a delivery's level: its destination zone's level
+    const deliveryPay = q => questPay(deliveryLvl(q), q.rare ? 'rare' : 'common');   // Scheduled = common, Priority = rare
     const clockText = ms => { const t = Math.max(0, Math.ceil(ms / 1000)); return `${Math.floor(t / 60)}:${String(t % 60).padStart(2, '0')}`; };
-    const questView = q => q.kind !== 'delivery' ? q : { ...q, desc: `Bring the ${q.item} to the Netizen Chef at her food cart in ${areaLabel(q.dest)}. ${clockText(q.until - gameTime)} left · +${deliveryPay(q).money}$ +${deliveryPay(q).exp} exp` };
+    const questView = q => q.kind === 'rogue' ? (() => { const r = rqDef(q.id) || { goal: '', need: 1, prog: () => 0, lvl: 1, rarity: 'common' }, n = Math.min(r.need, r.prog()), pay = rqPay(r);
+        return { ...q, lvl: r.lvl, rarity: r.rarity, desc: rqComplete(q) ? `Done! Hand it in to the Rogue. +${pay.exp} exp +${pay.money}$` : `${r.goal}${r.need > 1 ? ` (${n}/${r.need})` : ''} · +${pay.exp} exp +${pay.money}$` }; })()
+      : q.kind !== 'delivery' ? q : { ...q, lvl: deliveryLvl(q), rarity: q.rare ? 'rare' : 'common', desc: `Bring the ${q.item} to the Netizen Chef at her food cart in ${areaLabel(q.dest)}. ${clockText(q.until - gameTime)} left · +${deliveryPay(q).money}$ +${deliveryPay(q).exp} exp` };
     function checkDeliveries() {   // runs with the game clock: late deliveries fail
       for (let i = quests.length - 1; i >= 0; i--) {
         const q = quests[i];
@@ -2498,8 +2555,9 @@
     }
     // the running tutorial as a quest-list entry (null when it isn't running)
     const tutQuest = () => tut >= 1 && tut <= TUT.length ? { name: `Rogue's lessons ${tut}/${TUT.length}`, desc: `${TUT[tut - 1].task}${tutProgress()} ${TUT[tut - 1].tip}`,
-      from: 'Rogue', color: '#b58cff', tut: true }
-      : tut === TUT_READY ? { name: `Rogue's lessons ${TUT.length}/${TUT.length}`, desc: tutQuiz.i < TUT_QUIZ.length ? 'Answer the Rogue\'s questions.' : 'Talk to the Rogue to get your reward.', from: 'Rogue', color: '#b58cff', tut: true } : null;
+      from: 'Rogue', lvl: 1, rarity: 'legendary', tut: true }
+      : tut === TUT_READY ? { name: `Rogue's lessons ${TUT.length}/${TUT.length}`, desc: tutQuiz.i < TUT_QUIZ.length ? 'Answer the Rogue\'s questions.' : 'Talk to the Rogue to get your reward.', from: 'Rogue', lvl: 1, rarity: 'legendary', tut: true } : null;
+    const tutAt = ev => tut >= 1 && tut <= TUT.length && TUT[tut - 1].ev === ev;   // the running tutorial task is this one
     function tutEvent(ev) {
       if (tut < 1 || tut > TUT.length || TUT[tut - 1].ev !== ev) return;
       if (++tutN < (TUT[tut - 1].need || 1)) return;
@@ -3341,7 +3399,7 @@
       if (drip.kind === 'spore' && drip.hidden) revealSpore(drip);
       if (drip.kind === 'drone' && drip.hp > 0 && drip.hp <= drip.maxHp * DRONE.cloakPct && !drip.repaired) droneCloak(drip);   // once per life, at 10% HP or less
       if (drip.hp <= 0) {   // nothing is given yet: the loot waits on his puddle
-        drip.dead = true; drip.deadAt = gameTime; drip.hitAt = 0; drip.dot = null; drip.stunUntil = 0; kills++;
+        drip.dead = true; drip.deadAt = gameTime; drip.hitAt = 0; drip.dot = null; drip.stunUntil = 0; kills++; if ((drip.kind || 'drip') === 'drip') dripKills++;
         if (drip.kind === 'drone') {   // falls: the wreck lands on the nearest walkable tile (it may have been over a building)
           drip.cloakUntil = 0; drip.fromX = drip.x; drip.fromY = drip.y;
           if (!free(drip.x, drip.y)) {
@@ -3696,7 +3754,7 @@
       gameTime += dt;   // game clock pauses behind windows
       lastFrame = now;
       syncChef();
-      if (dt) { checkDeliveries(); for (let i = piles.length - 1; i >= 0; i--) if (gameTime >= piles[i].until) piles.splice(i, 1);
+      if (dt) { checkDeliveries(); checkRogueQuests(); for (let i = piles.length - 1; i >= 0; i--) if (gameTime >= piles[i].until) piles.splice(i, 1);
         updateDrips(); updateProjectiles(dt); updateHeroDot(); updatePoison(); updateHeroMana(); updateHeroHealth(); }
       // keys still held when Tart wears off (or a blocking enemy moves): start walking again
       if (!moving && !comboTimer && held.size && !anyOpen()) tryStep(now);
@@ -4025,16 +4083,12 @@
       for (const w of WALLS) if (w.opens === 'rogue' || w.opens === 'chef') {
         const f = foot(w);
         if (cheb(player.x, player.y, f.x0, f.y0) <= 2 && player.x !== f.x0) w.flip = (player.x < f.x0) === !!w.facesRight;
-        if (w.opens === 'chef' || tut === 0 || tut === TUT_READY) {
+        const mark = w.opens === 'chef' || tut === 0 || tut === TUT_READY ? '!' : w.opens === 'rogue' && rogueReady().length ? '?' : w.opens === 'rogue' && rogueOffers().length ? '!' : '';   // her quests: ! new, ? ready to hand in
+        if (mark) {
           const bob = Math.sin(performance.now() / 300) * 5, x = (f.x0 + 0.5) * TILE, y = wallTop(w) - 50 + bob;   // above the purple arrow
           ctx.font = '800 44px ' + MONO; ctx.textAlign = 'center'; ctx.textBaseline = 'bottom';
-          ctx.lineWidth = 6; ctx.strokeStyle = '#000'; ctx.strokeText('!', x, y); ctx.fillStyle = '#ffdc00'; ctx.fillText('!', x, y);
+          ctx.lineWidth = 6; ctx.strokeStyle = '#000'; ctx.strokeText(mark, x, y); ctx.fillStyle = '#ffdc00'; ctx.fillText(mark, x, y);
         }
-      }
-      if (tut >= 1 && tut <= TUT.length && TUT[tut - 1].ev === 'hero' && !anyOpen()) {   // task 6: a golden ring around the hero (click him)
-        const a = 0.55 + 0.45 * Math.sin(performance.now() / 250);
-        ctx.save(); ctx.strokeStyle = `rgba(255, 220, 0, ${a})`; ctx.lineWidth = 5; ctx.shadowColor = '#ffdc00'; ctx.shadowBlur = 16;
-        ctx.beginPath(); ctx.ellipse((rx + 0.5) * TILE, (ry + 0.1) * TILE, TILE * 0.62, TILE * 1.05, 0, 0, Math.PI * 2); ctx.stroke(); ctx.restore();
       }
       // tutorial: a bobbing arrow over the building of the current task
       const arrowAt = tut === TUT_READY ? 'rogue' : tut >= 1 && tut <= TUT.length ? TUT[tut - 1].target : null;
@@ -4576,6 +4630,15 @@
       cv.naturalWidth = W; cv.naturalHeight = H; cv.complete = true;   // so it can stand in for the image everywhere
       return (skinCache[ck] = cv);
     }
+    // task 6 (open the Hero window): the hero gets the same yellow neon outline as the Rogue and buildings, gently pulsing
+    const heroTutGlow = () => tut >= 1 && tut <= TUT.length && TUT[tut - 1].ev === 'hero' && !anyOpen();
+    function heroImg(img, sx, sy, sw, sh, dx, dy, dw, dh) {
+      if (heroTutGlow()) {
+        ctx.save(); ctx.globalAlpha = 0.55 + 0.35 * Math.sin(performance.now() / 250);
+        ctx.drawImage(outlineOf(img, sx, sy, sw, sh, dw, dh, NEON.building.color), dx - OUTLINE_PAD, dy - OUTLINE_PAD); ctx.restore();
+      }
+      ctx.drawImage(img, sx, sy, sw, sh, dx, dy, dw, dh);
+    }
     function drawHeroSprite(rx, ry) {
       const im = skinned('heroSprite'), walk = skinned('heroWalk');
       if (!ready(im)) {   // fallback until the image loads
@@ -4599,7 +4662,7 @@
       if (key && ready(ART[key])) {   // attack frame
         const c = ATTACK_CELLS[key], f = Math.min(3, Math.floor(since / (HERO_ATTACK_ANIM_MS / 4)));
         if (heroAttackDir === 'side' && lookX < 0) ctx.scale(-1, 1);
-        ctx.drawImage(skinned(key), f * c.cellW, 0, c.cellW, c.cellH, -c.ax * k, -(c.cellH - c.foot - 2) * k, c.cellW * k, c.cellH * k);
+        heroImg(skinned(key), f * c.cellW, 0, c.cellW, c.cellH, -c.ax * k, -(c.cellH - c.foot - 2) * k, c.cellW * k, c.cellH * k);
         ctx.restore(); return;
       }
       // straight down / up use the front / back walk (never mirrored); everything else uses the side walk
@@ -4613,10 +4676,10 @@
         const t = Math.min(0.999, (performance.now() - moveStart) / stepMs);
         const f = ((stepsTaken - 1) * FRAMES_PER_TILE + Math.floor(t * FRAMES_PER_TILE)) % WALK_FRAMES;
         const fw = sheet.naturalWidth / WALK_FRAMES, fh = sheet.naturalHeight, w = h * fw / fh;
-        ctx.drawImage(sheet, f * fw, 0, fw, fh, -w / 2, -h, w, h);
+        heroImg(sheet, f * fw, 0, fw, fh, -w / 2, -h, w, h);
       } else {
         const w = h * im.naturalWidth / im.naturalHeight;
-        ctx.drawImage(im, -w / 2, -h, w, h);
+        heroImg(im, 0, 0, im.naturalWidth, im.naturalHeight, -w / 2, -h, w, h);
       }
       if (sword && view === 'up') drawBackSword(view, h);    // over the backpack
       ctx.restore();
@@ -4693,6 +4756,39 @@
     }
     // ---- TradeCorp drawing ----
     const DEAL_TITLE = { call: ['Customer call', 'Rare customer call'], sale: ['Sale offer', 'Rare sale offer'] };
+    // one of the Rogue's quests as a big tile, like a shop item: icon (! new, ? ready) and name in its rarity colour with
+    // "lvl · rarity" under it on the left; the goal (and progress) in the middle; the reward and Accept / Hand in on the right.
+    // Every text is wrapped or shrunk to its own column, so nothing overlaps or leaves the row.
+    function drawRogueQuestRow(rq, x, y, w, h, sel) {
+      const r = rq.r, pay = questPay(r.lvl, r.rarity), col = RARITY[r.rarity] || '#fff', big = h - 40, sx = x + 20, sy = y + 20;
+      glyphSlot(sx, sy, big, null, rq.mode === 'ready' ? '?' : '!', r.rarity === 'common' ? '#ffe600' : col);
+      const fit = (t, maxW, size, weight = '') => { let fs = size; ctx.font = `${weight}${fs}px ${MONO}`; while (fs > 12 && ctx.measureText(t).width > maxW) { fs--; ctx.font = `${weight}${fs}px ${MONO}`; } return fs; };
+      const nameX = sx + big + 20, nameW = 250, rightW = 170, midX = nameX + nameW + 24, midW = x + w - 20 - rightW - 24 - midX;
+      ctx.textAlign = 'left'; ctx.textBaseline = 'middle';
+      // name: up to 2 lines, shrunk until it fits
+      let fs = 28, lines;
+      for (;; fs -= 2) { ctx.font = `${sel ? 700 : 600} ${fs}px ${MONO}`; lines = wrapText(r.name, nameW); if ((lines.length <= 2 && lines.every(l => ctx.measureText(l).width <= nameW)) || fs <= 16) break; }
+      ctx.fillStyle = col; lines.slice(0, 2).forEach((l, i, a) => ctx.fillText(l, nameX, sy + big / 2 - 14 + (i - (a.length - 1) / 2) * (fs + 4)));
+      fit(questTag(r.lvl, r.rarity), nameW, 18); ctx.fillStyle = '#8a8a8a'; ctx.fillText(questTag(r.lvl, r.rarity), nameX, sy + big - 10);
+      // goal + progress (middle)
+      const n = Math.min(r.need, r.prog()), done = rq.mode === 'ready';
+      ctx.font = `600 22px ${MONO}`; ctx.fillStyle = '#fff';
+      const goal = wrapText(r.goal, midW).slice(0, 2);
+      goal.forEach((l, i) => ctx.fillText(l, midX, sy + 14 + i * 28));
+      ctx.font = `19px ${MONO}`; ctx.fillStyle = done ? '#3ddc84' : '#cfcfcf';
+      const sub = done ? 'Done! Hand it in.' : r.need > 1 ? `Progress: ${n}/${r.need}` : n >= r.need ? 'Already done: accept and hand it in.' : 'No time limit.';
+      wrapText(sub, midW).slice(0, 2).forEach((l, i) => ctx.fillText(l, midX, sy + 14 + goal.length * 28 + 8 + i * 24));
+      // reward + action (right)
+      const rx = x + w - 20; ctx.textAlign = 'right';
+      fit(`+${pay.exp} exp`, rightW, 28, '700 '); ctx.fillStyle = '#b58cff'; ctx.fillText(`+${pay.exp} exp`, rx, sy + 16);
+      fit(`+${pay.money}$`, rightW, 28, '700 '); ctx.fillStyle = '#f5c542'; ctx.fillText(`+${pay.money}$`, rx, sy + 50);
+      const act = done ? 'Hand in' : 'Accept';
+      ctx.font = `700 20px ${MONO}`; const bw = Math.min(rightW, ctx.measureText(act).width + 28), bh = 34, by = sy + big - bh + 4;
+      ctx.fillStyle = sel ? (done ? '#3ddc84' : '#ffdc00') : 'rgba(255, 255, 255, 0.08)'; rr(rx - bw, by, bw, bh, 8); ctx.fill();
+      ctx.strokeStyle = done ? '#3ddc84' : '#ffdc00'; ctx.lineWidth = 2; rr(rx - bw, by, bw, bh, 8); ctx.stroke();
+      ctx.fillStyle = sel ? '#000' : done ? '#3ddc84' : '#ffdc00'; ctx.textAlign = 'center'; ctx.fillText(act, rx - bw / 2, by + bh / 2 + 1);
+      ctx.textAlign = 'left';
+    }
     function glyphSlot(x, y, size, key, glyph, color) {   // an icon picture if its art exists, else a big drawn symbol in a slot
       if (ready(ART.slot)) ctx.drawImage(ART.slot, x, y, size, size);
       if (key && ready(ART[key])) { const i = size * 0.14; ctx.drawImage(ART[key], x + i, y + i, size - 2 * i, size - 2 * i); return; }
@@ -4835,12 +4931,14 @@
       ctx.fillText(`${Number(e[r.tab.col]).toLocaleString('en')} ${r.tab.unit}`, x + w - 20, y + h / 2);
     }
     function drawQuestRow(q, x, y, w, h) {
-      glyphSlot(x + 12, y + 8, h - 16, 'questIcon', '!', q.color || (q.rare ? RARITY.rare : '#ffe600'));
-      ctx.textAlign = 'left'; ctx.textBaseline = 'middle'; ctx.fillStyle = q.color || (q.rare ? RARITY.rare : '#fff'); ctx.font = '600 24px ' + MONO;
+      const rc = q.rarity ? RARITY[q.rarity] : null;   // name and icon in the quest's rarity colour (common: white name, yellow icon)
+      glyphSlot(x + 12, y + 8, h - 16, 'questIcon', '!', q.rarity && q.rarity !== 'common' ? rc : q.color || (q.rare ? RARITY.rare : '#ffe600'));
+      ctx.textAlign = 'left'; ctx.textBaseline = 'middle'; ctx.fillStyle = rc || q.color || (q.rare ? RARITY.rare : '#fff'); ctx.font = '600 24px ' + MONO;
       ctx.fillText(q.name, x + h + 10, y + 24);
       ctx.font = '17px ' + MONO; ctx.fillStyle = '#cfcfcf';
       wrapText(q.desc, w - h - 30).slice(0, 2).forEach((l, i) => ctx.fillText(l, x + h + 10, y + 52 + i * 22));
-      ctx.textAlign = 'right'; ctx.fillStyle = '#8a8a8a'; ctx.font = '16px ' + MONO; ctx.fillText(q.from || '', x + w - 14, y + 24);
+      ctx.textAlign = 'right'; ctx.fillStyle = '#8a8a8a'; ctx.font = '16px ' + MONO;
+      ctx.fillText([q.lvl ? questTag(q.lvl, q.rarity || 'common') : '', q.from || ''].filter(Boolean).join(' · '), x + w - 14, y + 24);
     }
     // quest button under the minimap (click or Q opens the quest list); a badge shows how many quests are active
     let questBtn = null, lbBtn = null;
@@ -4909,10 +5007,10 @@
       if (ui.kind === 'techversity') { drawTalentWindow(); return; }
       const list = rows();
       const info = ui.kind === 'controls';          // read-only list, nothing to select
-      const rowH = info ? 38 : ui.kind === 'shop' || ui.kind === 'work' || ui.kind === 'rest' ? 150 : ui.kind === 'quests' || ui.kind === 'leaderboard' ? 96 : ui.kind === 'loot' || ui.kind === 'scrap' ? 88 : ui.kind === 'cheat' ? 50 : ui.kind === 'spelltech' ? 262 : 64;   // shop and loot rows are taller for the item pictures
+      const rowH = info ? 38 : list.some(r => r.rq) ? 150 : ui.kind === 'shop' || ui.kind === 'work' || ui.kind === 'rest' ? 150 : ui.kind === 'quests' || ui.kind === 'leaderboard' ? 96 : ui.kind === 'loot' || ui.kind === 'scrap' ? 88 : ui.kind === 'cheat' ? 50 : ui.kind === 'spelltech' ? 262 : 64;   // shop and loot rows are taller for the item pictures
       const hero = ui.kind === 'hero', inv = ui.kind === 'inventory';
       const wide = hero || inv || ['leaderboard', 'quests', 'shop', 'scrap', 'save', 'load', 'logout', 'guest', 'sound', 'spelltech', 'rogue'].includes(ui.kind);
-      const pw = (ui.kind === 'spelltech' || ui.kind === 'shop' || ui.kind === 'work' || ui.kind === 'rest' ? 15 : wide ? 11 : 9) * TILE;
+      const pw = (ui.kind === 'spelltech' || ui.kind === 'shop' || ui.kind === 'work' || ui.kind === 'rest' || ui.kind === 'rogue' ? 15 : wide ? 11 : 9) * TILE;
       ctx.font = '26px ' + MONO;
       const wtext = typeof WINDOW_TEXT[ui.kind] === 'function' ? WINDOW_TEXT[ui.kind]() : WINDOW_TEXT[ui.kind];
       const textLines = wtext ? wrapText(wtext, pw - 80) : [];
@@ -4994,6 +5092,7 @@
         rowRects.push({ x: px + 24, y, w: pw - 48, h: rowH - 8, i });
         if (sel) { ctx.fillStyle = 'rgba(255, 220, 0, 0.12)'; ctx.fillRect(px + 24, y, pw - 48, rowH - 8); }
         if (r.craft) { drawCraftRow(r.craft, px + 24, y, pw - 48, rowH - 8, sel); return; }
+        if (r.rq) { drawRogueQuestRow(r.rq, px + 24, y, pw - 48, rowH - 8, sel); return; }
         if (r.shopItem) { drawShopRow(r.shopItem, px + 24, y, pw - 48, rowH - 8, sel); return; }
         if (r.rest) { drawRestRow(r.rest, px + 24, y, pw - 48, rowH - 8, sel); return; }
         if (r.deal) { drawDealRow(r.deal, px + 24, y, pw - 48, rowH - 8, sel); return; }
