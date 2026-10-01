@@ -594,6 +594,8 @@
     // Any number can be bought and carried (buying one you already have asks first); only one per equipment slot is worn.
     { name: 'Banana sword', tab: 'weapons', buyLevel: 2, meleeArea: 1.2, price: 370, gain: { strength: 3, charisma: 1 }, attackMs: -120, class: 'equipment', kind: 'sword', art: 'bananaSword', rarity: 'common',   // attackMs: swings 0.1 s faster
       desc: 'A curved yellow blade that hits hard and swings fast. Goes to your inventory: equip it there. Only one sword can be equipped.' },
+    { name: 'Mothersword', tab: 'weapons', buyLevel: 2, meleeArea: 1.2, price: 370, gain: { strength: 3, charisma: 1 }, attackMs: -120, class: 'equipment', kind: 'sword', art: 'mothersword', attackSheets: 'mother', rarity: 'common',
+      desc: 'A home-made blade cut from an old motherboard. Basic for now, but its empty sockets can take upgrades at MutaTech.' },
     // armor (Armor tab): capGain raises max HP / NRG while worn, hpRegen adds health per minute, speed = move speed bonus
     { name: 'NRG Headset', tab: 'armor', price: 370, gain: { charisma: 1 }, capGain: { health: 1, energy: 3 }, hpRegen: 1, class: 'equipment', slot: 'head', art: 'nrgHeadset', rarity: 'common',
       desc: 'Noise-cancelling headset with a charge loop. Full NRG set (3 pieces): +1 HP +1 CHSM +1 NRG and a new look.' },
@@ -601,6 +603,13 @@
       desc: 'Smart fabric with woven power lines. Full NRG set (3 pieces): +1 HP +1 CHSM +1 NRG and a new look.' },
     { name: 'NRG Sneakers', tab: 'armor', price: 390, gain: { charisma: 1 }, capGain: { health: 1, energy: 3 }, speed: 0.1, class: 'equipment', slot: 'boots', art: 'nrgSneakers', rarity: 'common',
       desc: 'Springy sneakers with glowing soles, 10% faster. Full NRG set (3 pieces): +1 HP +1 CHSM +1 NRG and a new look.' },
+    // Arduino set: cheap DIY armor, upgradable at MutaTech later
+    { name: 'Arduino Headset', tab: 'armor', price: 210, gain: {}, capGain: { health: 1 }, class: 'equipment', slot: 'head', art: 'arduinoHeadset', rarity: 'common',
+      desc: 'A DIY headset built from hobby parts, with empty pin headers for upgrades. Full Arduino set (3 pieces): +1 HP +1 CHSM and a new look.' },
+    { name: 'Arduino Shirt', tab: 'armor', price: 390, gain: {}, capGain: { health: 1 }, class: 'equipment', slot: 'chest', art: 'arduinoShirt', rarity: 'common',
+      desc: 'A teal tee with a microcontroller sewn on the chest. Full Arduino set (3 pieces): +1 HP +1 CHSM and a new look.' },
+    { name: 'Arduino Sneakers', tab: 'armor', price: 230, gain: {}, capGain: { health: 1 }, speed: 0.05, class: 'equipment', slot: 'boots', art: 'arduinoSneakers', rarity: 'common',
+      desc: 'Canvas sneakers with sensor boards strapped on, 5% faster. Full Arduino set (3 pieces): +1 HP +1 CHSM and a new look.' },
   ];
   // items that are never sold, only looted
   // class 'resource': stacks (up to `stack` per inventory slot), used for crafting later.
@@ -623,6 +632,11 @@
       desc: 'A worn street backpack with two pockets. Better than carrying loot in your hands.' },
     { name: 'BackBag X', class: 'bag', slots: 4, price: 600, rarity: 'rare', gain: { charisma: 1 }, art: 'bagX', tab: 'other', buyLevel: 3,
       desc: 'A reinforced tactical pack with four compartments and neon trim. Carries more, and looks sharp doing it.' },
+    // big bags, crafted at MutaTech (recipes coming soon). Vault Pack: when the hero dies wearing it, 10% of his money stays with him.
+    { name: 'Courier Shell', class: 'bag', slots: 8, price: 1690, rarity: 'mythical', gain: {}, art: 'courierShell',
+      desc: 'A hard-shell courier pack. Eight compartments behind one armoured hatch.' },
+    { name: 'Vault Pack', class: 'bag', slots: 12, price: 4490, rarity: 'legendary', gain: {}, art: 'vaultPack', keepMoney: 0.1,
+      desc: 'A pocket bank vault on your back. Twelve slots, and if you die, 10% of your money stays with you.' },
     // crafted at MutaTech (Banana sword + 5 MutaGen + 30 energy, hero lvl 4). price: its value (not sold in shops yet; the Scrap Dealer pays 40%).
     // meleeArea: melee area × 1.3; minLevel: hero level needed to equip. Uses the Banana sword picture until it has its own art.
     { name: 'baNano Sword', class: 'equipment', kind: 'sword', rarity: 'rare', price: 1200, minLevel: 4, meleeArea: 1.3, attackMs: -140,
@@ -635,6 +649,8 @@
   const RECIPES = [
     { make: 'Tar Orb', count: 1, cost: [['Tar', 10], ['MutaGen', 1]], energy: 20, minLevel: 2 },
     { make: 'baNano Sword', count: 1, cost: [['Banana sword', 1], ['MutaGen', 5]], energy: 30, minLevel: 4 },   // the Banana sword must be in the inventory (not equipped)
+    { make: 'Courier Shell', count: 1, cost: [], energy: 0, soon: true },   // soon: listed, recipe not ready yet
+    { make: 'Vault Pack', count: 1, cost: [], energy: 0, soon: true },
   ];
   const SCRAP_DEALER = { equipShare: 0.4, scrapPerCost: 0.01, scrapPrice: 2 };
   const BAG_ITEMS = () => LOOT_ITEMS.filter(it => it.class === 'bag');
@@ -655,6 +671,7 @@
   // (look: recolours his jacket and shoes in every frame, see heroSkin). One piece alone does nothing extra.
   const SETS = [
     { name: 'NRG', items: ['NRG Headset', 'NRG Shirt', 'NRG Sneakers'], gain: { charisma: 1 }, capGain: { health: 1, energy: 1 }, look: 'nrg' },
+    { name: 'Arduino', items: ['Arduino Headset', 'Arduino Shirt', 'Arduino Sneakers'], gain: { charisma: 1 }, capGain: { health: 1 }, look: 'arduino' },
   ];
   const setOf = name => SETS.find(st => st.items.includes(name)) || null;
   const slotOf = def => !def || def.class !== 'equipment' ? -1 : def.kind === 'sword' ? 0 : EQUIP_SLOT_KEYS.indexOf(def.slot);   // swords → weapon slot
@@ -1458,9 +1475,12 @@
     officePC: 'art/ui/officePC.webp', boss: 'art/ui/boss.webp', questIcon: 'art/ui/questIcon.webp', dealCall: 'art/ui/dealCall.webp', dealDelivery: 'art/ui/dealDelivery.webp',   // TradeCorp + quests (drawn placeholders until the art exists)
     slot:         'art/ui/slot.webp',   // slot frame: inventory, equipment, abilities, inventory button
     bananaSword:  'art/items/weapons/bananaSword.png',   // item icon
+    mothersword: 'art/items/weapons/mothersword.webp', courierShell: 'art/items/bags/courierShell.webp', vaultPack: 'art/items/bags/vaultPack.webp',
+    arduinoHeadset: 'art/items/armor/arduinoHeadset.webp', arduinoShirt: 'art/items/armor/arduinoShirt.webp', arduinoSneakers: 'art/items/armor/arduinoSneakers.webp',
     beefBrisket: 'art/items/food/beefBrisket.webp', dumplings: 'art/items/food/dumplings.webp', nrgShot: 'art/items/food/nrgShot.webp',   // food icons
     nrgHeadset: 'art/items/armor/nrgHeadset.webp', nrgShirt: 'art/items/armor/nrgShirt.webp', nrgSneakers: 'art/items/armor/nrgSneakers.webp',   // armor icons
     bananoSword: 'art/items/weapons/bananoSword.webp',   // baNano Sword icon (also drawn on his back)
+    heroMotherSide: 'art/hero/heroMotherSide.webp', heroMotherDown: 'art/hero/heroMotherDown.webp',   // Mothersword attacks
     heroBananoSide: 'art/hero/heroBananoSide.png', heroBananoDown: 'art/hero/heroBananoDown.png', heroBananoUp: 'art/hero/heroBananoUp.png',   // baNano Sword attacks
     ground:       'art/world/ground/ground.webp',   // seamless street floor, no joints (repeats every 6 x 6 tiles)
     groundSlums: 'art/world/ground/groundSlums.jpg', groundFactory: 'art/world/ground/groundFactory.jpg', groundLake: 'art/world/ground/groundLake.jpg',   // zone floors, same repeat
@@ -1526,7 +1546,8 @@
   // in every sheet, like the 280 px walk frames, so they share one scale.
   const HERO_ATTACK_SHEETS = { punch: { side: 'heroPunchSide', down: 'heroPunchDown', up: 'heroPunchUp' },
                                sword: { side: 'heroSwordSide', down: 'heroSwordDown', up: 'heroSwordUp' },
-                               banano: { side: 'heroBananoSide', down: 'heroBananoDown', up: 'heroBananoUp' } };   // a sword's attackSheets picks its set
+                               banano: { side: 'heroBananoSide', down: 'heroBananoDown', up: 'heroBananoUp' },
+                               mother: { side: 'heroMotherSide', down: 'heroMotherDown', up: 'heroSwordUp' } };   // Mothersword: its up sheet isn't made yet (Banana sword's for now)   // a sword's attackSheets picks its set
   const ATTACK_CELLS = {
     heroPunchSide: { cellW: 275, cellH: 283, ax: 98.0, foot: 2.1 },
     heroPunchDown: { cellW: 183, cellH: 283, ax: 91.3, foot: 5.0 },
@@ -1536,7 +1557,9 @@
     heroSwordUp: { cellW: 281, cellH: 389, ax: 147.8, foot: 3.6 },
     heroBananoSide: { cellW: 364, cellH: 350, ax: 138.0, foot: 3.0 },
     heroBananoDown: { cellW: 302, cellH: 381, ax: 195.5, foot: 5.0 },
-    heroBananoUp: { cellW: 306, cellH: 431, ax: 179.0, foot: 4.0 }
+    heroBananoUp: { cellW: 306, cellH: 431, ax: 179.0, foot: 4.0 },
+    heroMotherSide: { cellW: 330, cellH: 366, ax: 162, foot: 5 },
+    heroMotherDown: { cellW: 254, cellH: 466, ax: 130, foot: 46 }
   };
   const HERO_ATTACK_ANIM_MS = 400;   // 4 frames × 100 ms
 
@@ -1727,6 +1750,9 @@
     let restReadyAt = saved.restReadyAt ?? 0;   // Date.now() when the HomeDome can be used again
     const skills = (saved.skills || []).map(newName);            // learned skill names, shown in the ability slots
     const carried = () => [...inventory, ...equipped];
+    // a shop tab's items, cheapest first (current price: patches get dearer with every install)
+    const shopList = tabKey => [...SHOP_ITEMS, ...BAG_ITEMS()].filter(it => it.tab === tabKey)
+      .map((it, i) => ({ it, i, p: shown(it.name, prices[it.name]) })).sort((a, b) => a.p - b.p || a.i - b.i).map(o => o.it);
     const prices = { ...startPrices(), ...renameKeys(saved.prices) };
     const startLevels = () => Object.fromEntries(SHOP_ITEMS.filter(it => it.patch).map(it => [it.name, 0]));
     const levels = { ...startLevels(), ...renameKeys(saved.levels) };   // installed level of each patch
@@ -1783,7 +1809,7 @@
     // each row: { left, right, act() -> message }
     function rows() {
       if (!ui) return [];
-      if (ui.kind === 'shop') return [...SHOP_ITEMS, ...BAG_ITEMS()].filter(it => it.tab === SHOP_TABS[tabOf()].key).map(it => {
+      if (ui.kind === 'shop') return shopList(SHOP_TABS[tabOf()].key).map(it => {
         const gains = Object.entries(it.gain);
         const owned = (it.kind || it.slot || it.class === 'bag') && (carried().some(x => x.name === it.name) || bag === it.name);   // equipment: shown as owned, can still be bought (asks first)
         const showOwned = owned && it.class !== 'equipment';
@@ -2194,6 +2220,7 @@
         row('talent timers', 'ReZero ready', () => { rezeroReadyAt = 0; rezeroUntil = 0; return 'ReZero Protocol can save you again.'; }),
         row('take damage', `-25% max HP`, () => { hurtHero(Math.ceil(CAPS.health * 0.25), '#e5484d'); return `Hit for 25% of max HP. Health ${stats.health}/${CAPS.health}.`; }),
         row('poison', 'poison me (5 s)', () => { poisonHero(); return 'Poisoned: 2% max HP per second, no regen.'; }),
+        row('big bags', 'Courier Shell + Vault Pack', () => ['Courier Shell', 'Vault Pack'].map(n => { if (inventory.length >= invSlots()) return `No room for ${n}.`; inventory.push({ name: n, class: 'bag' }); return `Added ${n}.`; }).join(' ')),
         row('forest loot', '3 Spore Sacs, 1 Loader Core', () => [give('Spore Sac', 3), give('Loader Core', 1)].join(' ')),
         (() => {   // teleport next to the nearest Overgrown Loader's home (cycles through them)
           const homes = []; for (const id in AREAS) for (const f of AREAS[id].extraFoes || []) if (f.kind === 'loader') homes.push({ id, x: f.spawn.x - 1, y: f.spawn.y - 1 });
@@ -2240,7 +2267,7 @@
       return all.filter(r => (CHEAT_TAB[r.left] || 'world') === tab);
     }
     const CHEAT_TAB = { money: 'hero', refill: 'hero', 'mana cap': 'hero', exp: 'hero', 'level up': 'hero', charisma: 'hero', strength: 'hero', 'take damage': 'hero', die: 'hero', 'rest cooldown': 'hero',
-      'deal types': 'items', 'promotion ready': 'items', 'Magic tar': 'items', Tar: 'items', 'new items': 'items', 'Banana sword': 'items', 'baNano Sword': 'items', delivery: 'items', deliveries: 'items', poison: 'hero', 'forest loot': 'items' };
+      'deal types': 'items', 'promotion ready': 'items', 'Magic tar': 'items', Tar: 'items', 'new items': 'items', 'Banana sword': 'items', 'baNano Sword': 'items', delivery: 'items', deliveries: 'items', poison: 'hero', 'forest loot': 'items', 'big bags': 'items' };
     // MutaTech crafting: needs every item and the energy; the made item must fit in the inventory (after the costs are taken)
     const countOf = name => inventory.filter(it => it.name === name).reduce((t, it) => t + (it.count || 1), 0);
     function takeItems(name, n) {   // remove n of an item, from the last stacks first
@@ -2251,6 +2278,7 @@
       }
     }
     function craft(r) {
+      if (r.soon) return `The ${r.make} recipe is coming soon.`;
       if (r.minLevel && hero.level < r.minLevel) return `Reach level ${r.minLevel} to craft ${r.make}.`;
       const wearing = r.cost.find(([name, n]) => countOf(name) < n && equipped.some(it => it.name === name));
       if (wearing) return `Unequip your ${wearing[0]} first: it must be in your inventory.`;
@@ -3292,7 +3320,7 @@
       if (t < 0 || t > MELEE.flashMs) return;
       const a = meleeArea(), ang = Math.atan2(a.dy, a.dx), ox = a.ox * TILE, oy = a.oy * TILE, R = a.r * TILE;
       // colour by weapon: white with fists, yellow with the Banana sword, neon green with the baNano Sword
-      const w = equipped.find(e => MELEE_KINDS.includes(e.kind)), rgb = !w ? '255, 255, 255' : w.name === 'baNano Sword' ? '157, 255, 92' : '255, 230, 0';
+      const w = equipped.find(e => MELEE_KINDS.includes(e.kind)), rgb = !w ? '255, 255, 255' : w.name === 'baNano Sword' ? '157, 255, 92' : w.name === 'Mothersword' ? '62, 214, 120' : '255, 230, 0';
       const base = 0.06 * (1 - t / MELEE.flashMs);
       // corners dimmed: full in front, fading to about half toward both ends of the flat side (a conic gradient around the hero)
       ctx.save(); ctx.globalAlpha = base;
@@ -3520,7 +3548,9 @@
     // He respawns in the city below HomeDome with 1 HP, 0 mana, 0 energy and 1$; level and exp stay.
     function gameOver() {
       closePanels(); deathStart = performance.now(); moving = false;
-      const pile = { zone: areaName, x: player.x, y: player.y, money: Math.max(0, stats.money), bag, gear: equipped.map(it => ({ ...it })),
+      const keep = Math.floor(Math.max(0, stats.money) * ((itemDef(bag) || {}).keepMoney || 0));   // Vault Pack: 10% stays with him
+      keptMoney = keep;
+      const pile = { zone: areaName, x: player.x, y: player.y, money: Math.max(0, stats.money) - keep, bag, gear: equipped.map(it => ({ ...it })),
                      items: inventory.map(it => ({ ...it })), until: gameTime + PILE_MS };
       for (const it of [...equipped]) { const def = itemDef(it.name); equipped.splice(equipped.indexOf(it), 1); if (def) takeOffGains(def); }
       syncSets();
@@ -3530,11 +3560,13 @@
       if (dropped) piles.push(pile);
       const name = heroName || DEFAULT_NAME;
       ui = { kind: 'gameover', cursor: 0, title: `${name} died`,
-             lines: [dropped ? `${name}'s loot will stay in the ${areaLabel(pile.zone)} for ${PILE_MS / 60000} minutes.` : `${name} had nothing to drop.`] };
+             lines: [dropped ? `${name}'s loot will stay in the ${areaLabel(pile.zone)} for ${PILE_MS / 60000} minutes.` : `${name} had nothing to drop.`,
+                     ...(keep ? [`The Vault Pack kept ${keep}$ safe.`] : [])] };
       held.clear(); tapped.clear();
     }
+    let keptMoney = 0;   // money the Vault Pack saved at the last death, given back on respawn
     function respawn() {
-      Object.assign(stats, { health: 1, mana: 0, energy: 0, money: 1 });
+      Object.assign(stats, { health: 1, mana: 0, energy: 0, money: 1 + keptMoney }); keptMoney = 0;
       heroDot = null; rootedUntil = 0; slowUntil = 0; poisonUntil = 0; projectiles.length = 0; floaters.length = 0;
       ui = null; closePanels();
       enterArea('0:0', START.x, START.y, 1, true);
@@ -3926,11 +3958,12 @@
       }
 
       // full NRG set: a small soft circle of neon-green light on the ground under the hero (gently pulsing)
-      if (activeSets.has('NRG')) {
+      if (activeSets.has('NRG') || activeSets.has('Arduino')) {   // NRG green / Arduino teal
+        const glow = activeSets.has('NRG') ? '157, 255, 92' : '0, 200, 205';
         const gx = (rx + 0.5) * TILE, gy = (ry + 0.92) * TILE, pulse = 0.85 + 0.15 * Math.sin(performance.now() / 450);
         ctx.save(); ctx.translate(gx, gy); ctx.scale(1, 0.42);
         const gr = ctx.createRadialGradient(0, 0, 0, 0, 0, TILE * 0.5);
-        gr.addColorStop(0, `rgba(157, 255, 92, ${0.45 * pulse})`); gr.addColorStop(0.55, `rgba(157, 255, 92, ${0.18 * pulse})`); gr.addColorStop(1, 'rgba(157, 255, 92, 0)');
+        gr.addColorStop(0, `rgba(${glow}, ${0.45 * pulse})`); gr.addColorStop(0.55, `rgba(${glow}, ${0.18 * pulse})`); gr.addColorStop(1, `rgba(${glow}, 0)`);
         ctx.fillStyle = gr; ctx.beginPath(); ctx.arc(0, 0, TILE * 0.5, 0, Math.PI * 2); ctx.fill(); ctx.restore();
       }
       // tile the hero is facing: a soft, blurred triangle (3%) with its tip toward the hero, widening away from him (colour: markerColor)
@@ -4493,7 +4526,8 @@
     // ---- set looks: the hero's sheets recoloured once per look (cached). Cyan trim turns neon green everywhere on him (arm lights,
     // hair streak, every pose); below the neck (the bottom 58% of his height) dark navy cloth also turns graphite.
     // Outlines, skin, the black hair and the metal arm stay as they are.
-    const LOOKS = { nrg: { trim: [157, 255, 92], cloth: v => [v * 1.35 + 16, v * 1.4 + 18, v * 1.45 + 24] } };
+    const LOOKS = { nrg: { trim: [157, 255, 92], cloth: v => [v * 1.35 + 16, v * 1.4 + 18, v * 1.45 + 24] },
+                    arduino: { trim: [0, 186, 192], cloth: v => [v * 1.1 + 70, v * 1.25 + 125, v * 1.2 + 170] } };   // Arduino teal trim, light-blue clothes
     const skinCache = {};
     function skinned(key) {
       const img = ART[key], look = heroLook();
@@ -4616,6 +4650,7 @@
       const buyLvl = it.buyLevel || it.minLevel, locked = buyLvl && hero.level < buyLvl;
       const sub = locked ? `needs lvl ${buyLvl}` : it.patch ? `patch · installed lvl ${levels[it.name]}` : it.class === 'equipment' ? `${it.rarity || 'common'} · ${EQUIP_SLOT_KEYS[slotOf(it)] || 'equipment'}${setOf(it.name) ? ` · ${setOf(it.name).name} set` : ''}` : it.class === 'bag' ? (bag === it.name ? 'worn now' : `${it.rarity || 'common'} bag`) : 'used at once';
       if (locked) ctx.fillStyle = '#e5484d';
+      for (let fs = 18; fs > 12 && ctx.measureText(sub).width > nameW + 10; fs--) ctx.font = fs + 'px ' + MONO;   // long set names: shrink to fit
       ctx.fillText(sub, nameX, sy + big - 12);
       // price, right side
       const priceX = x + w - 20, cy = y + h / 2;
@@ -4839,6 +4874,14 @@
       ctx.fillText(`${def.rarity || 'common'} ${def.class || 'item'}`, sx + big + 20, sy + big - 10);
       // right part: costs = icon slot + amount (green when there is enough, red when not) + "name (have)", then energy
       const rx = sx + big + 20 + nameW + 30, cy = y + 20, cs = 64;
+      if (r.soon) {   // recipe not ready: what it is, its price, "coming soon"
+        ctx.textAlign = 'left'; ctx.textBaseline = 'middle'; ctx.font = '600 26px ' + MONO; ctx.fillStyle = '#8a8a8a';
+        ctx.fillText('Recipe coming soon', rx, cy + cs / 2);
+        ctx.font = '19px ' + MONO; ctx.fillStyle = '#cfcfcf';
+        wrapText(`${def.slots ? def.slots + ' slots. ' : ''}${def.desc || ''}`, x + w - 20 - rx).slice(0, 4).forEach((l, i) => ctx.fillText(l, rx, cy + cs + 26 + i * 24));
+        ctx.textAlign = 'right'; ctx.fillStyle = '#f5c542'; ctx.font = '700 28px ' + MONO; ctx.fillText(`${def.price}$`, x + w - 20, cy + cs / 2);
+        return;
+      }
       let cx = rx;
       for (const [name, n] of r.cost) {
         drawSlot(cx, cy, cs, { name });
@@ -4931,9 +4974,23 @@
         if (list.length && list[0].side) drawSideTab(list, px + 24, top, pw - 48, listN * rowH - 8);
       }
       let gapY = 0;
+      // long lists (shop tabs, MutaTech): only the rows that fit are drawn; the list scrolls with the cursor, which keeps one
+      // row of look-ahead, so clicking or tapping the last visible row brings the next one into view (mouse wheel works too)
+      const listBottom = py + ph - 104 - Math.max(0, msgLines.length - 1) * 32, fitN = Math.max(1, Math.floor((listBottom - top + 8) / rowH));
+      const scrolls = !info && !list.some(r => r.gapBefore) && !(list.length && list[0].side) && list.length > fitN;
+      if (scrolls) {
+        const ahead = fitN >= 3 ? 1 : 0;
+        ui.scroll = Math.max(0, Math.min(ui.scroll || 0, list.length - fitN));
+        if (ui.cursor - ahead < ui.scroll) ui.scroll = Math.max(0, ui.cursor - ahead);
+        if (ui.cursor + ahead >= ui.scroll + fitN) ui.scroll = Math.min(list.length - fitN, ui.cursor + ahead - fitN + 1);
+        const bx = px + pw - 18, bh = fitN * rowH - 8, th = bh * fitN / list.length, ty = top + bh * ui.scroll / list.length;   // scroll bar
+        ctx.fillStyle = 'rgba(255, 255, 255, 0.12)'; ctx.fillRect(bx, top, 5, bh); ctx.fillStyle = 'rgba(255, 255, 255, 0.55)'; ctx.fillRect(bx, ty, 5, th);
+      } else if (ui.kind !== 'work') ui.scroll = 0;
+      const first = scrolls ? ui.scroll : 0;
       (list.length && list[0].side ? [] : list).forEach((r, i) => {
         if (r.gapBefore) gapY += 24;
-        const y = top + i * rowH + gapY, sel = !info && i === ui.cursor;
+        if (scrolls && (i < first || i >= first + fitN)) return;
+        const y = top + (i - first) * rowH + gapY, sel = !info && i === ui.cursor;
         rowRects.push({ x: px + 24, y, w: pw - 48, h: rowH - 8, i });
         if (sel) { ctx.fillStyle = 'rgba(255, 220, 0, 0.12)'; ctx.fillRect(px + 24, y, pw - 48, rowH - 8); }
         if (r.craft) { drawCraftRow(r.craft, px + 24, y, pw - 48, rowH - 8, sel); return; }
@@ -5000,7 +5057,7 @@
         return best >= 0 ? { row: best } : null;
       }
       const shopRow = (tabKey, name) => SHOP_TABS[tabOf()].key !== tabKey ? { tab: SHOP_TABS.findIndex(t => t.key === tabKey) }
-        : { row: [...SHOP_ITEMS, ...BAG_ITEMS()].filter(it => it.tab === tabKey).findIndex(it => it.name === name) };
+        : { row: shopList(tabKey).findIndex(it => it.name === name) };
       if (ev === 'food' && ui.kind === 'shop') return shopRow('food', 'Cheap noodles');
       if (ev === 'smile' && ui.kind === 'shop') return shopRow('patches', 'Smile');
       if (ev === 'rest' && ui.kind === 'rest') return { row: 0 };
@@ -5770,7 +5827,11 @@
     addEventListener('blur', () => held.clear());
 
     // tap/click a row in a window to pick it
-    canvas.addEventListener('contextmenu', e => e.preventDefault());   // right-click is the game's item menu, not the browser's
+    canvas.addEventListener('contextmenu', e => e.preventDefault());
+    canvas.addEventListener('wheel', e => {   // mouse wheel: move through a long window list (it scrolls with the cursor)
+      if (!ui || naming() || ['techversity', 'map', 'start', 'loading', 'gameover'].includes(ui.kind) || (WINDOW_TABS[ui.kind] && ui.kind === 'work')) return;
+      e.preventDefault(); moveCursor(e.deltaY > 0 ? 1 : -1);
+    }, { passive: false });   // right-click is the game's item menu, not the browser's
     function tapOnHero(cx, cy) {   // canvas point → is it on the hero's sprite (his tile and the head above it)?
       const wx = (cx - cam.ox) / cam.z / TILE, wy = (cy - cam.oy) / cam.z / TILE;
       return wx >= player.x - 0.15 && wx <= player.x + 1.15 && wy >= player.y + 1 - HERO_H && wy <= player.y + 1;
