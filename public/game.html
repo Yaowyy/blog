@@ -590,12 +590,12 @@
       desc: 'A small-talk module for the street. Twice the charm of Smile. +15% price per install.' },
     { name: 'Persona', tab: 'patches', class: 'patch', minLevel: 3, price: 240, gain: { charisma: 3 }, patch: true, art: 'personaPatch', rarity: 'common',
       desc: 'A premium personality overlay. The biggest charisma boost per install. +15% price per install.' },
-    // class 'equipment': goes to the inventory, gives its bonus only once equipped (I → A/D → Space).
-    // kind: only one item per kind (e.g. one sword), counting inventory and equipped items. Bought once.
-    { name: 'Banana sword', tab: 'weapons', buyLevel: 2, meleeArea: 1.2, price: 390, gain: { strength: 3, charisma: 1 }, attackMs: -120, class: 'equipment', kind: 'sword', art: 'bananaSword', rarity: 'common',   // attackMs: swings 0.1 s faster
-      desc: 'A curved yellow blade that hits hard and swings fast. Goes to your inventory: equip it there. One sword at a time.' },
+    // class 'equipment': goes to the inventory, gives its bonus only once equipped (I → A/D → Space). Never stacks (1 per slot).
+    // Any number can be bought and carried (buying one you already have asks first); only one per equipment slot is worn.
+    { name: 'Banana sword', tab: 'weapons', buyLevel: 2, meleeArea: 1.2, price: 370, gain: { strength: 3, charisma: 1 }, attackMs: -120, class: 'equipment', kind: 'sword', art: 'bananaSword', rarity: 'common',   // attackMs: swings 0.1 s faster
+      desc: 'A curved yellow blade that hits hard and swings fast. Goes to your inventory: equip it there. Only one sword can be equipped.' },
     // armor (Armor tab): capGain raises max HP / NRG while worn, hpRegen adds health per minute, speed = move speed bonus
-    { name: 'NRG Headset', tab: 'armor', price: 390, gain: { charisma: 1 }, capGain: { health: 1, energy: 3 }, hpRegen: 1, class: 'equipment', slot: 'head', art: 'nrgHeadset', rarity: 'common',
+    { name: 'NRG Headset', tab: 'armor', price: 370, gain: { charisma: 1 }, capGain: { health: 1, energy: 3 }, hpRegen: 1, class: 'equipment', slot: 'head', art: 'nrgHeadset', rarity: 'common',
       desc: 'Noise-cancelling headset with a charge loop. Full NRG set (3 pieces): +1 HP +1 CHSM +1 NRG and a new look.' },
     { name: 'NRG Shirt', tab: 'armor', price: 590, gain: { charisma: 2 }, capGain: { health: 2, energy: 5 }, hpRegen: 1, class: 'equipment', slot: 'chest', art: 'nrgShirt', rarity: 'common',
       desc: 'Smart fabric with woven power lines. Full NRG set (3 pieces): +1 HP +1 CHSM +1 NRG and a new look.' },
@@ -615,8 +615,8 @@
       desc: 'A magic orb that fuses magic power and body', consume: { manaCap: 1 } },
     { name: 'AI chip',    class: 'resource', stack: 32, gain: {}, value: 24, rarity: 'rare', art: 'aiChip' },
     // forest enemies' loot (sold at the Scrap Dealer for now; MutaTech recipes later)
-    { name: 'Spore Sac',  class: 'resource', stack: 32, gain: {}, value: 5, rarity: 'common', art: 'sporeSac', desc: 'A soft sac of glowing spores from a Sporeling.' },
-    { name: 'Loader Core', class: 'resource', stack: 8, gain: {}, value: 90, rarity: 'rare', art: 'loaderCore', desc: 'The still-warm power core of an Overgrown Loader.' },
+    { name: 'Spore Sac',  class: 'resource', stack: 64, gain: {}, value: 5, rarity: 'common', art: 'sporeSac', desc: 'A soft sac of glowing spores from a Sporeling.' },
+    { name: 'Loader Core', class: 'resource', stack: 16, gain: {}, value: 90, rarity: 'mythical', art: 'loaderCore', desc: 'The still-warm power core of an Overgrown Loader.' },
     // bags: class 'bag', worn in the bag slot (the backpack tile in the bar); slots = inventory size while worn.
     // Sold in the ATB-Market (Other tab). A bag can only be swapped when the worn bag holds nothing but the new bag.
     { name: 'BackBag', class: 'bag', slots: 2, price: 80, rarity: 'common', gain: {}, art: 'invIcon', tab: 'other',
@@ -1785,23 +1785,30 @@
       if (!ui) return [];
       if (ui.kind === 'shop') return [...SHOP_ITEMS, ...BAG_ITEMS()].filter(it => it.tab === SHOP_TABS[tabOf()].key).map(it => {
         const gains = Object.entries(it.gain);
-        const owned = (it.kind || it.slot || it.class === 'bag') && (carried().some(x => x.name === it.name) || bag === it.name);
+        const owned = (it.kind || it.slot || it.class === 'bag') && (carried().some(x => x.name === it.name) || bag === it.name);   // equipment: shown as owned, can still be bought (asks first)
+        const showOwned = owned && it.class !== 'equipment';
         return {
           left: it.patch ? `${it.name}  lvl ${levels[it.name]}` : it.name,
-          shopItem: { it, owned, price: shown(it.name, prices[it.name]) },   // drawn as a big tile (drawShopRow)
-          right: `${bonusText(it)}   ${owned ? 'owned' : shown(it.name, prices[it.name]) + '$'}`,
-          act() {
+          shopItem: { it, owned: showOwned, have: owned, price: shown(it.name, prices[it.name]) },   // drawn as a big tile (drawShopRow)
+          right: `${bonusText(it)}   ${showOwned ? 'owned' : shown(it.name, prices[it.name]) + '$'}`,
+          act(again) {
             const price = shown(it.name, prices[it.name]);
-            if (owned) return `You already have the ${it.name}.`;
+            if (owned && it.class !== 'equipment') return `You already have the ${it.name}.`;
+            if (owned && !again) {   // equipment you already have: ask before buying another
+              askConfirm({ title: 'Already owned', icon: '?', text: 'You already have this item. Buy anyway?', yes: 'Buy', no: 'Cancel' }).then(ok => {
+                if (!ok || !ui || ui.kind !== 'shop') return;
+                ui.msg = this.act(true) || ''; renderStats();
+              });
+              return '';
+            }
             const buyLvl = it.buyLevel || it.minLevel;   // shop level lock (buyLevel: needed to buy only, not to equip)
             if (buyLvl && hero.level < buyLvl) return `Reach level ${buyLvl} to ${it.patch ? 'install' : 'buy'} ${it.name}.`;
-            if (it.kind && carried().some(x => x.kind === it.kind)) return `You can only carry one ${it.kind}.`;
             const carriesIt = it.kind || it.slot || it.class === 'bag';   // goes into the bag (a first bag is worn straight away)
             const noRoom = carriesIt && !(it.class === 'bag' && !bag) && inventory.length >= invSlots();
             if (noRoom && !(it.class === 'equipment' && canWearDirect(it))) return fullMsg();   // equipment with a free slot is worn instead
             if (stats.money < price) return `Not enough money for ${it.name}.`;
             if (it.class === 'food' && stats.energy >= CAPS.energy) {   // full of energy: offer to keep it for later
-              const fits = inventory.some(x => x.name === it.name && (x.count || 1) < (it.stack || 1)) || inventory.length < invSlots();
+              const fits = inventory.some(x => x.name === it.name && !x.quest && (x.count || 1) < (it.stack || 1)) || inventory.length < invSlots();
               if (!fits) return bag ? `Your energy is full, and your ${bag} has no room for ${it.name}.` : 'Your energy is full, and you have no bag to keep food in.';
               askConfirm({ title: 'Energy is full', icon: '⚡', text: `Your energy is full. Put <b>${it.name}</b> in your inventory for later?`, yes: 'Put in bag', no: 'Cancel' }).then(ok => {
                 if (!ok) return;
@@ -1919,7 +1926,7 @@
         if (!q) return [{ left: 'bye', right: '', act() { ui = null; } }];   // (after a delivery she lingers a few seconds)
         const pay = deliveryPay(q);
         return [{ left: `hand over the ${q.item}`, right: `+${pay.money}$ +${pay.exp} exp`, act() {
-          const it = inventory.find(x => x.name === q.item);
+          const it = questItemOf(q);
           if (!it) return `You don't have the ${q.item} any more.`;
           if ((it.count || 1) > 1) it.count--; else inventory.splice(inventory.indexOf(it), 1);
           quests.splice(quests.indexOf(q), 1); stats.money += pay.money; gainExp(pay.exp); renderStats();
@@ -2201,7 +2208,7 @@
         row('crit', 'trigger one crit', () => { onHeroCrit(); return tal('overclock', 2) ? `Overclock x${ocStacks}.` : 'Crit triggered (System Overclock has no points).'; }),
         row('delivery', 'start a rare one', () => {
           if (quests.length >= MAX_QUESTS) return `You already have ${MAX_QUESTS} active quests.`;
-          const q = makeDelivery(true); if (addItem(q.item, 1)) return `The ${q.item} needs a free inventory slot.`;
+          const q = makeDelivery(true); if (addQuestItem(q.item)) return `The ${q.item} needs a free inventory slot.`;
           quests.push(q); deliveryBanner = { q, at: performance.now() }; return `Rare delivery started: ${q.item}.`;
         }),
         row('deliveries', 'finish the timers now', () => { const d = quests.filter(q => q.kind === 'delivery'); if (!d.length) return 'No active deliveries.'; d.forEach(q => { q.until = gameTime; }); return `${d.length} deliver${d.length === 1 ? 'y runs' : 'ies run'} out of time now.`; }),
@@ -2384,7 +2391,7 @@
         if (quests.length >= MAX_QUESTS) return `You already have ${MAX_QUESTS} active quests. Cancel one first (Q).`;
         const q = makeDelivery(d.rare);
         const backup = inventory.map(it => ({ ...it }));
-        if (addItem(q.item, 1)) { inventory.length = 0; inventory.push(...backup); return `${fullMsg()} The ${q.item} for the delivery needs a free slot.`; }
+        if (addQuestItem(q.item)) { inventory.length = 0; inventory.push(...backup); return `${fullMsg()} The ${q.item} for the delivery needs a free slot.`; }
         quests.push(q);
         deliveryBanner = { q, at: performance.now() };   // big notice in the middle of the screen
       }
@@ -2441,7 +2448,7 @@
         const q = quests[i];
         if (q.kind !== 'delivery' || gameTime < q.until) continue;
         quests.splice(i, 1);
-        const it = inventory.find(x => x.name === q.item);
+        const it = questItemOf(q);
         if (it) { if ((it.count || 1) > 1) it.count--; else inventory.splice(inventory.indexOf(it), 1); }
         showHint(`Too late! The ${q.name.toLowerCase()} failed and the ${q.item} was taken back.`);
         renderStats();
@@ -2523,6 +2530,7 @@
         pn.msg = `Learned ${item.name}: spell slot ${skills.length}, key ${skills.length}.`;
         renderStats(); return;
       }
+      if (item.quest) { pn.msg = `That ${item.name} is for a delivery. Bring it to the Netizen Chef.`; return; }
       if (def.class === 'food') {   // eat one: its gains, up to the caps (refused when nothing would go up)
         const up = Object.entries(def.gain || {}).filter(([st]) => !(st in CAPS) || stats[st] < CAPS[st]);
         if (!up.length) { pn.msg = 'You are already full.'; return; }
@@ -3459,11 +3467,17 @@
     const lootable = () => drips.find(d => d.dead && d.loot &&
       (occupies(d, player.x + facing.x, player.y + facing.y) || occupies(d, player.x, player.y))) || null;
 
+    // a delivery's parcel: its own slot, never stacked with the same food bought in the shop (1 = no room)
+    function addQuestItem(name) {
+      if (inventory.length >= invSlots()) return 1;
+      const def = itemDef(name) || {}; inventory.push({ name, class: def.class, kind: def.kind, count: 1, quest: true }); return 0;
+    }
+    const questItemOf = q => inventory.find(x => x.name === q.item && x.quest) || inventory.find(x => x.name === q.item);   // (older saves: unflagged)
     // put n of an item into the inventory: fills existing stacks first, then empty slots. Returns what didn't fit.
     function addItem(name, n) {
       const def = itemDef(name) || {}, max = def.stack || 1;
       if (max > 1) for (const it of inventory) {
-        if (it.name !== name || (it.count || 1) >= max) continue;
+        if (it.name !== name || it.quest || (it.count || 1) >= max) continue;
         const k = Math.min(n, max - (it.count || 1)); it.count = (it.count || 1) + k; n -= k;
         if (!n) return 0;
       }
@@ -3543,7 +3557,7 @@
       if (p.bag && fits()) { inventory.push({ name: p.bag, class: 'bag' }); got.push(p.bag); p.bag = null; }
       p.items = p.items.filter(it => {
         const def = itemDef(it.name) || {};
-        if ((def.stack || 1) > 1) { const left = addItem(it.name, it.count || 1); if (left < (it.count || 1)) got.push(it.name); it.count = left; return left > 0; }
+        if ((def.stack || 1) > 1 && !it.quest) { const left = addItem(it.name, it.count || 1); if (left < (it.count || 1)) got.push(it.name); it.count = left; return left > 0; }
         if (fits()) { inventory.push(it); got.push(it.name); return false; }
         return true;
       });
@@ -4971,8 +4985,20 @@
     function tutGlowTarget() {
       if (!ui || tut < 1 || tut > TUT.length) return null;
       const ev = TUT[tut - 1].ev;
-      if (ev === 'deal' && tutN > 0) return null;   // task 1: the first deal is outlined only until he takes one
-      if ((ev === 'deal' || ev === 'money') && ui.kind === 'work') return WINDOW_TABS.work[tabOf()].key === 'deals' ? { row: 0 } : { tab: WINDOW_TABS.work.findIndex(t => t.key === 'deals') };
+      // tasks 1 (5 deals) and 3 (30$): the best call is outlined until the task is done: the most money per energy among the
+      // calls he can pay for (ties: more money). None he can pay for (or no calls rolled): nothing outlined.
+      if ((ev === 'deal' || ev === 'money') && ui.kind === 'work') {
+        if (WINDOW_TABS.work[tabOf()].key !== 'deals') return { tab: WINDOW_TABS.work.findIndex(t => t.key === 'deals') };
+        let best = -1, bestScore = -1;
+        deals.forEach((d, i) => {
+          if (d.type !== 'call') return;
+          const cost = ceoFree() ? 0 : dealCost(d);
+          if (stats.energy < cost) return;
+          const score = d.money / Math.max(cost, 0.01) + d.money * 1e-6;
+          if (score > bestScore) { bestScore = score; best = i; }
+        });
+        return best >= 0 ? { row: best } : null;
+      }
       const shopRow = (tabKey, name) => SHOP_TABS[tabOf()].key !== tabKey ? { tab: SHOP_TABS.findIndex(t => t.key === tabKey) }
         : { row: [...SHOP_ITEMS, ...BAG_ITEMS()].filter(it => it.tab === tabKey).findIndex(it => it.name === name) };
       if (ev === 'food' && ui.kind === 'shop') return shopRow('food', 'Cheap noodles');
@@ -5327,6 +5353,11 @@
         ctx.shadowColor = rarityColor(item.name); ctx.shadowBlur = 6;
         ctx.strokeRect(x + i, y + i, size - 2 * i, size - 2 * i); ctx.restore();
       }
+      if (item && item.quest) {   // delivery parcel: a small cyan tag, top-left
+        const r = size * 0.13, bx = x + size * 0.2, by = y + size * 0.2;
+        ctx.fillStyle = '#00e5ff'; ctx.beginPath(); ctx.arc(bx, by, r, 0, Math.PI * 2); ctx.fill();
+        ctx.fillStyle = '#000'; ctx.font = `800 ${Math.round(r * 1.5)}px ` + MONO; ctx.textAlign = 'center'; ctx.textBaseline = 'middle'; ctx.fillText('!', bx, by + 1);
+      }
       if (item && (item.count || 1) > 1) {   // stack size, bottom-right
         const fs = Math.round(size * 0.2);
         ctx.font = `700 ${fs}px ` + MONO; ctx.textAlign = 'right'; ctx.textBaseline = 'alphabetic';
@@ -5419,7 +5450,7 @@
       else if (sel) {   // what the selected item is, and its total price
         const def = itemDef(sel.name) || {}, n = sel.count || 1;
         ctx.fillStyle = rarityColor(sel.name);   // name in its rarity colour
-        ctx.fillText(`${sel.name} · ${rarityOf(sel.name)} ${def.class || sel.class || 'item'}${def.stack > 1 ? ` · ${n}/${def.stack}` : ''}`, x + 24, ly);
+        ctx.fillText(sel.quest ? `${sel.name} · delivery parcel (Netizen Chef)` : `${sel.name} · ${rarityOf(sel.name)} ${def.class || sel.class || 'item'}${def.stack > 1 ? ` · ${n}/${def.stack}` : ''}`, x + 24, ly);
         ctx.fillStyle = '#cfcfcf';
         if (def.class === 'equipment' || def.class === 'bag' || def.class === 'food') { const hint = def.class === 'bag' ? '· Space wear' : def.class === 'food' ? '· Space eat' : '· Space equip', ex = drawParts(bonusParts(def), x + 24, ly + 26, 10);   // hint only if it fits in the panel
           if (ex + ctx.measureText(hint).width < x + w - 16) { ctx.fillStyle = '#cfcfcf'; ctx.fillText(hint, ex, ly + 26); } }
