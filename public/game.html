@@ -598,9 +598,9 @@
       desc: 'A premium personality overlay. The biggest charisma boost per install. +15% price per install.' },
     // class 'equipment': goes to the inventory, gives its bonus only once equipped (I → A/D → Space). Never stacks (1 per slot).
     // Any number can be bought and carried (buying one you already have asks first); only one per equipment slot is worn.
-    { name: 'Banana sword', tab: 'weapons', buyLevel: 2, meleeArea: 1.2, price: 370, gain: { strength: 3, charisma: 1 }, attackMs: -120, class: 'equipment', kind: 'sword', art: 'bananaSword', rarity: 'common',   // attackMs: swings 0.1 s faster
+    { name: 'Banana sword', tab: 'weapons', buyLevel: 2, meleeArea: 1.2, price: 260, gain: { strength: 1, charisma: 1 }, hit: 5, attackMs: -100, class: 'equipment', kind: 'sword', art: 'bananaSword', rarity: 'common',   // attackMs: swings 0.1 s faster
       desc: 'A curved yellow blade that hits hard and swings fast. Goes to your inventory: equip it there. Only one sword can be equipped.' },
-    { name: 'Mothersword', tab: 'weapons', buyLevel: 2, meleeArea: 1.2, price: 370, gain: { strength: 3, charisma: 1 }, attackMs: -120, class: 'equipment', kind: 'sword', art: 'mothersword', attackSheets: 'mother', rarity: 'common',
+    { name: 'Mothersword', tab: 'weapons', buyLevel: 3, meleeArea: 1.25, price: 390, gain: { strength: 2, charisma: 1 }, hit: 9, attackMs: -120, class: 'equipment', kind: 'sword', art: 'mothersword', attackSheets: 'mother', rarity: 'common',
       desc: 'A home-made blade cut from an old motherboard. Basic for now, but its empty sockets can take upgrades at MutaTech.' },
     // armor (Armor tab): capGain raises max HP / NRG while worn, hpRegen adds health per minute, speed = move speed bonus
     { name: 'NRG Headset', tab: 'armor', price: 370, gain: { charisma: 1 }, capGain: { health: 1, energy: 3 }, hpRegen: 1, class: 'equipment', slot: 'head', art: 'nrgHeadset', rarity: 'common',
@@ -645,8 +645,8 @@
       desc: 'A pocket bank vault on your back. Twelve slots, and if you die, 10% of your money stays with you.' },
     // crafted at MutaTech (Banana sword + 5 MutaGen + 30 energy, hero lvl 4). price: its value (not sold in shops yet; the Scrap Dealer pays 40%).
     // meleeArea: melee area × 1.3; minLevel: hero level needed to equip. Uses the Banana sword picture until it has its own art.
-    { name: 'baNano Sword', class: 'equipment', kind: 'sword', rarity: 'rare', price: 1200, minLevel: 4, meleeArea: 1.3, attackMs: -140,
-      gain: { strength: 6, charisma: 3 }, art: 'bananoSword', attackSheets: 'banano',
+    { name: 'baNano Sword', class: 'equipment', kind: 'sword', rarity: 'rare', price: 1200, minLevel: 4, meleeArea: 1.3, attackMs: -140, hit: 24,
+      gain: { strength: 5, charisma: 3 }, art: 'bananoSword', attackSheets: 'banano',
       desc: 'A Banana sword mutated by MutaGen down to the nano level. Its living, self-sharpening peel glows acid green and cuts faster than ever.' },
   ];
   // Scrap Dealer (slums): buys equipment for 40% of its shop price plus 1% of that price in scrap (rounded down),
@@ -1306,43 +1306,87 @@
     for (const id of zonesOf('factoryIn')) for (let q = 0; q < 4; q++)
       for (let n = 3 + Math.floor(rnd() * 2); n >= 3; n--) if (placeRow(id, Array(n).fill('cont'), q)) break;
     for (const id of zonesOf('factory')) for (let i = 0; i < 6; i++) place(id, 'cont');
-    // toxic lake: a research hut in every zone; 1 pump station, in 0:-2, right at the water with its pipes going in
     // enemies placed with the scenery: A.extraFoes (no twins). tileOk: open ground, away from passages
     const tileOk = (A, x, y) => x >= 1 && y >= 1 && x <= COLS - 2 && y <= ROWS - 2 && !A.walls.some(o => inFoot(foot(o), x, y, 0))
       && !lakeT(A, x, y) && !bigT(A, x, y) && !(A.coils || []).some(c => c.x - 1 === x && c.y - 1 === y)
       && !A.exits.some(e => e.tiles.some(([tx, ty]) => Math.abs(tx - x) < 3 && Math.abs(ty - y) < 3))
       && !(A.extraFoes || []).some(f => f.spawn.x - 1 === x && f.spawn.y - 1 === y) && !behindTall(Object.keys(AREAS).find(k => AREAS[k] === A), x, y);
-    const addFoe = (A, kind, x, y) => (A.extraFoes = A.extraFoes || []).push({ kind, spawn: { x: x + 1, y: y + 1 } });
+    // every enemy belongs to a group (a lab's Scavs, a patch's Sporelings, the satellite's drones, or just itself).
+    // Enemies of different groups start at least FOE_GAP tiles apart (diagonals count as 1; a Loader counts all 4 of its tiles).
+    const FOE_GAP = 6;
+    let groupN = 0;
+    const newGroup = () => ++groupN;
+    const foeTiles = f => f.kind === 'loader' ? [[0, 0], [1, 0], [0, -1], [1, -1]].map(([dx, dy]) => [f.spawn.x - 1 + dx, f.spawn.y - 1 + dy]) : [[f.spawn.x - 1, f.spawn.y - 1]];
+    const farFromFoes = (A, tiles, group) => !(A.extraFoes || []).some(f => f.group !== group && foeTiles(f).some(([fx, fy]) => tiles.some(([x, y]) => Math.max(Math.abs(fx - x), Math.abs(fy - y)) < FOE_GAP)));
+    const addFoe = (A, kind, x, y, group = newGroup()) => (A.extraFoes = A.extraFoes || []).push({ kind, spawn: { x: x + 1, y: y + 1 }, group });
     function foeSomewhere(id, kind) {
       const A = AREAS[id];
-      for (let t = 0; t < 500; t++) { const x = 2 + Math.floor(rnd() * (COLS - 4)), y = 2 + Math.floor(rnd() * (ROWS - 4)); if (tileOk(A, x, y)) { addFoe(A, kind, x, y); return true; } }
+      for (let t = 0; t < 1500; t++) { const x = 2 + Math.floor(rnd() * (COLS - 4)), y = 2 + Math.floor(rnd() * (ROWS - 4)); if (tileOk(A, x, y) && farFromFoes(A, [[x, y]], -1)) { addFoe(A, kind, x, y); return true; } }
       return false;
     }
-    // toxic lake: 2 research labs per zone, 1-2 Toxic Scavs in front of each
-    for (const id of zonesOf('lake')) for (let i = 0; i < 2; i++) {
-      const hut = place(id, 'hut');
-      if (!hut) continue;
-      const A = AREAS[id], f = foot(hut), spots = [];
-      for (let y = f.y1 + 1; y <= f.y1 + 2; y++) for (let x = f.x0 - 1; x <= f.x1 + 1; x++) if (tileOk(A, x, y)) spots.push([x, y]);
-      const n = 1 + (rnd() < 0.5 ? 1 : 0);
-      for (const [x, y] of shuffle(spots).slice(0, n)) addFoe(A, 'scav', x, y);
-    }
+    // ---- scenery first: pump, satellite, labs, mushroom patches ----
     // 1 pump station, in 0:-2, right at the water. Exception: always mirrored, so its pipes (then at the lower-right) go into the lake
     const pumpFaces = (w, f, A) => { for (const x of [f.x1, f.x1 + 1, f.x1 + 2]) for (let y = f.y1 + 1; y <= f.y1 + 2; y++) if (lakeT(A, x, y)) return true; return false; };
     place('0:-2', 'pump', { shore: true, flip: true, test: pumpFaces });
-    // deep forest: the fallen satellite in -8:-1 with 6 Mav-1K drones, each 3-6 tiles from it; 2-3 Toxic Scavs in every zone
-    {
-      const id = '-8:-1', s = place(id, 'sat', { test: (w, f) => f.x0 >= 8 && f.x1 <= COLS - 9 && f.y0 >= 7 && f.y1 <= ROWS - 8 });   // room around it for the drones
-      if (s) {
-        const A = AREAS[id], f = foot(s);
-        const dist = (x, y) => Math.max(Math.max(f.x0 - x, 0, x - f.x1), Math.max(f.y0 - y, 0, y - f.y1));   // tiles from its footprint
-        for (let k = 0, t = 0; k < 6 && t < 2000; t++) {
-          const x = f.x0 - 6 + Math.floor(rnd() * (f.x1 - f.x0 + 13)), y = f.y0 - 6 + Math.floor(rnd() * (f.y1 - f.y0 + 13)), d = dist(x, y);
-          if (d >= 3 && d <= 6 && tileOk(A, x, y)) { addFoe(A, 'drone', x, y); k++; }
-        }
+    const sat = place('-8:-1', 'sat', { test: (w, f) => f.x0 >= 8 && f.x1 <= COLS - 9 && f.y0 >= 7 && f.y1 <= ROWS - 8 });   // the fallen satellite, room around it for its drones
+    // research labs: toxic lake 2 per zone; forest 5 (1 per 2 zones, rounded up, never 2 in a zone); deep forest 9: the zones are
+    // paired at random and every pair gets 2 labs (1 + 1 or 2 + 0), the odd zone 1
+    const labsIn = {};
+    for (const id of zonesOf('lake')) labsIn[id] = 2;
+    for (const id of shuffle(zonesOf('forest')).slice(0, Math.ceil(zonesOf('forest').length / 2))) labsIn[id] = 1;
+    { const dz = shuffle(zonesOf('deepForest'));
+      for (let i = 0; i + 1 < dz.length; i += 2) { if (rnd() < 0.5) { labsIn[dz[i]] = 1; labsIn[dz[i + 1]] = 1; } else { labsIn[dz[i]] = 2; labsIn[dz[i + 1]] = 0; } }
+      if (dz.length % 2) labsIn[dz[dz.length - 1]] = 1; }
+    // mushroom patches: forest 3 per zone, deep forest 8 per zone (2 in every quadrant)
+    for (const id of zonesOf('forest')) for (let i = 0; i < 3; i++) place(id, 'mush');
+    for (const id of zonesOf('deepForest')) for (let q = 0; q < 4; q++) for (let k = 0; k < 2; k++) if (!place(id, 'mush', { q })) place(id, 'mush');
+    // ---- enemies: biggest first, so the small groups fit around them ----
+    // Overgrown Loaders: one per 3 forest / deep forest zones, near the middle of the zone (the search widens step by step),
+    // never by the fallen satellite (spawn = its bottom-left tile)
+    for (const id of ['-3:-2', '-4:0', '-6:-1', '-7:0', '-8:-2', '-10:-1']) {
+      const A = AREAS[id], cx = Math.floor(COLS / 2), cy = Math.floor(ROWS / 2);
+      const satF = sat && AREAS['-8:-1'] === A ? foot(sat) : null;
+      done: for (let r = 3; r <= 18; r += 3) for (let t = 0; t < 400; t++) {
+        const x = cx - 1 - r + Math.floor(rnd() * (2 * r + 1)), y = cy - r + Math.floor(rnd() * (2 * r + 1));
+        const tiles = [[0, 0], [1, 0], [0, -1], [1, -1]].map(([dx, dy]) => [x + dx, y + dy]);
+        if (!tiles.every(([tx, ty]) => tileOk(A, tx, ty) && !(A.decos || []).some(o => inFoot(foot(o), tx, ty, 0))) || !farFromFoes(A, tiles, -1)) continue;   // not on a mushroom patch
+        if (satF && tiles.some(([tx, ty]) => Math.max(Math.max(satF.x0 - tx, 0, tx - satF.x1), Math.max(satF.y0 - ty, 0, ty - satF.y1)) < 10)) continue;
+        addFoe(A, 'loader', x, y); break done;
       }
     }
-    for (const id of zonesOf('deepForest')) { const n = 2 + (rnd() < 0.5 ? 1 : 0); for (let i = 0; i < n; i++) foeSomewhere(id, 'scav'); }
+    // the satellite's 6 Mav-1K drones (one group), each 3-6 tiles from it
+    if (sat) {
+      const A = AREAS['-8:-1'], f = foot(sat), g = newGroup();
+      const dist = (x, y) => Math.max(Math.max(f.x0 - x, 0, x - f.x1), Math.max(f.y0 - y, 0, y - f.y1));   // tiles from its footprint
+      for (let k = 0, t = 0; k < 6 && t < 3000; t++) {
+        const x = f.x0 - 6 + Math.floor(rnd() * (f.x1 - f.x0 + 13)), y = f.y0 - 6 + Math.floor(rnd() * (f.y1 - f.y0 + 13)), d = dist(x, y);
+        if (d >= 3 && d <= 6 && tileOk(A, x, y) && farFromFoes(A, [[x, y]], g)) { addFoe(A, 'drone', x, y, g); k++; }
+      }
+    }
+    // Toxic Scavs live only at labs, in front of the door: zone level 1-5 → 1-2 per lab, 6-10 → 1-3, 11-15 → 2-3, 16-20 → 3-4.
+    // A lab is only put where its front yard is FOE_GAP tiles from every other group.
+    const scavsAt = lvl => lvl <= 5 ? [1, 2] : lvl <= 10 ? [1, 3] : lvl <= 15 ? [2, 3] : [3, 4];
+    const labYard = (A, f) => { const spots = []; for (let y = f.y1 + 1; y <= f.y1 + 2; y++) for (let x = f.x0 - 1; x <= f.x1 + 1; x++) if (tileOk(A, x, y)) spots.push([x, y]); return spots; };
+    for (const id in labsIn) for (let i = 0; i < labsIn[id]; i++) {
+      const A = AREAS[id], [lo, hi] = scavsAt(zoneLevel(id)), n = lo + Math.floor(rnd() * (hi - lo + 1));
+      const hut = place(id, 'hut', { test: (w, f) => { const y = labYard(A, f); return y.length >= n && farFromFoes(A, y, -1); } });
+      if (!hut) continue;
+      const g = newGroup();
+      for (const [x, y] of shuffle(labYard(A, foot(hut))).slice(0, n)) addFoe(A, 'scav', x, y, g);
+    }
+    // Sporelings: a group of 2-3 at one in three mushroom patches of each zone (rounded up), on or right next to the patch
+    for (const id of [...zonesOf('forest'), ...zonesOf('deepForest')]) {
+      const A = AREAS[id], patches = shuffle((A.decos || []).filter(w => w.art === 'mushroomPatch'));
+      let want = Math.ceil(patches.length / 3);
+      for (const m of patches) {
+        if (!want) break;
+        const f = foot(m), spots = [];
+        for (let y = f.y0 - 1; y <= f.y1 + 1; y++) for (let x = f.x0 - 1; x <= f.x1 + 1; x++) if (tileOk(A, x, y)) spots.push([x, y]);
+        const pick = shuffle(spots).slice(0, 2 + (rnd() < 0.5 ? 1 : 0));
+        if (pick.length < 2 || !farFromFoes(A, pick, -1)) continue;
+        const g = newGroup(); for (const [x, y] of pick) addFoe(A, 'spore', x, y, g); want--;
+      }
+    }
     // Drips in the slums: 4 up to 2 zones from the city, then +2 for every 2 zones further (by the farther map coordinate);
     // the greaser district has 12. They replace the Drips placed before, have no twins, and never start behind a tall building.
     for (const id of [...slums, ...zonesOf('greaser')]) {
@@ -1351,30 +1395,12 @@
       A.drips = 0; A.foes = A.foes.filter(f => f.kind !== 'drip');
       for (let i = 0, t = 0; i < n && t < 3000; t++) {
         const x = 2 + Math.floor(rnd() * (COLS - 4)), y = 2 + Math.floor(rnd() * (ROWS - 4));
-        if (!tileOk(A, x, y) || behindTall(id, x, y) || (A.extraFoes || []).some(f => Math.max(Math.abs(f.spawn.x - 1 - x), Math.abs(f.spawn.y - 1 - y)) < 4)) continue;
+        if (!tileOk(A, x, y) || behindTall(id, x, y) || !farFromFoes(A, [[x, y]], -1)) continue;
         addFoe(A, 'drip', x, y); i++;
       }
     }
     // factory entrance: 2 Drips and 1 Mav-1K drone
     for (const id of zonesOf('factoryIn')) { foeSomewhere(id, 'drip'); foeSomewhere(id, 'drip'); foeSomewhere(id, 'drone'); }
-    for (const id of zonesOf('deepForest')) for (let q = 0; q < 4; q++) if (!place(id, 'mush', { q })) place(id, 'mush');
-    // Sporelings: a group of 2-3 hiding on or right next to every mushroom patch
-    for (const id of zonesOf('deepForest')) {
-      const A = AREAS[id];
-      for (const m of (A.decos || []).filter(w => w.art === 'mushroomPatch')) {
-        const f = foot(m), spots = [];
-        for (let y = f.y0 - 1; y <= f.y1 + 1; y++) for (let x = f.x0 - 1; x <= f.x1 + 1; x++) if (tileOk(A, x, y)) spots.push([x, y]);
-        for (const [x, y] of shuffle(spots).slice(0, 2 + (rnd() < 0.5 ? 1 : 0))) addFoe(A, 'spore', x, y);
-      }
-    }
-    // Overgrown Loaders: one per 3 forest / deep forest zones, on open 2 x 2 ground near the middle (spawn = its bottom-left tile)
-    for (const id of ['-3:-2', '-4:0', '-6:-1', '-7:0', '-8:-2', '-10:-1']) {
-      const A = AREAS[id];
-      for (let t = 0; t < 2000; t++) {
-        const x = 8 + Math.floor(rnd() * (COLS - 18)), y = 7 + Math.floor(rnd() * (ROWS - 14));
-        if ([[0, 0], [1, 0], [0, -1], [1, -1]].every(([dx, dy]) => tileOk(A, x + dx, y + dy))) { addFoe(A, 'loader', x, y); break; }
-      }
-    }
   }
   const footCX = w => { const f = foot(w); return (f.x0 + f.x1 + 1) / 2; };   // footprint centre, in tiles
   const START = { x: 21, y: 11 };   // 0-based: just below HomeDome
@@ -1486,7 +1512,7 @@
     beefBrisket: 'art/items/food/beefBrisket.webp', dumplings: 'art/items/food/dumplings.webp', nrgShot: 'art/items/food/nrgShot.webp',   // food icons
     nrgHeadset: 'art/items/armor/nrgHeadset.webp', nrgShirt: 'art/items/armor/nrgShirt.webp', nrgSneakers: 'art/items/armor/nrgSneakers.webp',   // armor icons
     bananoSword: 'art/items/weapons/bananoSword.webp',   // baNano Sword icon (also drawn on his back)
-    heroMotherSide: 'art/hero/heroMotherSide.webp', heroMotherDown: 'art/hero/heroMotherDown.webp',   // Mothersword attacks
+    heroMotherSide: 'art/hero/heroMotherSide.webp', heroMotherDown: 'art/hero/heroMotherDown.webp', heroMotherUp: 'art/hero/heroMotherUp.webp',   // Mothersword attacks
     heroBananoSide: 'art/hero/heroBananoSide.png', heroBananoDown: 'art/hero/heroBananoDown.png', heroBananoUp: 'art/hero/heroBananoUp.png',   // baNano Sword attacks
     ground:       'art/world/ground/ground.webp',   // seamless street floor, no joints (repeats every 6 x 6 tiles)
     groundSlums: 'art/world/ground/groundSlums.jpg', groundFactory: 'art/world/ground/groundFactory.jpg', groundLake: 'art/world/ground/groundLake.jpg',   // zone floors, same repeat
@@ -1553,7 +1579,7 @@
   const HERO_ATTACK_SHEETS = { punch: { side: 'heroPunchSide', down: 'heroPunchDown', up: 'heroPunchUp' },
                                sword: { side: 'heroSwordSide', down: 'heroSwordDown', up: 'heroSwordUp' },
                                banano: { side: 'heroBananoSide', down: 'heroBananoDown', up: 'heroBananoUp' },
-                               mother: { side: 'heroMotherSide', down: 'heroMotherDown', up: 'heroSwordUp' } };   // Mothersword: its up sheet isn't made yet (Banana sword's for now)   // a sword's attackSheets picks its set
+                               mother: { side: 'heroMotherSide', down: 'heroMotherDown', up: 'heroMotherUp' } };   // a sword's attackSheets picks its set
   const ATTACK_CELLS = {
     heroPunchSide: { cellW: 275, cellH: 283, ax: 98.0, foot: 2.1 },
     heroPunchDown: { cellW: 183, cellH: 283, ax: 91.3, foot: 5.0 },
@@ -1564,8 +1590,9 @@
     heroBananoSide: { cellW: 364, cellH: 350, ax: 138.0, foot: 3.0 },
     heroBananoDown: { cellW: 302, cellH: 381, ax: 195.5, foot: 5.0 },
     heroBananoUp: { cellW: 306, cellH: 431, ax: 179.0, foot: 4.0 },
-    heroMotherSide: { cellW: 330, cellH: 366, ax: 162, foot: 5 },
-    heroMotherDown: { cellW: 254, cellH: 466, ax: 130, foot: 46 }
+    heroMotherSide: { cellW: 311, cellH: 367, ax: 146, foot: 8 },
+    heroMotherDown: { cellW: 257, cellH: 469, ax: 133, foot: 50 },
+    heroMotherUp: { cellW: 306, cellH: 433, ax: 181, foot: 4 }
   };
   const HERO_ATTACK_ANIM_MS = 400;   // 4 frames × 100 ms
 
@@ -2139,7 +2166,7 @@
     function snapshot() {
       return { x: player.x, y: player.y, fx: facing.x, fy: facing.y, stats: statsNoBuffs(), deals, prices: { ...prices }, dealsDone, foodBought, itemsV2: true, sets: [...activeSets], promotion, kills, dripKills, weaponBought, rogueDone: [...rogueDone], cheated: runCheated, quests: quests.map(q => q.kind === 'delivery' ? { ...q, left: Math.max(0, q.until - gameTime) } : { ...q }),
                inventory: inventory.map(it => ({ ...it })), equipped: equipped.map(it => ({ ...it })), skills: [...skills],
-               areaName, restReadyAt, levels: { ...levels }, manaCap: CAP_BASE.mana, energyCap: CAP_BASE.energy, level: hero.level, exp: hero.exp, strengthLevel: hero.level, bag, talents: JSON.parse(JSON.stringify(talents)), ceoCalls, tut, tutV: 3, tutN, tutQuiz: { ...tutQuiz }, discovered: [...discovered], enemies: saveEnemies(),
+               weaponsV: 2, areaName, restReadyAt, levels: { ...levels }, manaCap: CAP_BASE.mana, energyCap: CAP_BASE.energy, level: hero.level, exp: hero.exp, strengthLevel: hero.level, bag, talents: JSON.parse(JSON.stringify(talents)), ceoCalls, tut, tutV: 3, tutN, tutQuiz: { ...tutQuiz }, discovered: [...discovered], enemies: saveEnemies(),
                piles: piles.map(p => ({ ...p, gear: p.gear.map(it => ({ ...it })), items: p.items.map(it => ({ ...it })), left: Math.max(0, p.until - gameTime), until: undefined })) };
     }
     function applySave(s) {
@@ -2158,6 +2185,10 @@
       bag = s.bag !== undefined ? s.bag : !inventory.length ? null : inventory.length <= 2 ? 'BackBag' : 'BackBag X';   // saves from before bags: a bag that fits what they carry
       if (s.bag === undefined && bag === 'BackBag X') stats.charisma += 1;
       equipped.length = 0; equipped.push(...renameItems(s.equipped)); recalcCaps();
+      if ((s.weaponsV || 1) < 2) {   // swords were rebalanced: a sword worn in an older save had its old STR added to the stats
+        const OLD_STR = { 'Banana sword': 3, 'Mothersword': 3, 'baNano Sword': 6 };
+        for (const it of equipped) if (it.name in OLD_STR) stats.strength += ((itemDef(it.name) || {}).gain || {}).strength - OLD_STR[it.name];
+      }
       if (!s.itemsV2 && equipped.some(it => it.name === 'Banana sword')) stats.strength -= 1;   // the sword gave +4 STR before (now +3)
       activeSets.clear(); for (const n of s.sets || []) activeSets.add(n); recalcCaps();
       fixEquipSlots(); syncSets();
@@ -3344,6 +3375,14 @@
       if (stats.health <= 0) gameOver();
     }
 
+    // hit rate: 97% against enemies of the hero's level, 100% against lower ones, -10% for every level the enemy is above him.
+    // HIT points (Hero panel, 0 by default) add 0.01% each, up to HIT_CAP points (+3%: 100% against his own level).
+    // They come from equipment (`hit` on an item) later.
+    const HIT_BASE = 0.97, HIT_PER_LVL = 0.1, HIT_PER_PT = 0.0001, HIT_CAP = 300;
+    const hitPts = () => Math.min(HIT_CAP, Math.max(0, equipSum('hit')));
+    const hitChance = (enemyLvl = npcLevel()) => enemyLvl < hero.level ? 1 : Math.max(0, Math.min(1, HIT_BASE + HIT_PER_PT * hitPts() - HIT_PER_LVL * (enemyLvl - hero.level)));
+    const heroHits = () => Math.random() < hitChance();   // every enemy in a fight lives in the hero's zone, so has its level
+    function heroMissed(d) { d.aggro = true; d.returning = false; float('miss', '#8a8a8a', d.x + (foeSize(d) === 2 ? 1 : 0.5), d.y - (d.kind === 'loader' ? 2.4 : 0.9)); }
     function heroAttack() {
       if (gameTime < heroNextAttack) return;
       heroNextAttack = gameTime + heroAttackMs();
@@ -3351,8 +3390,9 @@
       heroAttackDir = facing.x ? 'side' : facing.y > 0 ? 'down' : 'up';
       if (facing.x) lookX = facing.x;
       const crit = Math.random() < critChance(), dmg = Math.round(heroStr() * (crit ? 2 + critBonus() : 1));   // a crit adds strength once more (+ Quick Hands)
-      if (crit && meleeTargets().length) onHeroCrit();
-      for (const d of meleeTargets()) { drip = d; damageDrip(dmg, crit ? `-${dmg} crit!` : `-${dmg}`, crit ? '#ffe600' : '#fff'); }
+      let landed = false;
+      for (const d of meleeTargets()) { drip = d; if (!heroHits()) { heroMissed(d); continue; } landed = true; damageDrip(dmg, crit ? `-${dmg} crit!` : `-${dmg}`, crit ? '#ffe600' : '#fff'); }
+      if (crit && landed) onHeroCrit();
     }
     // time between swings: 1 s with fists; equipment can shorten it (attackMs, e.g. banana sword -100 ms), at least 0.3 s
     const heroAttackMs = () => Math.max(300, Math.round((HERO_ATTACK_MS + equipped.reduce((t, it) => t + ((itemDef(it.name) || {}).attackMs || 0), 0)) / (1 + talentAttackSpeed())));
@@ -3509,7 +3549,8 @@
           if (gone || e.dead || cloaked(e)) continue;
           drip = e;
           const c = foeCentre(dripPos(), e);
-          if (Math.hypot(c.x - pr.x, c.y - pr.y) < 0.3 + foeR(e)) {   // hit: root + damage over time (refreshes if already on)
+          if (Math.hypot(c.x - pr.x, c.y - pr.y) < 0.3 + foeR(e)) {
+            if (!heroHits()) { heroMissed(e); gone = true; continue; }   // Magic Tar missed: no root, no damage   // hit: root + damage over time (refreshes if already on)
             drip.stunUntil = gameTime + pr.spell.rootMs;
             drip.dot = { spell: pr.spell, left: pr.spell.ticks, next: gameTime + pr.spell.tickMs };
             drip.aggro = true;
@@ -4542,7 +4583,7 @@
     }
     // enemy panel at the top while fighting: portrait, name, health, mana
     function drawFoePanel() {
-      const w = 300, h = 80, x = (canvas.width - w) / 2, y = phoneView && canvas.height > canvas.width ? phudBottom() + 12 : 12;
+      const w = 340, h = 80, x = (canvas.width - w) / 2, y = phoneView && canvas.height > canvas.width ? phudBottom() + 12 : 12;
       ctx.fillStyle = 'rgba(0, 0, 0, 0.75)'; rr(x, y, w, h, 12); ctx.fill();
       ctx.strokeStyle = 'rgba(255, 43, 214, 0.6)'; ctx.lineWidth = 2; rr(x + 1, y + 1, w - 2, h - 2, 11); ctx.stroke();
       const T = ET(drip), pic = ART[({ scav: 'scavPortrait', drone: 'dronePortrait', spore: 'sporelingPortrait', loader: 'loaderPortrait' })[drip.kind] || 'dripPortrait'];
@@ -4550,8 +4591,11 @@
       else if (drip.kind === 'drone') { ctx.fillStyle = '#1B2233'; ctx.fillRect(x + 8, y + 8, 64, 64); drawDroneBody(x + 40, y + 44, 0, gameTime, !!drip.hitAt, -1); }
       const tx = x + 84, bw = w - 84 - 14;
       ctx.textBaseline = 'middle';
-      ctx.textAlign = 'left'; ctx.fillStyle = '#fff'; ctx.font = '600 22px ' + MONO; ctx.fillText(T.name, tx, y + 18);
-      const lvl = npcLevel();   // red when stronger than the hero, grey when weaker
+      const lvl = npcLevel();   // level: red when stronger than the hero, grey when weaker
+      ctx.font = '600 16px ' + MONO; const tagW = ctx.measureText(`lvl ${lvl}`).width;
+      ctx.textAlign = 'left'; ctx.fillStyle = '#fff';
+      for (let fs = 22; fs >= 12; fs--) { ctx.font = `600 ${fs}px ${MONO}`; if (ctx.measureText(T.name).width <= bw - tagW - 10) break; }   // long names shrink, never under the tag
+      ctx.fillText(T.name, tx, y + 18);
       ctx.textAlign = 'right'; ctx.fillStyle = lvl > hero.level ? '#e5484d' : lvl < hero.level ? '#8a8a8a' : '#fff'; ctx.font = '600 16px ' + MONO;
       ctx.fillText(`lvl ${lvl}`, tx + bw, y + 18);
       // bars styled like the hero plate's: dark track, thin border, coloured fill, "now/max" centred inside
@@ -5566,6 +5610,7 @@
       return Object.entries(all).sort((a, b) => STAT_ORDER.indexOf(a[0]) - STAT_ORDER.indexOf(b[0])).map(([st, n]) => [`${n > 0 ? '+' : ''}${n} ${STAT_SHORT[st] || st}`, STAT_COLOR[st] || '#fff']); };
     const bonusParts = def => def ? [...(def.slots ? [[`${def.slots} SLOTS`, '#f2f2f2']] : []), ...statParts(def),
       ...(def.hpRegen ? [[`+${def.hpRegen} HP REG`, STAT_COLOR.health]] : []), ...(def.speed ? [[`+${Math.round(def.speed * 100)}% SPD`, '#00e5ff']] : []),
+      ...(def.hit ? [[`+${def.hit} HIT`, '#cfcfcf']] : []),   // hit points (0.01% each)
       ...(def.attackMs ? [[`${def.attackMs > 0 ? '+' : ''}${secs(def.attackMs)}s ATK SPD`, '#ffe600']] : []),
       ...(def.meleeArea ? [[`+${Math.round((def.meleeArea - 1) * 100)}% AOE`, '#00e5ff']] : [])] : [];
     const bonusText = def => bonusParts(def).map(p => p[0]).join('  ');
@@ -5644,6 +5689,7 @@
         ['MANA', CAPS.mana, 'mana'], ['CHSM', stats.charisma, 'charisma'],
         ['NRG', CAPS.energy, 'energy'],
         ['CRIT', `${(critChance() * 100).toFixed(2)}%`, 'crit'],
+        ['HIT', hitPts(), 'hit'],   // hit points: 0 = 97% vs his own level, each +0.01% (cap 300)
         ['ATK SPD', `${secs(heroAttackMs())}s`, 'atk'],
         ['HP REG', Math.round(healthRegen()), 'hregen', '/min'], ['MANA REG', `${Math.round(manaRegen())}/min`, 'mregen'],
         ['MOVE SPD', Math.round((1 + lbSpeed() + equipSum('speed')) * 100), 'spd', '%'],
