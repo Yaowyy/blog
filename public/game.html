@@ -1397,21 +1397,24 @@
                   slowChance: 0.4, slow: 0.2, slowMs: 3000, cloakPct: 0.1, cloakMs: 3000, cloakAlpha: 0.02, fleeDist: 3, repairPct: 0.3,
                   respawnMs: [40000, 100000], lootMs: 30000, fadeMs: 2000, loot: { money: [4, 10], aiChipChance: 0.1 } };
   // Sporeling (deep forest): a small mushroom mutant hiding as a glowing mushroom, in groups of 2-3 around every mushroom patch.
-  // Hidden it can't be targeted or hit. It pops up (0.7 s) when the hero comes within `reveal` tiles (its group-mates within
-  // 3 tiles pop up with it), then chases. Next to the hero it puffs spores (wind-up 0.35 s): a small hit + Poison.
+  // Hidden it can't be targeted or hit. It pops up (0.4 s) when the hero comes within `reveal` tiles (its group-mates within
+  // 3 tiles pop up 0.1-0.3 s later), then chases. Next to the hero it puffs spores (wind-up 0.3 s, every 1.5 s): a small hit + Poison.
   // Poison: 2% of the hero's max HP per second for 5 s and no health regen meanwhile; a new dose restarts the 5 s.
   // Dying, it bursts into a spore cloud (3 s) that poisons whoever stands in it. 8+ tiles from the hero it walks home and hides.
-  const SPORE = { name: 'Sporeling', exp: 2, reveal: 2, leash: 8, stepMs: 700, popMs: 700, windupMs: 350, attackMs: 1800, puffMult: 0.05,
+  const SPORE = { name: 'Sporeling', exp: 2, reveal: 2, leash: 8, stepMs: 700, popMs: 400, windupMs: 300, attackMs: 1500, puffMult: 0.05,
                   poisonMs: 5000, poisonPct: 0.02, cloudMs: 3000, respawnMs: [60000, 90000], lootMs: 30000, fadeMs: 2000,
                   loot: { money: [2, 6], sporeSacChance: 0.5 } };
   // Overgrown Loader (forest mini-boss, one per 3 forest / deep forest zones): blocks 2 x 2 tiles (x..x+1, y-1..y, where x, y is
-  // its bottom-left tile). Waits at home until the hero comes within `aggro` tiles of its body, then walks slowly after him.
-  // Vine whip: at a hero up to `whipRange` tiles away (every 5 s, wind-up 0.6 s) it lashes the tile he stood on: damage and
-  // 1.5 s root (step off the marked tile to dodge). Next to him: ground slam (wind-up 0.7 s, red area) hits every tile around
-  // its body. Gives up when the hero is 12+ tiles from its home. Comes back 5 minutes after it dies.
-  const LOADER = { name: 'Overgrown Loader', size: 2, exp: 20, aggro: 4, leash: 12, stepMs: 1300, whipRange: 3.5, whipEveryMs: 5000, whipWindupMs: 600,
-                   whipMs: 1100, whipMult: 0.12, rootMs: 1500, slamWindupMs: 700, slamMs: 1150, slamEveryMs: 2600, slamMult: 0.3,
-                   respawnMs: [300000, 300000], lootMs: 60000, fadeMs: 3000, loot: { money: [60, 100], tar: [1, 3], coreChance: 0.25 } };
+  // its bottom-left tile). Waits at home until the hero comes within `aggro` tiles of its body, then walks after him (1 tile/s).
+  // Vine whip: at a hero up to `whipRange` tiles from its body (first 0.8 s after waking, then every 3 s; never when he's next
+  // to it) it marks the tile he stands on (pulsing green circle) and lashes it 0.4 s later: damage and a 1.6 s root (step off
+  // to dodge); stands still 0.8 s. Next to him: ground slam every 2.2 s: a red circle (body + 1.5 tiles, 2.5 tiles from its
+  // centre) pulses 0.55 s, then whoever's tile centre is inside takes the hit; stands still 1 s. Gives up when the hero is 12+
+  // tiles from its home; while walking home it heals 100% of max HP per minute. Comes back 5 minutes after it dies.
+  // Loot money: 40-80$ plus the zone's |x| + |y|.
+  const LOADER = { name: 'Overgrown Loader', size: 2, exp: 20, aggro: 4, leash: 12, stepMs: 1000, whipRange: 5, firstWhipMs: 800, whipEveryMs: 3000, whipWindupMs: 400,
+                   whipMs: 800, whipMult: 0.1, rootMs: 1600, slamWindupMs: 550, slamMs: 1000, slamEveryMs: 2200, slamMult: 0.3, slamR: 2.5, homeHealPerMin: 1,
+                   respawnMs: [300000, 300000], lootMs: 60000, fadeMs: 3000, loot: { money: [40, 80], zoneMoney: true, tar: [1, 3], coreChance: 0.1, aiChipChance: 0.2 } };
   const ENEMY = { drip: DRIP, scav: SCAV, drone: DRONE, spore: SPORE, loader: LOADER };
   // enemy max health = round(the hero's max HP at the enemy's level × the enemy's hpMult). Every new enemy gets its own hpMult.
   // Drip ×1: 10 / 12 / 14 / 17 / 21 at lvl 1-5 · Mav-1K ×0.8: 8 / 10 / 11 / 14 / 17 · Toxic Scav ×1.8: 18 / 22 / 25 / 31 / 38
@@ -3043,7 +3046,7 @@
     function revealSpore(d) {   // it and its hidden group-mates within 3 tiles pop up (the others a moment later)
       const t = gameTime;
       for (const o of drips) if (o.kind === 'spore' && !o.dead && o.hidden && cheb(o.x, o.y, d.x, d.y) <= 3) {
-        o.hidden = false; o.aggro = true; o.returning = false; o.popStart = t + (o === d ? 0 : 150 + Math.random() * 300);
+        o.hidden = false; o.aggro = true; o.returning = false; o.popStart = t + (o === d ? 0 : 100 + Math.random() * 200);
         o.nextAttack = o.popStart + SPORE.popMs; if (player.x !== o.x) o.lookX = player.x > o.x ? 1 : -1;
       }
     }
@@ -3091,7 +3094,7 @@
     // ---- Overgrown Loader (see LOADER) ----
     function updateLoader() {
       const L = LOADER, d = drip, t = gameTime, fd = footDist(d, player.x, player.y);
-      const reach = Math.hypot(player.x + 0.5 - (d.x + 1), player.y + 0.5 - d.y);   // hero centre to body centre
+      const inSlam = () => Math.hypot(player.x + 0.5 - (d.x + 1), player.y + 0.5 - d.y) <= L.slamR;   // hero's tile centre inside the slam circle
       if (d.act) {   // a whip or slam in progress: stands still
         const a = d.act;
         if (!a.done && t >= a.hitAt) {
@@ -3100,18 +3103,21 @@
             hurtHero(npcDamage(L.whipMult), '#3fbf3f');
             if (stats.health > 0) { rootedUntil = Math.max(rootedUntil, t + L.rootMs); rootTotal = L.rootMs; rootVine = true; float('rooted!', '#3fbf3f', player.x + 0.5, player.y - 1.1); }
           }
-          if (a.kind === 'slam' && footDist(d, player.x, player.y) <= 1 && stats.health > 0) hurtHero(npcDamage(L.slamMult), '#e5484d');
+          if (a.kind === 'slam' && inSlam() && stats.health > 0) hurtHero(npcDamage(L.slamMult), '#e5484d');
         }
         if (t < a.end) return;
         d.act = null;
       }
-      if (d.returning) {   // back home at walking speed, then waits there
+      if (d.returning) {   // back home at walking speed, healing 100% of max HP per minute on the way, then waits there
+        d.healBuf = (d.healBuf || 0) + (t - (d.healT || t)) * d.maxHp * L.homeHealPerMin / 60000; d.healT = t;
+        const n = Math.floor(d.healBuf); if (n) { d.healBuf -= n; d.hp = Math.min(d.maxHp, d.hp + n); }
         if (t - d.stepStart < L.stepMs) return;
         const home = (x, y) => cheb(x, y, d.home.x, d.home.y);
         if ((d.x === d.home.x && d.y === d.home.y) || !groundStep(d, d.home.x, d.home.y, home)) d.returning = false;
         return;
       }
-      if (!d.aggro) { if (fd > L.aggro || stats.health <= 0) return; d.aggro = true; d.nextWhip = t + 800; }
+      d.healT = 0;   // not walking home: no fast healing
+      if (!d.aggro) { if (fd > L.aggro || stats.health <= 0) return; d.aggro = true; d.nextWhip = t + L.firstWhipMs; }
       if (cheb(player.x, player.y, d.home.x, d.home.y) > L.leash || stats.health <= 0) { d.aggro = false; d.returning = true; return; }
       if (player.x + 0.5 !== d.x + 1) d.lookX = player.x + 0.5 > d.x + 1 ? 1 : -1;
       if (t - d.stepStart < L.stepMs) return;
@@ -3119,7 +3125,7 @@
         if (t >= d.nextAttack) { d.act = { kind: 'slam', start: t, hitAt: t + L.slamWindupMs, end: t + L.slamMs }; d.attackStart = t; d.nextAttack = t + L.slamEveryMs; }
         return;
       }
-      if (t >= d.nextWhip && reach <= L.whipRange + 0.5 && stats.health > 0) {   // vine whip at the tile the hero stands on now
+      if (t >= d.nextWhip && fd <= L.whipRange && stats.health > 0) {   // vine whip at the tile the hero stands on now
         d.act = { kind: 'whip', start: t, hitAt: t + L.whipWindupMs, end: t + L.whipMs, tx: player.x, ty: player.y }; d.attackStart = t; d.nextWhip = t + L.whipEveryMs;
         return;
       }
@@ -3322,7 +3328,8 @@
         if (L.aiChipChance && Math.random() < L.aiChipChance) items.push({ name: 'AI chip', count: 1 });
         if (L.sporeSacChance && Math.random() < L.sporeSacChance) items.push({ name: 'Spore Sac', count: 1 });
         if (L.coreChance && Math.random() < L.coreChance) items.push({ name: 'Loader Core', count: 1 });
-        drip.loot = { money: rand(L.money[0], L.money[1]), items };
+        const zm = L.zoneMoney ? zoneCoords(areaName).reduce((a, b) => a + b, 0) : 0;   // Loader: + |x| + |y| of its zone
+        drip.loot = { money: rand(L.money[0] + zm, L.money[1] + zm), items };
         gainExp(killExp(drip, levelDmgFactor(npcLevel() - hero.level)));
         const vt = tal('chrome', 1);   // VampTech
         if (vt && stats.health > 0) { const n = Math.round(CAPS.health * [0.08, 0.12, 0.16, 0.20][vt - 1]); const was = stats.health; stats.health = capped('health', stats.health + n); if (stats.health > was) float(`+${stats.health - was} HP`, '#e5484d', player.x + 0.5, player.y - 1.4); renderStats(); }   // round(his max HP × 0.4 × level factor)
@@ -4190,7 +4197,7 @@
       let ok;
       if (drip.hidden || pop < 0) ok = cell('sporelingPopup', 'popup', 0);   // disguised as a mushroom
       else if (pop < S.popMs) ok = cell('sporelingPopup', 'popup', Math.min(3, Math.floor(pop / (S.popMs / 4))));
-      else if (t - drip.attackStart < 700) ok = cell('sporelingAttack', 'attack', Math.min(3, Math.floor((t - drip.attackStart) / 175)));
+      else if (t - drip.attackStart < 700) ok = cell('sporelingAttack', 'attack', Math.min(3, Math.floor((t - drip.attackStart) / 150)));   // 0-1 inhale, 2 the puff (at 0.3 s), 3 settles
       else if (t - drip.hurtStart < 300) ok = cell('sporelingHurt', 'hurt', 0);
       else if (walkFrame(t) >= 0) ok = cell('sporelingWalk', 'walk', walkFrame(t));
       else ok = cell('sporelingIdle', 'idle', 0);
@@ -4200,17 +4207,17 @@
       const A = LOADER_ART, L = LOADER, k = FOE_K, neon = dripNeon(), a = drip.act;
       const cell = (key, name, f) => ready(ART[key]) && (drawScavCell(ART[key], A[name], f, cx, feet, neon, k), true);
       let ok;
-      if (a && a.kind === 'whip') { const p = t - a.start; ok = cell('loaderWhip', 'whip', p < L.whipWindupMs - 150 ? 0 : p < L.whipWindupMs ? 1 : p < L.whipWindupMs + 250 ? 2 : 3); }
-      else if (a && a.kind === 'slam') { const p = t - a.start; ok = cell('loaderSlam', 'slam', p < L.slamWindupMs - 200 ? 0 : p < L.slamWindupMs ? 1 : p < L.slamWindupMs + 250 ? 2 : 3); }
+      if (a && a.kind === 'whip') { const p = t - a.start; ok = cell('loaderWhip', 'whip', p < L.whipWindupMs - 150 ? 0 : p < L.whipWindupMs ? 1 : p < L.whipWindupMs + 200 ? 2 : 3); }
+      else if (a && a.kind === 'slam') { const p = t - a.start; ok = cell('loaderSlam', 'slam', p < L.slamWindupMs - 200 ? 0 : p < L.slamWindupMs ? 1 : p < L.slamWindupMs + 220 ? 2 : 3); }
       else if (t - drip.hurtStart < 250) ok = cell('loaderHurt', 'hurt', 0);
       else if (walkFrame(t) >= 0) ok = cell('loaderWalk', 'walk', walkFrame(t));
       else ok = cell('loaderIdle', 'idle', 0);
       if (!ok) { ctx.fillStyle = '#E0B83A'; ctx.fillRect(cx - 70, feet - 180, 140, 180); }
       if (a && a.kind === 'whip') {   // the vine, from its clamp to the lashed tile, while it strikes
         const p = t - a.start - L.whipWindupMs + 80;
-        if (p >= 0 && p < 380) {
+        if (p >= 0 && p < 340) {
           const sx = cx + (drip.lookX > 0 ? 1 : -1) * 0.7 * TILE, sy = feet - 1.1 * TILE, ex = (a.tx + 0.5) * TILE, ey = (a.ty + 0.75) * TILE;
-          const grow = Math.min(1, p / 120), fade = Math.min(1, (380 - p) / 120), mx = (sx + ex) / 2, my = Math.min(sy, ey) - 0.8 * TILE;
+          const grow = Math.min(1, p / 100), fade = Math.min(1, (340 - p) / 120), mx = (sx + ex) / 2, my = Math.min(sy, ey) - 0.8 * TILE;
           const qx = t2 => (1 - t2) * (1 - t2) * sx + 2 * (1 - t2) * t2 * mx + t2 * t2 * ex, qy = t2 => (1 - t2) * (1 - t2) * sy + 2 * (1 - t2) * t2 * my + t2 * t2 * ey;
           ctx.save(); ctx.globalAlpha = fade; ctx.lineCap = 'round';
           for (const [w, c] of [[16, '#10131C'], [10, '#3fbf3f'], [3, '#9dff5c']]) {
@@ -4227,18 +4234,23 @@
       const t = gameTime;
       for (const d of drips) {
         const a = d.act;
-        if (d.dead || !a || t >= a.hitAt + 150) continue;
-        const k = Math.min(1, (t - a.start) / (a.hitAt - a.start)), pulse = 0.5 + 0.5 * Math.sin(t / 60);
-        ctx.save(); ctx.globalAlpha = 0.18 + 0.22 * k * pulse;
-        ctx.fillStyle = a.kind === 'whip' ? '#3fbf3f' : '#e5484d'; ctx.strokeStyle = ctx.fillStyle; ctx.lineWidth = 4;
-        if (a.kind === 'whip') { ctx.fillRect(a.tx * TILE + 6, a.ty * TILE + 6, TILE - 12, TILE - 12); ctx.globalAlpha = 0.7; ctx.strokeRect(a.tx * TILE + 6, a.ty * TILE + 6, TILE - 12, TILE - 12); }
-        else { const x0 = (d.x - 1) * TILE, y0 = (d.y - 2) * TILE, w = 4 * TILE; ctx.fillRect(x0 + 4, y0 + 4, w - 8, w - 8); ctx.globalAlpha = 0.7; ctx.strokeRect(x0 + 4, y0 + 4, w - 8, w - 8); }
-        ctx.restore();
-        if (a.kind === 'slam' && t >= a.hitAt && t < a.hitAt + 300) {   // shockwave ring
-          const r = (t - a.hitAt) / 300, cx = (d.x + 1) * TILE, cy = (d.y + 0.6) * TILE;
-          ctx.save(); ctx.globalAlpha = 1 - r; ctx.strokeStyle = '#d9c08a'; ctx.lineWidth = 8;
-          ctx.beginPath(); ctx.ellipse(cx, cy, (1 + r * 1.2) * TILE, (0.45 + r * 0.5) * TILE, 0, 0, Math.PI * 2); ctx.stroke(); ctx.restore();
+        if (d.dead || !a || t >= a.hitAt + 300) continue;
+        const pulse = 0.5 + 0.5 * Math.sin(t / 60);
+        ctx.save();
+        if (a.kind === 'whip') {   // pulsing green circle (up to 40%) on the tile it will lash
+          if (t < a.hitAt) { ctx.globalAlpha = 0.2 + 0.2 * pulse; ctx.fillStyle = '#3fbf3f'; ctx.beginPath(); ctx.arc((a.tx + 0.5) * TILE, (a.ty + 0.5) * TILE, 0.42 * TILE, 0, Math.PI * 2); ctx.fill(); }
+        } else {   // pulsing red circle: the slam area (body + 1.5 tiles)
+          const cx = (d.x + 1) * TILE, cy = d.y * TILE, R = LOADER.slamR * TILE;
+          if (t < a.hitAt) {
+            ctx.globalAlpha = 0.15 + 0.2 * pulse; ctx.fillStyle = '#e5484d'; ctx.beginPath(); ctx.arc(cx, cy, R, 0, Math.PI * 2); ctx.fill();
+            ctx.globalAlpha = 0.7; ctx.strokeStyle = '#e5484d'; ctx.lineWidth = 4; ctx.stroke();
+          } else if (t < a.hitAt + 300) {   // shockwave ring
+            const r = (t - a.hitAt) / 300;
+            ctx.globalAlpha = 1 - r; ctx.strokeStyle = '#d9c08a'; ctx.lineWidth = 8;
+            ctx.beginPath(); ctx.arc(cx, cy, R * (0.45 + 0.55 * r), 0, Math.PI * 2); ctx.stroke();
+          }
         }
+        ctx.restore();
       }
     }
     function drawSporeClouds() {   // clouds left by dead Sporelings (this zone)
