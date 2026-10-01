@@ -1,4 +1,4 @@
-<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover"><title>Neon Hustle</title>
+<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover"><title>Neon Hustle</title>
 <meta name="mobile-web-app-capable" content="yes"><meta name="apple-mobile-web-app-capable" content="yes"><meta name="apple-mobile-web-app-status-bar-style" content="black-translucent"><meta name="theme-color" content="#000000">
 <script>if (!document.querySelector('meta[name=viewport]')) { const m = document.createElement('meta'); m.name = 'viewport'; m.content = 'width=device-width, initial-scale=1, viewport-fit=cover'; document.head.appendChild(m); }</script>
 <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Crect width='64' height='64' rx='12' fill='%231B2233'/%3E%3Crect x='6' y='6' width='52' height='52' rx='9' fill='none' stroke='%2300E5FF' stroke-width='4'/%3E%3Cpath d='M22 16v32h20' fill='none' stroke='%23FF2BD6' stroke-width='8' stroke-linecap='square'/%3E%3C/svg%3E">
@@ -12,7 +12,7 @@
   .xp-fill { position: absolute; inset: 0 auto 0 0; width: 0; background: linear-gradient(90deg, #6a3fd0, #b58cff); transition: width 0.3s; }
   .xp-text { position: absolute; inset: 0; text-align: center; text-shadow: 0 0 3px #000, 0 0 3px #000; }
   .xp-lvl { position: absolute; left: 8px; top: 0; color: #ffe600; text-shadow: 0 0 3px #000; }
-  html, body { height: 100%; }
+  html, body { height: 100%; touch-action: manipulation; }   /* no double-tap zoom */
   body {
     background: var(--bg); color: var(--grid); margin: 0;
     padding-inline: 16px; box-sizing: border-box;
@@ -61,6 +61,13 @@
   .t-knob { position: absolute; left: 50%; top: 50%; width: 42%; aspect-ratio: 1; border-radius: 50%; transform: translate(-50%, -50%);
             background: rgba(0, 229, 255, 0.35); border: 2px solid #00e5ff; box-sizing: border-box; box-shadow: 0 0 12px rgba(0, 229, 255, 0.5); }
   .t-stick.on { opacity: 0.95; }
+  html.phone .t-stick, html.phone .t-stick.on, html.phone .t-act, html.phone .t-menu button { opacity: 0.4; }   /* phone controls: 40% */
+  html.phone .t-spell { opacity: 0.2; }                                          /* empty spell slot: 20% */
+  html.phone .t-act.filled, html.phone .t-spell.filled { opacity: 0.7; }         /* a spell / weapon in it: 70% */
+  html.phone .touch button:active, html.phone .touch button.on { opacity: 0.4; } /* pressing only brightens (below) */
+  html.phone .t-spell.filled:active, html.phone .t-spell.filled.on, html.phone .t-act.filled:active, html.phone .t-act.filled.on { opacity: 0.7; }
+  html.phone .t-spell:not(.filled):active, html.phone .t-spell:not(.filled).on { opacity: 0.2; }
+  .t-act img, .t-spell img { width: 64%; height: 64%; object-fit: contain; pointer-events: none; }
   .t-btns { position: absolute; right: 3%; bottom: 5%; width: clamp(150px, calc(var(--u) * 62), 250px); aspect-ratio: 1; }
   .t-act, .t-spell { position: absolute; border-radius: 50%; box-sizing: border-box; opacity: 0.75; }
   .t-act { right: 0; bottom: 0; width: 50%; aspect-ratio: 1; background: rgba(255, 230, 0, 0.22); border: 3px solid #ffe600; color: #ffe600; font-size: clamp(22px, calc(var(--u) * 11), 40px); }
@@ -124,11 +131,14 @@
   html.phone .touch button { font-size: min(calc(var(--u) * 5), 22px); }
   html.phone .t-act { font-size: min(calc(var(--u) * 8), 36px); }
   html.phone .t-spell { font-size: min(calc(var(--u) * 4.6), 22px); }
-  html.phone .t-menu { left: auto; right: calc(var(--mini-w, 120px) + 10px); top: 8px; }
+  html.phone .t-menu { left: 50%; right: auto; top: auto; bottom: 3%; transform: translateX(-50%); }   /* phones: buttons in a row at the bottom */
   html.phone .t-menu button { width: min(calc(var(--u) * 10.5), 54px); font-size: min(calc(var(--u) * 4.2), 22px); }
   html.phone .t-menu small { font-size: min(calc(var(--u) * 2), 11px); }
   .touch button[hidden] { display: none; }
-  html.phone.portrait .t-menu { flex-direction: column; right: 8px; top: calc(var(--mini-h, 80px) + 16px); }
+  html.phone.portrait .t-menu { bottom: calc(6% + min(calc(var(--u) * 30), 170px) + 12px); }   /* upright: just above the stick and buttons */
+  html.phone .t-menu button[data-code="KeyM"] { display: none; }   /* the minimap opens the map */
+  html.phone .touch.inv .t-menu, html.phone .touch.hero .t-menu { display: none; }
+  html.phone .touch.win .t-stick, html.phone .touch.win .t-btns { display: none; }   /* a window is open: everything in it is tapped directly */
   html.phone .touch.win .t-menu { display: none; }
   html.phone .touch.hero .t-stick { top: auto; right: auto; left: 4%; bottom: 6%; }   /* phones: the hero panel sits mid-left, clear of the stick */   /* a window is open: it has its own ✕ */
   :is(html.phone, html.fill) .phud { display: flex; position: absolute; z-index: 3; gap: 8px; align-items: flex-start;
@@ -247,8 +257,7 @@
   .right-col { display: grid; gap: 2px; justify-items: end; }
   .right-row { display: flex; gap: 24px; align-items: center; }
   .area-name { font-size: 0.7em; font-weight: 600; color: var(--muted); line-height: 1.1; text-transform: uppercase; letter-spacing: 0.08em; }
-  .counter b { color: var(--grid); font-weight: 600; }
-  .stats { display: flex; gap: 24px; color: var(--grid); }
+  .counter b { color: var(--grid); font-weight: 600; }</head><body>  .stats { display: flex; gap: 24px; color: var(--grid); }
   .stat { display: inline-flex; align-items: baseline; gap: 10px; }
   .stat i { font-style: normal; font-size: 1.3em; line-height: 1; }
   .stat b { font-weight: 600; }
@@ -257,7 +266,8 @@
   .stat.mana i { color: #4ea1ff; }
   .stat.nrg i { color: #9dff5c; }
   .stat.cha i { color: #b58cff; }
-  .stat.gold i { color: #f5c542; }</head><body></style>
+  .stat.gold i { color: #f5c542; }
+</style>
 
 <div id="stage"><canvas id="c" width="1680" height="1040" aria-label="Game grid, 21 by 13 tiles"></canvas>
   <!-- phone HUD (phone view only): hero face (tap = hero panel), HP / mana / XP bars, energy and money -->
@@ -1975,8 +1985,8 @@
         { left: 'keep playing', right: '', act() { ui = null; } },
       ];
       if (ui.kind === 'throw') return [   // "are you sure?" for throwing away items (from the right-click menu)
-        { left: 'Yes', right: '', act() { throwAway(ui.throwIdx, ui.throwName, ui.throwN); ui = null; } },
-        { left: 'No', right: '', act() { ui = null; } },
+        { left: 'Yes', right: '', act() { throwAway(ui.throwIdx, ui.throwName, ui.throwN); ui = ui.back || null; if (ui) focus = 'inventory'; } },
+        { left: 'No', right: '', act() { ui = ui.back || null; if (ui) focus = 'inventory'; } },
       ];
       if (ui.kind === 'restart') return [
         { left: 'yes', right: '', act() { newGame(); autosave(true); showStartScreen(); } },
@@ -2599,8 +2609,11 @@
     function openWindow(kind, cursor = 0, back = null) {
       if (kind === 'rogue') tutEvent('talk');   // last task: come back and talk to her
       ui = { kind, cursor, msg: '', back };
+      focus = 'window';   // keys go to the window (a click on an open panel gives them to the panel)
+      if (((kind === 'shop' && fillView) || kind === 'scrap') && !panels.inventory) panels.inventory = { cursor: 0, msg: '' };   // computers: the shop opens the inventory; the Scrap Dealer everywhere (sell from the bag)   // computers: the shop opens the inventory next to it
       held.clear(); tapped.clear();
     }
+    const panelFocused = () => focus && focus !== 'window' && panels[focus] ? panels[focus] : null;   // a panel has the keys (even with a window open)
     const locked = () => !!ui && (ui.kind === 'gameover' || ui.kind === 'start' || ui.kind === 'loading');   // only "respawn" gets you out
     function closeWindow() { if (ui && ui.kind === 'intro') return endIntro(); if (!locked()) { ui = null; itemMenu = null; } }
 
@@ -2614,7 +2627,7 @@
       if (locked()) return;
       if (!panels[name]) { panels[name] = { cursor: 0, msg: '' }; focus = name; held.clear(); tapped.clear(); if (name === 'hero') tutEvent('hero'); }
       else if (focus !== name) focus = name;
-      else { panels[name] = null; const other = name === 'hero' ? 'inventory' : 'hero'; focus = panels[other] ? other : null; }
+      else { panels[name] = null; const other = name === 'hero' ? 'inventory' : 'hero'; focus = panels[other] ? other : ui ? 'window' : null; }
     }
     function closePanels() { panels.inventory = panels.hero = null; focus = null; }
     function closeAll() { if (ui && ui.kind === 'intro') return endIntro(); if (locked()) return; ui = null; closePanels(); }
@@ -2728,7 +2741,7 @@
 
     // Space: open the tile the hero faces, pick the highlighted row, or equip in the inventory
     function spacePressed() {   // everything but a swing plays the interact click
-      if (ui) { playSfx('interact'); choose(ui.cursor); return; }
+      if (ui && !panelFocused()) { playSfx('interact'); choose(ui.cursor); return; }
       if (focus === 'inventory' && panels.inventory) { playSfx('interact'); useSelected(panels.inventory); return; }
       if (focus === 'hero' && panels.hero) { playSfx('interact'); unequipSelected(panels.hero); return; }
       // enemy in reach: swing. Otherwise loot / open the faced building if there is one, else swing at the air.
@@ -2742,10 +2755,17 @@
     function goBack() { const b = ui.back; openWindow(b.kind, b.cursor, b.back); }
     // ---- right-click menu on bag items: throw away 1 or the whole stack (then "are you sure?") ----
     let itemMenu = null;   // { idx, name, x, y, cursor, opts: [{ label, n }] } in canvas px
+    // an item's menu (right-click, long press, or a tap on phones): use it (equip / eat / learn / wear / use), sell it (only while
+    // the Scrap Dealer's window is open), or throw it away
     function openItemMenu(idx, x, y) {
       const it = inventory[idx]; if (!it) { itemMenu = null; return; }
-      const n = it.count || 1;
-      itemMenu = { idx, name: it.name, x, y, cursor: 0, opts: n > 1 ? [{ label: 'Throw away 1', n: 1 }, { label: `Throw away all (${n})`, n }] : [{ label: 'Throw away', n: 1 }] };
+      const n = it.count || 1, def = itemDef(it.name) || {}, opts = [];
+      const use = it.quest ? null : def.class === 'equipment' ? 'Equip' : def.class === 'food' ? 'Eat' : def.class === 'skill' ? 'Learn' : def.class === 'bag' ? 'Wear' : def.consume ? 'Use' : null;
+      if (use) opts.push({ label: use, act: 'use' });
+      if (ui && ui.kind === 'scrap') { const row = scrapRows()[idx + 1]; if (row && row.right !== "won't buy") opts.push({ label: `Sell  ${row.right.replace(/\s+/g, ' ').trim()}`, act: 'sell' }); }
+      if (!it.quest) { if (n > 1) opts.push({ label: 'Throw away 1', n: 1 }, { label: `Throw away all (${n})`, n }); else opts.push({ label: 'Throw away', n: 1 }); }
+      if (!opts.length) { if (panels.inventory) panels.inventory.msg = `That ${it.name} is for a delivery. Bring it to the Netizen Chef.`; itemMenu = null; return; }
+      itemMenu = { idx, name: it.name, x, y, cursor: 0, opts };
     }
     function openQuestMenu(idx, x, y) {   // right-click (or Space) on a quest: cancel it
       const q = quests[idx]; if (!q) { itemMenu = null; return; }
@@ -2759,7 +2779,10 @@
         openWindow('cancelQuest', 1, { kind: 'quests', cursor: m.idx, back: null }); ui.questIdx = m.idx; ui.questName = m.name; return;   // cursor starts on "No"
       }
       if (!o || !inventory[m.idx] || inventory[m.idx].name !== m.name) return;
-      openWindow('throw', 1); ui.throwIdx = m.idx; ui.throwName = m.name; ui.throwN = o.n;   // cursor starts on "No"
+      if (o.act === 'use') { if (panels.inventory) { focus = 'inventory'; panels.inventory.cursor = m.idx; useSelected(panels.inventory); } return; }
+      if (o.act === 'sell') { const row = ui && ui.kind === 'scrap' && scrapRows()[m.idx + 1]; if (row) { const msg = row.act(); if (panels.inventory) panels.inventory.msg = msg || ''; ui.msg = msg || ''; renderStats(); } return; }
+      const keep = ui && ui.kind !== 'throw' ? ui : null;   // throwing from inside a window (e.g. the Scrap Dealer): come back to it
+      ui = { kind: 'throw', cursor: 1, msg: '', back: keep }; focus = 'window'; held.clear(); tapped.clear(); ui.throwIdx = m.idx; ui.throwName = m.name; ui.throwN = o.n;   // cursor starts on "No"
     }
     function throwAway(idx, name, n) {
       const it = inventory[idx]; if (!it || it.name !== name) return;
@@ -2769,23 +2792,26 @@
       renderStats();
     }
     const MENU = { w: 300, rowH: 44 };
+    const menuDims = () => phoneView ? { w: 420, rowH: 72, font: 30 } : { w: 340, rowH: 44, font: 22 };   // bigger for fingers
     function drawItemMenu() {
       const m = itemMenu; if (!m) return;
-      const h = m.opts.length * MENU.rowH + 16, x = Math.min(m.x, canvas.width - MENU.w - 8), y = Math.min(m.y, canvas.height - h - 8);
-      m.box = { x, y, w: MENU.w, h };
-      ctx.fillStyle = 'rgba(0, 0, 0, 0.95)'; rr(x, y, MENU.w, h, 12); ctx.fill();
-      ctx.strokeStyle = '#fff'; ctx.lineWidth = 2; rr(x + 1, y + 1, MENU.w - 2, h - 2, 11); ctx.stroke();
-      ctx.font = '22px ' + MONO; ctx.textAlign = 'left'; ctx.textBaseline = 'middle';
+      const D = menuDims(), h = m.opts.length * D.rowH + 16, x = Math.max(8, Math.min(m.x, canvas.width - D.w - 8)), y = Math.max(8, Math.min(m.y, canvas.height - h - 8));
+      m.box = { x, y, w: D.w, h, rowH: D.rowH };
+      ctx.fillStyle = 'rgba(0, 0, 0, 0.95)'; rr(x, y, D.w, h, 12); ctx.fill();
+      ctx.strokeStyle = '#fff'; ctx.lineWidth = 2; rr(x + 1, y + 1, D.w - 2, h - 2, 11); ctx.stroke();
+      ctx.textAlign = 'left'; ctx.textBaseline = 'middle';
       m.opts.forEach((o, i) => {
-        const ry = y + 8 + i * MENU.rowH;
-        if (i === m.cursor) { ctx.fillStyle = 'rgba(255, 220, 0, 0.14)'; ctx.fillRect(x + 6, ry, MENU.w - 12, MENU.rowH - 4); }
-        ctx.fillStyle = i === m.cursor ? '#fff' : '#cfcfcf'; ctx.fillText(o.label, x + 18, ry + MENU.rowH / 2 - 2);
+        const ry = y + 8 + i * D.rowH;
+        if (i === m.cursor) { ctx.fillStyle = 'rgba(255, 220, 0, 0.14)'; ctx.fillRect(x + 6, ry, D.w - 12, D.rowH - 4); }
+        for (let fs = D.font; fs > 12; fs--) { ctx.font = (o.act ? '600 ' : '') + fs + 'px ' + MONO; if (ctx.measureText(o.label).width <= D.w - 36) break; }
+        ctx.fillStyle = o.act === 'use' ? '#9dff5c' : o.act === 'sell' ? '#f5c542' : i === m.cursor ? '#fff' : '#cfcfcf';
+        ctx.fillText(o.label, x + 18, ry + D.rowH / 2 - 2);
       });
     }
     function escPressed() {   // Esc: back to the previous window, or close everything, or drop the target, or open the menu
       if (locked()) return;
       if (itemMenu) { itemMenu = null; return; }
-      if (ui && ui.kind === 'throw') { ui = null; return; }   // back to the inventory
+      if (ui && ui.kind === 'throw') { ui = ui.back || null; if (ui) focus = 'inventory'; return; }   // back to the inventory (and the window it came from)
       if (ui && ui.bossTalk) { ui.bossTalk = false; return; }
       if (ui && ui.back) goBack();
       else if (anyOpen()) closeAll();
@@ -3741,7 +3767,7 @@
     }
 
     function press(keys) {
-      if (!ui && focus && panels[focus]) {   // focused panel: inventory A/D along the slots, hero W/S (or A/D) through equipped slots
+      if (panelFocused()) {   // focused panel: inventory A/D along the slots, hero W/S (or A/D) through equipped slots
         const pn = panels[focus];
         const d = (keys.includes('d') ? 1 : 0) - (keys.includes('a') ? 1 : 0);
         const v = (keys.includes('s') ? 1 : 0) - (keys.includes('w') ? 1 : 0);
@@ -3774,6 +3800,7 @@
 
     // ---- drawing ------------------------------------------------------------
     let rowRects = [];   // canvas-space hit areas of window rows, for taps/clicks
+    let winFrames = [];  // open window / panel outlines in draw order (last = on top): { id: 'window' | 'inventory' | 'hero', x, y, w, h }
 
     // menu navigation tick: the selection moved inside an open window / panel (W/A/S/D, arrows, mouse). Opening or
     // closing something only updates the snapshot, so it stays quiet.
@@ -3788,7 +3815,9 @@
       watchNavigation();
       if (tut >= 1 && tut <= TUT.length && TUT[tut - 1].ev === 'money' && stats.money >= TUT[tut - 1].need) { tutN = 0; tut++; }   // task 3: holds 30$
       phFaceEl.classList.toggle('tut-glow', tut >= 1 && tut <= TUT.length && TUT[tut - 1].ev === 'hero' && !panels.hero);
-      if (ui && ui.kind === 'loading' && artProgress() >= 1) ui.next();
+      if (!ui && focus === 'window') focus = panels.inventory ? 'inventory' : panels.hero ? 'hero' : null;   // the window closed: back to a panel
+      syncTouchButtons();
+      if (ui && ui.kind === 'loading' && !ui.wait && artProgress() >= 1 && !(ui.minUntil > performance.now())) ui.next();
       const hideTouch = !!ui && (ui.kind === 'start' || ui.kind === 'loading' || ui.kind === 'techversity');   // start screen: no joystick or buttons over its choices
       if (touchEl.style.visibility !== (hideTouch ? 'hidden' : '')) touchEl.style.visibility = hideTouch ? 'hidden' : '';
       const dt = !anyOpen() && !naming() ? Math.min(100, now - lastFrame) : 0;
@@ -4164,13 +4193,20 @@
         ctx.globalAlpha = 1;
       }
 
-      rowRects = [];
+      rowRects = []; winFrames = [];
       drawStates();
       drawTutorial();
       if (!(ui && ui.kind === 'map')) { drawMinimap(rx, ry); if (!mobUI()) { drawQuestButton(); drawLbButton(); } else { lbBtn = null; if (fillView) drawQuestButton(); else questBtn = null; } }
-      drawPanels();
-      if (!ui) drawItemMenu();
-      if (ui) drawWindow();
+      if (ui && panelFocused()) {   // a panel was clicked: it's drawn over the window
+        ui.noDim = false; drawWindow(); drawPanels(); drawItemMenu();
+      } else {
+        if (ui && (panels.inventory || panels.hero) && (fillView || phoneView) && !['techversity', 'map', 'start', 'loading', 'gameover'].includes(ui.kind)) {   // dim the world under both
+          ctx.fillStyle = 'rgba(0, 0, 0, 0.6)'; ctx.fillRect(0, 0, canvas.width, canvas.height); ui.noDim = true;
+        } else if (ui) ui.noDim = false;
+        drawPanels();
+        if (!ui) drawItemMenu();
+        if (ui) drawWindow();
+      }
       if (ui && ui.kind === 'quests') drawItemMenu();   // quest cancel menu sits on top of the quest list
       drawDeliveryHud();
     }
@@ -5040,7 +5076,9 @@
       if (def.consume && def.consume.manaCap) { ctx.fillStyle = '#4ea1ff'; ctx.font = '20px ' + MONO;
         ctx.fillText(`Consume: +${def.consume.manaCap} MANA cap`, rx, y + h - 22); }
       if (def.class === 'equipment') { ctx.font = '600 20px ' + MONO;
-        drawParts([['Equipped:', '#8a8a8a'], ...bonusParts(def)], rx, y + h - 22); }
+        const parts = [['Equipped:', '#8a8a8a'], ...bonusParts(def)];   // shrink until the whole line fits the row
+        for (let fs = 20; fs > 11; fs--) { ctx.font = `600 ${fs}px ${MONO}`; if (parts.reduce((t, [p]) => t + ctx.measureText(p).width + 14, 0) <= x + w - 20 - rx) break; }
+        drawParts(parts, rx, y + h - 22); }
       if (r.minLevel) { ctx.font = '600 18px ' + MONO; ctx.fillStyle = hero.level >= r.minLevel ? '#8a8a8a' : '#e5484d';
         ctx.fillText(`needs lvl ${r.minLevel}`, sx + big + 20, sy + big - 36); }
     }
@@ -5064,9 +5102,11 @@
       const textH = (textLines.length ? textLines.length * 34 + 24 : 0) + tabsH, gaps = list.filter(r => r.gapBefore).length * 24;
       const ph = hero || inv ? 7 * TILE
         : Math.min(canvas.height - 20, Math.max((ui.kind === 'rest' ? 4.5 : 6) * TILE, 110 + textH + listN * rowH + gaps + Math.max(1, msgLines.length) * 32 + 100));
-      const px = (canvas.width - pw) / 2, py = (canvas.height - ph) / 2;
-      ctx.fillStyle = 'rgba(0, 0, 0, 0.6)';
-      ctx.fillRect(0, 0, canvas.width, canvas.height);
+      let px = (canvas.width - pw) / 2;
+      if ((fillView || phoneView) && panels.inventory) px = Math.max(16, Math.min(px, canvas.width - INV_PANEL.w - 32 - pw));   // computers: make room for the inventory on the right
+      const py = (canvas.height - ph) / 2;
+      winFrames.push({ id: 'window', x: px, y: py, w: pw, h: ph });
+      if (!ui.noDim) { ctx.fillStyle = 'rgba(0, 0, 0, 0.6)'; ctx.fillRect(0, 0, canvas.width, canvas.height); }
       ctx.fillStyle = '#000';
       rr(px, py, pw, ph, UI_R); ctx.fill();
       ctx.strokeStyle = '#fff'; ctx.lineWidth = 2;
@@ -5086,7 +5126,7 @@
         ctx.textAlign = 'right';
         ctx.font = '26px ' + MONO;
         ctx.fillStyle = '#8a8a8a';
-        ctx.fillText(`${ICON.energy} ${stats.energy}   ${stats.money}$`, px + pw - 84, py + 56);
+        ctx.fillText(`${ICON.energy} ${stats.energy}   ${stats.money}$`, px + pw - 92, py + 56);
       }
 
       ctx.font = '26px ' + MONO; ctx.fillStyle = '#cfcfcf'; ctx.textAlign = 'left';
@@ -5231,6 +5271,7 @@
       ctx.textAlign = 'right'; ctx.font = `700 ${Math.round(24 * k)}px ${MONO}`; ctx.fillStyle = free ? '#ffdc00' : '#8a8a8a';
       ctx.fillText(`${free} point${free === 1 ? '' : 's'} to spend`, px + pw - 90, py + 44);
       drawCloseX(px + pw - 62, py + 20, null);
+      winFrames.push({ id: 'window', x: px, y: py, w: pw, h: ph });
       const top = py + 90, colGap = 18, colW = (pw - 72 - 2 * colGap) / 3, bottomH = 120, colH = ph - (top - py) - bottomH;
       BRANCHES.forEach((B, bi) => {
         const cx = px + 36 + bi * (colW + colGap), pts = branchPts(B.key), full = branchFull(B.key);
@@ -5250,7 +5291,9 @@
           ctx.strokeStyle = sel ? '#ffdc00' : r ? B.color : 'rgba(255, 255, 255, 0.18)'; ctx.lineWidth = sel ? 3 : 1.5; rr(x, y, w, cardH, 10); ctx.stroke();
           const ic = ART[T.art], icS = Math.min(cardH - 16, 88 * k), hasIc = ready(ic), tx0 = hasIc ? x + 14 + icS + 12 : x + 14;   // icon on the left once its picture exists
           if (hasIc) { ctx.save(); if (!r) ctx.globalAlpha = locked ? 0.2 : 0.45; ctx.imageSmoothingQuality = 'high'; ctx.drawImage(ic, x + 12, y + 8, icS, icS); ctx.restore(); }
-          ctx.textAlign = 'left'; ctx.fillStyle = r ? '#fff' : locked ? '#6a6a6a' : '#bdbdbd'; ctx.font = `700 ${Math.round(21 * k)}px ${MONO}`; ctx.fillText((sel ? '> ' : '') + T.name, tx0, y + 24 * k);
+          ctx.textAlign = 'left'; ctx.fillStyle = r ? '#fff' : locked ? '#6a6a6a' : '#bdbdbd';
+          for (let fs = Math.round(21 * k); fs > 11; fs--) { ctx.font = `700 ${fs}px ${MONO}`; if (tx0 + ctx.measureText((sel ? '> ' : '') + T.name).width <= x + w - 10) break; }   // long names shrink to fit the card
+          ctx.fillText((sel ? '> ' : '') + T.name, tx0, y + 24 * k);
           const pipsW = TALENT_MAX * 22 * k, under = tx0 + ctx.measureText((sel ? '> ' : '') + T.name).width + 12 > x + w - 14 - pipsW;   // no room: pips go under the name
           for (let p = 0; p < TALENT_MAX; p++) {   // rank pips
             const qx = under ? tx0 + p * 22 * k : x + w - 14 - (TALENT_MAX - p) * 22 * k, qy = under ? y + 40 * k : y + 16 * k;
@@ -5312,7 +5355,7 @@
       ctx.strokeText('NEON HUSTLE', cx, ty); ctx.shadowColor = '#ff2bd6'; ctx.shadowBlur = 24 * k; ctx.fillStyle = '#fff'; ctx.fillText('NEON HUSTLE', cx, ty); ctx.shadowBlur = 0;
       ctx.font = `600 ${Math.round(17 * k)}px ${MONO}`; ctx.fillStyle = '#e8e8e8';
       if (ui.kind === 'loading') {   // choice made, pictures still arriving: "Loading" and a thin progress bar
-        const pr = artProgress(), bw = Math.min(canvas.width - 64 * k, 320 * k), bh = Math.max(3, 4 * k), by = ty + 70 * k;
+        const pr = ui.wait ? artProgress() * 0.9 : artProgress(), bw = Math.min(canvas.width - 64 * k, 320 * k), bh = Math.max(3, 4 * k), by = ty + 70 * k;
         ctx.fillText('Loading', cx, ty + 46 * k);
         ctx.fillStyle = 'rgba(255, 255, 255, 0.15)'; ctx.fillRect(cx - bw / 2, by, bw, bh);
         ctx.fillStyle = '#b58cff'; ctx.fillRect(cx - bw / 2, by, bw * pr, bh);
@@ -5632,7 +5675,8 @@
       const pn = panels.inventory, on = focus === 'inventory', w = INV_PANEL.w, h = INV_PANEL.h;
       const x = canvas.width - w - 16, y = viewBottom() - h - 16;
       panelFrame(x, y, w, h, 'Inventory', on);
-      if (!ui) drawCloseX(x + w - 54, y + 10, 'inventory');
+      winFrames.push({ id: 'inventory', x, y, w, h });
+      drawCloseX(x + w - 54, y + 10, 'inventory');
       const slots = invSlots(), size = 96, gap = 16, total = Math.max(1, slots) * size + (Math.max(1, slots) - 1) * gap, x0 = x + (w - total) / 2, sy = y + 62;
       if (!slots) {   // no bag worn: nothing to carry things in
         ctx.fillStyle = '#8a8a8a'; ctx.font = '20px ' + MONO; ctx.textAlign = 'left'; ctx.textBaseline = 'middle';
@@ -5662,7 +5706,7 @@
       } else { ctx.fillStyle = '#8a8a8a'; ctx.fillText('empty slot', x + 24, ly); }
       ctx.fillStyle = '#8a8a8a'; ctx.font = '16px ' + MONO;
       ctx.fillText('A/D · Space use · right-click throw · I/X/Esc close', x + 24, y + h - 18);
-      ctx.textAlign = 'right'; ctx.fillStyle = rarityColor(bag); ctx.font = '600 18px ' + MONO; ctx.fillText(bag, x + w - 24, y + 34);   // the worn bag
+      ctx.textAlign = 'right'; ctx.fillStyle = rarityColor(bag); ctx.font = '600 18px ' + MONO; ctx.fillText(bag, x + w - 70, y + 34);   // the worn bag (left of the ✕)
     }
 
     // hero: middle left. Full-body picture, stats, and the equipped slots (W/S choose, Space unequips).
@@ -5670,7 +5714,8 @@
       const pn = panels.hero, on = focus === 'hero', w = HERO_PANEL.w, h = HERO_PANEL.h;
       const x = 16, y = Math.max(12, (viewBottom() - h) / 2), top = y + 64;
       panelFrame(x, y, w, h, heroName || DEFAULT_NAME, on);
-      if (!ui) drawCloseX(x + w - 54, y + 10, 'hero');
+      winFrames.push({ id: 'hero', x, y, w, h });
+      drawCloseX(x + w - 54, y + 10, 'hero');
       {   // set progress next to the close button: "NRG set 2/3", green with ✓ when complete
         let sx2 = x + w - 70; ctx.textAlign = 'right'; ctx.textBaseline = 'middle'; ctx.font = '600 18px ' + MONO;
         for (const st of SETS) { const n = setCount(st); if (!n) continue; const full = n === st.items.length;
@@ -5886,6 +5931,9 @@
       accEl.hidden = true; document.activeElement?.blur();
       startMusic();
       newGame(); renderStats();
+      // a signed-in player: the loading screen (start picture, "Loading", thin bar) covers the world until his save and the
+      // pictures are in. It stays at least 0.6 s so it doesn't just flash.
+      if (user) ui = { kind: 'loading', cursor: 0, msg: '', wait: true, minUntil: performance.now() + 600, next() { ui = null; } };
       lastAutosave = Date.now();   // don't autosave the fresh run over an existing save
       const { slots } = await listSlots();   // continue from the newest slot (autosave or manual)
       const latest = Object.values(slots || {}).sort((a, b) => new Date(b.at) - new Date(a.at))[0];
@@ -5896,7 +5944,8 @@
       if (guestRun && guestRun.state && !latest && Date.now() - guestRun.at < 7 * 24 * 3600 * 1000) {   // a brand-new account takes over the guest run
         applySave(guestRun.state); await writeSlot(1);
         float('guest run saved', '#3ddc84', player.x + 0.5, player.y - 0.8);
-      } else if (latest) { applySave(latest.state); float('welcome back', '#3ddc84', player.x + 0.5, player.y - 0.8); }
+        if (ui && ui.kind === 'loading') ui.wait = false;
+      } else if (latest) { applySave(latest.state); float('welcome back', '#3ddc84', player.x + 0.5, player.y - 0.8); if (ui && ui.kind === 'loading') ui.wait = false; }
       else showStartScreen();   // a new account's first run
       lastAutosave = Date.now();
       refreshLeaderboard();
@@ -5950,9 +5999,9 @@
       if (itemMenu && e.code === 'Space') { e.preventDefault(); if (!e.repeat) { playSfx('interact'); pickItemMenu(itemMenu.cursor); } return; }
       if (e.code === 'Space') { e.preventDefault(); if (!e.repeat) spacePressed(); return; }
       if (k === 'p') { e.preventDefault(); if (!e.repeat && !locked()) { if (ui && ui.kind === 'cheat') closeWindow(); else openCheats(); } return; }   // CHEAT menu (testing) — remove before release
-      if (k === 'i') { e.preventDefault(); if (!e.repeat && !ui) togglePanel('inventory'); return; }
+      if (k === 'i') { e.preventDefault(); if (!e.repeat && (!ui || (fillView && !locked()))) togglePanel('inventory'); return; }
       if (k === 'm') { e.preventDefault(); if (!e.repeat && !locked()) { if (ui && ui.kind === 'map') closeWindow(); else if (!ui) openWindow('map'); } return; }
-      if (k === 'h') { e.preventDefault(); if (!e.repeat && !ui) togglePanel('hero'); return; }
+      if (k === 'h') { e.preventDefault(); if (!e.repeat && (!ui || (fillView && !locked()))) togglePanel('hero'); return; }
       if (e.key === 'Escape') { e.preventDefault(); if (!e.repeat) escPressed(); return; }
       if (k === 'x') { e.preventDefault(); if (!e.repeat && (itemMenu || anyOpen())) escPressed(); return; }   // X: another close key (never opens the menu)
       if (k === 'l') { e.preventDefault(); if (!e.repeat && !locked()) { if (ui && ui.kind === 'leaderboard') closeWindow(); else if (!ui) openLeaderboard(); } return; }
@@ -5977,6 +6026,30 @@
       if (!ui || naming() || ['techversity', 'map', 'start', 'loading', 'gameover'].includes(ui.kind) || (WINDOW_TABS[ui.kind] && ui.kind === 'work')) return;
       e.preventDefault(); moveCursor(e.deltaY > 0 ? 1 : -1);
     }, { passive: false });   // right-click is the game's item menu, not the browser's
+    // touch: a tap on the highlighted building / NPC opens it, on an enemy in reach attacks, on another enemy targets it,
+    // on a lootable body loots it (all the same as the A button)
+    function tapWorld(cx, cy) {
+      const wx = (cx - cam.ox) / cam.z, wy = (cy - cam.oy) / cam.z, keep = drip;
+      try {
+        for (const d of drips) {
+          if (cloaked(d)) continue;
+          drip = d; const q = dripPos(), n = foeSize(d), hgt = d.kind === 'loader' ? 2.7 : d.kind === 'spore' ? 1.2 : d.kind === 'drone' ? 2.2 : 1.8;
+          const x0 = (q.x - 0.15) * TILE, x1 = (q.x + n + 0.15) * TILE, y1 = (q.y + 1) * TILE, y0 = y1 - hgt * TILE;
+          if (wx < x0 || wx > x1 || wy < y0 || wy > y1) continue;
+          if (d.dead) { if (d.loot && lootable() === d) { spacePressed(); return true; } continue; }
+          target = d;
+          if (meleeTargets().includes(d)) spacePressed();
+          return true;
+        }
+      } finally { drip = keep; }
+      const w = facedBuilding();
+      if (w) {
+        const f = foot(w), a = artSize(w);
+        const x0 = a ? footCX(w) * TILE - a.dw / 2 : f.x0 * TILE, x1 = a ? x0 + a.dw : (f.x1 + 1) * TILE, y1 = (f.y1 + 1) * TILE, y0 = a ? y1 - a.dh : f.y0 * TILE;
+        if (wx >= x0 && wx <= x1 && wy >= y0 && wy <= y1) { spacePressed(); return true; }
+      }
+      return false;
+    }
     function tapOnHero(cx, cy) {   // canvas point → is it on the hero's sprite (his tile and the head above it)?
       const wx = (cx - cam.ox) / cam.z / TILE, wy = (cy - cam.oy) / cam.z / TILE;
       return wx >= player.x - 0.15 && wx <= player.x + 1.15 && wy >= player.y + 1 - HERO_H && wy <= player.y + 1;
@@ -5990,8 +6063,9 @@
         if (row && quests[qi]) openQuestMenu(qi, cx, cy);
         return;
       }
-      const slot = !ui && panels.inventory && rowRects.find(b => b.panel === 'inventory' && cx >= b.x && cx <= b.x + b.w && cy >= b.y && cy <= b.y + b.h);
+      const slot = panels.inventory && rowRects.find(b => b.panel === 'inventory' && cx >= b.x && cx <= b.x + b.w && cy >= b.y && cy <= b.y + b.h);
       if (slot && inventory[slot.i]) { focus = 'inventory'; panels.inventory.cursor = slot.i; panels.inventory.msg = ''; openItemMenu(slot.i, cx, cy); }
+      else if (ui && ui.kind !== 'quests') return;
     }
     let longPress = null;   // { id, x, y, timer }: finger held still for 0.5 s on the map
     function armLongPress(e, cx, cy) {
@@ -6010,25 +6084,36 @@
       const cx = (e.clientX - r.left - ox) / s, cy = (e.clientY - r.top - oy) / s;
       if (!ui && !locked() && lbBtn && e.button === 0 && cx >= lbBtn.x && cx <= lbBtn.x + lbBtn.w && cy >= lbBtn.y && cy <= lbBtn.y + lbBtn.h) { openLeaderboard(); return; }
       if (!ui && !anyOpen() && e.button === 0 && tapOnHero(cx, cy)) { togglePanel('hero'); return; }   // tap / click the hero: stats
+      if (!anyOpen() && e.pointerType && e.pointerType !== 'mouse' && tapWorld(cx, cy)) return;   // finger on the faced building / an enemy
       if (!ui && !locked() && questBtn && e.button === 0 && cx >= questBtn.x && cx <= questBtn.x + questBtn.w && cy >= questBtn.y && cy <= questBtn.y + questBtn.h) { openWindow('quests'); return; }
       if (!anyOpen()) return;
       if (itemMenu) {   // menu open: a click on an option picks it, anywhere else closes the menu
         const b = itemMenu.box;
-        if (b && e.button === 0 && cx >= b.x && cx <= b.x + b.w && cy >= b.y + 8 && cy < b.y + b.h - 8) { playSfx('interact'); pickItemMenu(Math.floor((cy - b.y - 8) / MENU.rowH)); }
+        if (b && e.button === 0 && cx >= b.x && cx <= b.x + b.w && cy >= b.y + 8 && cy < b.y + b.h - 8) { playSfx('interact'); pickItemMenu(Math.floor((cy - b.y - 8) / (b.rowH || MENU.rowH))); }
         else itemMenu = null;
         return;
       }
-      const xHit = e.button === 0 && rowRects.find(b => b.close && cx >= b.x && cx <= b.x + b.w && cy >= b.y && cy <= b.y + b.h);
-      if (xHit && (xHit.close === 'window' ? ui : !ui)) {   // ✕ buttons
+      // which open window / panel is under the click (the top one). Computers: a click outside all of them closes them all.
+      const inBox = f => cx >= f.x && cx <= f.x + f.w && cy >= f.y && cy <= f.y + f.h;
+      let top = [...winFrames].reverse().find(inBox) || null;
+      if (!top && ui && !winFrames.some(f => f.id === 'window')) top = { id: 'window' };   // full-screen windows (map, game over…)
+      if (!top) { if (e.pointerType === 'mouse' && e.button === 0 && !locked() && !(ui && ui.bossTalk)) closeAll(); return; }
+      if (top.id === 'window') { if (ui) focus = 'window'; } else if (panels[top.id]) focus = top.id;   // a click selects that window
+      const mine = b => top.id === 'window' ? !b.panel && (!b.close || b.close === 'window') : (b.panel === top.id || b.close === top.id);
+      const xHit = e.button === 0 && rowRects.find(b => b.close && mine(b) && cx >= b.x && cx <= b.x + b.w && cy >= b.y && cy <= b.y + b.h);
+      if (xHit) {   // ✕ buttons
         if (xHit.close === 'window') closeAll();
-        else { panels[xHit.close] = null; if (focus === xHit.close) focus = panels.inventory ? 'inventory' : panels.hero ? 'hero' : null; }
+        else { panels[xHit.close] = null; if (focus === xHit.close) focus = panels.inventory ? 'inventory' : panels.hero ? 'hero' : ui ? 'window' : null; }
         return;
       }
       if (ui && ui.bossTalk) { ui.bossTalk = false; return; }   // a click closes the boss's message
       if (e.button === 2) { secondaryAt(cx, cy); return; }
       if (e.pointerType && e.pointerType !== 'mouse') armLongPress(e, cx, cy);   // touch: holding a finger = right-click
-      const hit = rowRects.find(b => !b.close && (!ui || !b.panel) && cx >= b.x && cx <= b.x + b.w && cy >= b.y && cy <= b.y + b.h);
-      if (hit && hit.panel) { focus = hit.panel; panels[hit.panel].cursor = hit.i; panels[hit.panel].msg = ''; }   // click a panel slot: focus + select
+      const hit = rowRects.find(b => !b.close && mine(b) && cx >= b.x && cx <= b.x + b.w && cy >= b.y && cy <= b.y + b.h);
+      if (hit && hit.panel) {   // click a panel slot: focus + select. Phones: a tap on a bag item opens its menu (use / sell / throw away)
+        focus = hit.panel; panels[hit.panel].cursor = hit.i; panels[hit.panel].msg = '';
+        if (hit.panel === 'inventory' && inventory[hit.i] && e.pointerType && e.pointerType !== 'mouse') { clearTimeout(longPress?.timer); longPress = null; openItemMenu(hit.i, hit.x, hit.y - 20); }
+      }
       else if (hit && hit.tab !== undefined) switchShopTab(hit.tab);
       else if (hit && ui && (WINDOW_TABS[ui.kind] || ui.kind === 'techversity') && hit.i !== ui.cursor) { ui.cursor = hit.i; ui.msg = ''; }   // shop: first click selects, a click on the selected item buys
       else if (hit) { playSfx('interact'); choose(hit.i); }   // a click that acts = the same click as Space
@@ -6040,8 +6125,15 @@
     const phFaceEl = $('ph-face');
     const touchEl = $('touch'), stickEl = $('t-stick'), knobEl = $('t-knob'), fsBtn = $('t-fs');
     // full screen (hides the browser's address bar where the browser allows it; iPhone Safari doesn't — there, Share → Add to Home Screen)
+    const isIOS = /iP(hone|ad|od)/.test(navigator.userAgent) || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
+    const standalone = () => navigator.standalone || matchMedia('(display-mode: standalone)').matches || matchMedia('(display-mode: fullscreen)').matches;
     fsBtn.addEventListener('click', () => {
       const d = document, el = d.documentElement;
+      if (!(el.requestFullscreen || el.webkitRequestFullscreen) || (isIOS && !d.fullscreenEnabled && !d.webkitFullscreenEnabled)) {   // iPhone Safari: pages can't go full screen
+        askConfirm({ title: 'Full screen', icon: '⛶', no: '', yes: 'Got it',
+          text: 'iPhone Safari can\'t hide its bars for web games. Tap <b>Share</b> (the square with an arrow), then <b>Add to Home Screen</b>, and open Neon Hustle from your home screen: it plays full screen.' });
+        return;
+      }
       if (d.fullscreenElement || d.webkitFullscreenElement) (d.exitFullscreen || d.webkitExitFullscreen).call(d);
       else { const r = (el.requestFullscreen || el.webkitRequestFullscreen).call(el, { navigationUI: 'hide' });
         r?.then?.(() => {
@@ -6073,7 +6165,7 @@
       const vw = window.innerWidth, vh = window.innerHeight;
       phoneView = touchOn();   // touch controls on (phones, tablets, or turned on in Settings): full-screen view with the camera
       viewTiles = Math.max(7, Math.min(13, Math.round(Math.min(vw, vh) / 56)));   // tiles across the short side: 7 on phones, more on tablets
-      fsBtn.hidden = !(document.fullscreenEnabled || document.webkitFullscreenEnabled);
+      fsBtn.hidden = standalone() || !(document.fullscreenEnabled || document.webkitFullscreenEnabled || (isIOS && phoneView));   // iPhone: shows the Add to Home Screen tip
       document.documentElement.classList.toggle('phone', phoneView);
       document.documentElement.classList.toggle('portrait', phoneView && vh > vw);
       fillView = !phoneView;
@@ -6120,6 +6212,26 @@
       b.addEventListener('pointerup', up); b.addEventListener('pointercancel', up); b.addEventListener('pointerleave', up);
       b.addEventListener('contextmenu', e => e.preventDefault());
     });
+    // spell slots show their spell, the A button the equipped weapon; filled controls are more visible (CSS .filled)
+    let touchSyncKey = '';
+    function syncTouchButtons() {
+      if (!phoneView) return;
+      const sw = swordDef(), key = skills.join('|') + '#' + (sw ? sw.art : '');
+      if (key === touchSyncKey) return;
+      touchSyncKey = key;
+      touchEl.querySelectorAll('.t-spell').forEach((b, i) => {
+        const name = skills[i], art = name && (itemDef(name) || {}).art, src = art && ART_SRC[art];
+        b.classList.toggle('filled', !!name);
+        b.innerHTML = src ? `<img src="${src}" alt="">` : String(i + 1);
+      });
+      const act = touchEl.querySelector('.t-act'), wsrc = sw && ART_SRC[sw.art];
+      act.classList.toggle('filled', !!sw);
+      act.innerHTML = wsrc ? `<img src="${wsrc}" alt="">` : 'A';
+    }
+    // phones: no zooming by double tap or pinch (a quick second tap on a button used to zoom in with no way back)
+    let lastTouchEnd = 0;
+    document.addEventListener('touchend', e => { const now = Date.now(); if (now - lastTouchEnd < 350) e.preventDefault(); lastTouchEnd = now; }, { passive: false });
+    ['gesturestart', 'gesturechange', 'dblclick'].forEach(ev => document.addEventListener(ev, e => e.preventDefault(), { passive: false }));
     let stick = null, stickKeys = [], stickRepeat = null;   // stick: { id, cx, cy, r } while a finger is on it
     const STICK_CODE = { w: 'KeyW', a: 'KeyA', s: 'KeyS', d: 'KeyD' };
     function setStickKeys(keys) {
