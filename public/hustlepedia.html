@@ -1,0 +1,410 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Hustlepedia · Neon Hustle</title>
+<link rel="icon" type="image/png" href="/favicon.png">
+<meta name="theme-color" content="#0a0d16">
+<style>
+  :root {
+    --bg: #0a0d16; --panel: #111726; --panel2: #161e31; --line: #222d45; --text: #e6ebf5; --muted: #8a96ad; --faint: #5b6680;
+    --cyan: #00e5ff; --pink: #ff2bd6; --yellow: #ffe600; --green: #9dff5c; --red: #e5484d; --orange: #ff9a2e; --blue: #4ea1ff;
+    --mono: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+  }
+  * { box-sizing: border-box; }
+  html { scroll-behavior: smooth; scroll-padding-top: 120px; }
+  body { margin: 0; background: var(--bg); color: var(--text); font: 15px/1.55 var(--mono); -webkit-font-smoothing: antialiased; }
+  a { color: var(--cyan); }
+  img { image-rendering: auto; }
+  .wrap { max-width: 1120px; margin: 0 auto; padding: 0 16px; }
+
+  /* hero banner */
+  .hero { position: relative; overflow: hidden; border-bottom: 1px solid var(--line); }
+  .hero img.bg { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; object-position: 45% 40%; opacity: .55; }
+  .hero::after { content: ''; position: absolute; inset: 0; background: linear-gradient(to top, var(--bg) 5%, rgba(10,13,22,.4) 60%, rgba(10,13,22,.2)); }
+  .hero .wrap { position: relative; z-index: 1; padding-top: 72px; padding-bottom: 28px; }
+  .hero h1 { margin: 0; font-size: clamp(38px, 8vw, 72px); letter-spacing: -.02em; line-height: 1; text-shadow: 0 0 24px rgba(255,43,214,.55); }
+  .hero h1 span { color: var(--pink); }
+  .hero p { margin: 10px 0 0; color: #c7cfe0; max-width: 560px; }
+  .back { position: absolute; top: 16px; left: 16px; z-index: 2; display: inline-flex; gap: 8px; align-items: center; padding: 8px 14px; border: 1px solid var(--cyan);
+          color: var(--cyan); background: rgba(10,13,22,.7); border-radius: 8px; text-decoration: none; font-weight: 700; font-size: 13px; }
+  .back:hover { background: var(--cyan); color: #000; }
+
+  /* sticky tabs + search */
+  .bar { position: sticky; top: 0; z-index: 10; background: rgba(10,13,22,.94); backdrop-filter: blur(8px); border-bottom: 1px solid var(--line); }
+  .bar .wrap { display: flex; gap: 10px; align-items: center; padding-top: 10px; padding-bottom: 10px; flex-wrap: wrap; }
+  .tabs { display: flex; gap: 6px; overflow-x: auto; flex: 1 1 auto; scrollbar-width: none; }
+  .tabs::-webkit-scrollbar { display: none; }
+  .tabs a { flex: none; padding: 7px 12px; border-radius: 8px; color: var(--muted); text-decoration: none; font-weight: 700; font-size: 13px; border: 1px solid transparent; }
+  .tabs a:hover, .tabs a.on { color: var(--text); border-color: var(--line); background: var(--panel); }
+  .tabs a.on { color: var(--yellow); }
+  #q { flex: 1 1 200px; max-width: 280px; padding: 8px 12px; border-radius: 8px; border: 1px solid var(--line); background: var(--panel); color: var(--text); font: inherit; font-size: 14px; }
+  #q:focus { outline: none; border-color: var(--cyan); }
+
+  section { padding: 34px 0 10px; }
+  h2 { font-size: 26px; margin: 0 0 4px; letter-spacing: -.01em; }
+  h2 .k { color: var(--cyan); }
+  .lead { color: var(--muted); margin: 0 0 18px; }
+  h3 { font-size: 17px; margin: 26px 0 10px; color: var(--yellow); }
+  .grid { display: grid; gap: 12px; grid-template-columns: repeat(auto-fill, minmax(300px, 1fr)); }
+  .grid.small { grid-template-columns: repeat(auto-fill, minmax(230px, 1fr)); }
+  .card { background: var(--panel); border: 1px solid var(--line); border-radius: 12px; padding: 14px; }
+  .card.big { grid-column: 1 / -1; }
+  .card h4 { margin: 0; font-size: 16px; }
+  .head { display: flex; gap: 12px; align-items: center; margin-bottom: 8px; }
+  .icon { width: 52px; height: 52px; flex: none; border-radius: 10px; background: #1b2233; border: 1px solid var(--line); object-fit: contain; padding: 4px; }
+  .portrait { width: 84px; height: 84px; border-radius: 12px; background: #1b2233; border: 1px solid var(--line); object-fit: cover; flex: none; }
+  .tag { display: inline-block; font-size: 11px; padding: 1px 7px; border-radius: 99px; border: 1px solid currentColor; margin: 2px 4px 0 0; white-space: nowrap; }
+  .muted { color: var(--muted); }
+  .faint { color: var(--faint); }
+  .desc { color: #c3cbdc; font-size: 13.5px; margin: 6px 0 0; }
+  .stats { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 8px; }
+  .stat { background: var(--panel2); border: 1px solid var(--line); border-radius: 7px; padding: 3px 8px; font-size: 12.5px; }
+  .stat b { color: var(--text); }
+  ul.facts { margin: 8px 0 0; padding-left: 18px; font-size: 13.5px; color: #c3cbdc; }
+  ul.facts li { margin: 3px 0; }
+  ul.facts b { color: var(--text); }
+  .phase { margin-top: 10px; padding: 10px 12px; border-left: 3px solid var(--orange); background: var(--panel2); border-radius: 0 8px 8px 0; }
+  .phase h5 { margin: 0 0 4px; font-size: 14px; color: var(--orange); }
+  table { width: 100%; border-collapse: collapse; font-size: 13px; }
+  th, td { text-align: left; padding: 6px 8px; border-bottom: 1px solid var(--line); vertical-align: top; }
+  th { color: var(--muted); font-weight: 700; font-size: 11.5px; text-transform: uppercase; letter-spacing: .06em; white-space: nowrap; }
+  .tablebox { overflow-x: auto; background: var(--panel); border: 1px solid var(--line); border-radius: 12px; padding: 6px 8px; }
+  kbd { font: 12px var(--mono); padding: 1px 6px; border: 1px solid var(--line); border-bottom-width: 2px; border-radius: 5px; background: var(--panel2); color: var(--text); white-space: nowrap; }
+  .keys { display: grid; gap: 6px; grid-template-columns: repeat(auto-fill, minmax(340px, 1fr)); }
+  .key { display: flex; gap: 10px; align-items: baseline; background: var(--panel); border: 1px solid var(--line); border-radius: 8px; padding: 7px 10px; font-size: 13px; }
+  .key kbd { flex: none; }
+  .key span { color: #c3cbdc; }
+  .branch { border-top: 3px solid var(--c); }
+  .branch h4 { color: var(--c); }
+  .ranks { display: grid; grid-template-columns: auto 1fr; gap: 2px 8px; font-size: 12.5px; margin-top: 6px; }
+  .ranks span:nth-child(odd) { color: var(--faint); }
+  .hidden { display: none !important; }
+  .empty { color: var(--muted); padding: 20px 0; }
+  footer { color: var(--faint); font-size: 12px; padding: 30px 0 50px; border-top: 1px solid var(--line); margin-top: 30px; }
+  @media (max-width: 600px) { body { font-size: 14px; } .grid, .keys { grid-template-columns: 1fr; } .key { flex-wrap: wrap; } .portrait { width: 64px; height: 64px; } }
+</style>
+</head>
+<body>
+<header class="hero">
+  <img class="bg" id="banner" alt="">
+  <a class="back" href="game.html" id="back">← back to the game</a>
+  <div class="wrap">
+    <h1>Hustle<span>pedia</span></h1>
+    <p>Everything in Neon Hustle: controls, stats, every enemy and boss, every item, talents, quests and the map. All numbers come straight from the game.</p>
+  </div>
+</header>
+<div class="bar"><div class="wrap">
+  <nav class="tabs" id="tabs">
+    <a href="#basics">Basics</a><a href="#enemies">Enemies</a><a href="#items">Items</a><a href="#talents">Talents</a><a href="#quests">Quests &amp; work</a><a href="#world">World</a>
+  </nav>
+  <input id="q" type="search" placeholder="search…" autocomplete="off">
+</div></div>
+<main class="wrap" id="main"></main>
+<div class="wrap"><footer id="foot"></footer></div>
+
+<script>
+const D = {"version":"2026-10-03T09:01:30.064Z","start":{"health":10,"strength":1,"mana":0,"charisma":1,"money":0,"energy":10},"caps":{"health":10,"energy":20,"mana":0},"maxLevel":20,"levels":[{"L":1,"exp":100,"hp":10,"str":1,"mana":0,"nrg":20,"crit":0,"quest":{"exp":10,"money":4}},{"L":2,"exp":140,"hp":12,"str":1,"mana":1,"nrg":22,"crit":0.1,"quest":{"exp":14,"money":6}},{"L":3,"exp":200,"hp":14,"str":1,"mana":2,"nrg":24,"crit":0.2,"quest":{"exp":20,"money":8}},{"L":4,"exp":280,"hp":17,"str":1,"mana":3,"nrg":27,"crit":0.3,"quest":{"exp":28,"money":11}},{"L":5,"exp":390,"hp":21,"str":2,"mana":4,"nrg":29,"crit":0.4,"quest":{"exp":39,"money":16}},{"L":6,"exp":550,"hp":26,"str":2,"mana":5,"nrg":32,"crit":0.5,"quest":{"exp":55,"money":22}},{"L":7,"exp":770,"hp":32,"str":2,"mana":6,"nrg":35,"crit":0.6,"quest":{"exp":77,"money":31}},{"L":8,"exp":1080,"hp":38,"str":2,"mana":7,"nrg":39,"crit":0.7,"quest":{"exp":108,"money":43}},{"L":9,"exp":1510,"hp":45,"str":2,"mana":8,"nrg":43,"crit":0.8,"quest":{"exp":151,"money":60}},{"L":10,"exp":2110,"hp":53,"str":3,"mana":9,"nrg":47,"crit":0.9,"quest":{"exp":211,"money":84}},{"L":11,"exp":2950,"hp":62,"str":3,"mana":10,"nrg":52,"crit":1,"quest":{"exp":295,"money":118}},{"L":12,"exp":4130,"hp":72,"str":3,"mana":11,"nrg":57,"crit":1.1,"quest":{"exp":413,"money":165}},{"L":13,"exp":5780,"hp":82,"str":4,"mana":12,"nrg":63,"crit":1.2,"quest":{"exp":578,"money":231}},{"L":14,"exp":8090,"hp":93,"str":4,"mana":13,"nrg":69,"crit":1.3,"quest":{"exp":809,"money":324}},{"L":15,"exp":11330,"hp":105,"str":5,"mana":14,"nrg":76,"crit":1.4,"quest":{"exp":1133,"money":453}},{"L":16,"exp":15860,"hp":118,"str":5,"mana":15,"nrg":84,"crit":1.5,"quest":{"exp":1586,"money":634}},{"L":17,"exp":22200,"hp":132,"str":6,"mana":16,"nrg":92,"crit":1.6,"quest":{"exp":2220,"money":888}},{"L":18,"exp":31080,"hp":146,"str":7,"mana":17,"nrg":101,"crit":1.7,"quest":{"exp":3108,"money":1243}},{"L":19,"exp":43510,"hp":161,"str":8,"mana":18,"nrg":111,"crit":1.8,"quest":{"exp":4351,"money":1740}},{"L":20,"exp":0,"hp":177,"str":9,"mana":19,"nrg":122,"crit":1.9,"quest":null}],"killExp":0.4,"questMult":{"common":1,"rare":2,"mythical":3,"legendary":4},"hit":{"base":0.97,"perLvl":0.1,"perPt":0.0001,"cap":300},"crit":{"perCha":0.0003,"cap":0.15,"perLvl":0.001},"levelMult":{"strength":1.12,"healthRegen":1.06,"manaRegen":1.09},"rest":{"price":1,"share":{"health":0.4,"energy":0.4,"mana":0.4},"cooldownMs":300000},"regenMs":{"hero":60000,"mana":60000,"enemy":60000},"attackMs":1000,"abilitySlots":3,"maxQuests":5,"controls":[["W A S D / arrows","move (any keyboard layout)"],["two keys, e.g. W+D","move diagonally"],["Space","open / select"],["Space (facing an enemy)","attack"],["Space (facing a beaten enemy)","loot"],["Esc","back to the previous window / close"],["Esc (nothing open)","menu"],["H","hero (left)"],["I","inventory (bottom right)"],["M","world map"],["H / I (both open)","switch focus"],["W / S (hero)","choose equipped item"],["Space (hero)","unequip"],["A / D (inventory)","choose a slot"],["Space (inventory)","equip / learn / wear a bag"],["right-click (inventory)","throw away an item"],["A / D (sound settings)","volume down / up"],["A / D (shop)","switch tab (or click a tab)"],["click (shop)","select an item, click again to buy"],["W / S","choose in a window"],["1 2 3","pick a row (window) / cast spell"],["Tab","next target (closest first)"],["Q (or the quest icon)","active quests"],["L (or the trophy)","leaderboard: Top Exp, Top Dealers, Top Slayers"],["click the hero","hero stats"],["A / D (TradeCorp)","switch tab: My Office, Deals, Boss"],["Esc (target selected)","deselect target"],["phone: joystick","move (in a window: choose)"],["phone: A \u00b7 1 2 3","Space (act / confirm) \u00b7 spells"],["phone: top-left row","bag, hero, map, quests, menu / back"],["phone: hold","item or quest: throw away / cancel menu"]],"phoneControls":[["joystick","walk \u00b7 in windows: choose"],["A","attack \u00b7 open \u00b7 pick up \u00b7 confirm"],["1 2 3","cast your spells"],["tap the hero","hero stats and equipment"],["top buttons","bag, quests, top, map, menu"],["hold an item / quest","throw away / cancel"],["\u2715","close a window"]],"items":[{"name":"Cheap noodles","tab":"food","class":"food","stack":16,"price":1,"gain":{"energy":10,"health":1},"art":"food","rarity":"common","desc":"A steaming bowl of street noodles. Refills energy and patches you up a little. +1$ per 100 food bought.","icon":"art/items/food/food.png","set":null},{"name":"Beef brisket","tab":"food","class":"food","stack":16,"price":4,"gain":{"energy":18,"health":2},"art":"beefBrisket","rarity":"common","desc":"Slow-smoked brisket from a rooftop grill. A proper meal: more energy and a bit more healing. +3$ per 100 food bought.","icon":"art/items/food/beefBrisket.webp","set":null},{"name":"Dumplings","tab":"food","class":"food","stack":16,"price":12,"buyLevel":4,"gain":{"energy":33,"health":4},"art":"dumplings","rarity":"rare","desc":"A steamer basket of fat dumplings. Keeps you going through a long shift. +6.7$ per 100 food bought.","icon":"art/items/food/dumplings.webp","set":null},{"name":"NRG Shot","tab":"food","class":"food","stack":16,"price":24,"buyLevel":6,"gain":{"energy":50},"art":"nrgShot","rarity":"rare","desc":"A tiny vial of neon-blue fuel. A huge energy kick, no healing at all. +10$ per 100 food bought.","icon":"art/items/food/nrgShot.webp","set":null},{"name":"Smile","tab":"patches","class":"patch","price":30,"gain":{"charisma":1},"patch":true,"art":"smilePatch","rarity":"common","desc":"Cheap social firmware. Every install makes you a little more likeable. +15% price per install.","icon":"art/items/patches/smilePatch.png","set":null},{"name":"Social","tab":"patches","class":"patch","minLevel":2,"price":90,"gain":{"charisma":2},"patch":true,"art":"socialPatch","rarity":"common","desc":"A small-talk module for the street. Twice the charm of Smile. +15% price per install.","icon":"art/items/patches/socialPatch.png","set":null},{"name":"Persona","tab":"patches","class":"patch","minLevel":3,"price":240,"gain":{"charisma":3},"patch":true,"art":"personaPatch","rarity":"common","desc":"A premium personality overlay. The biggest charisma boost per install. +15% price per install.","icon":"art/items/patches/personaPatch.png","set":null},{"name":"Banana sword","tab":"weapons","buyLevel":2,"meleeArea":1.2,"price":260,"gain":{"strength":1,"charisma":1},"hit":5,"attackMs":-100,"class":"equipment","kind":"sword","art":"bananaSword","rarity":"common","desc":"A curved yellow blade that hits hard and swings fast. Goes to your inventory: equip it there. Only one sword can be equipped.","icon":"art/items/weapons/bananaSword.png","set":null},{"name":"Mothersword","tab":"weapons","buyLevel":3,"meleeArea":1.25,"price":390,"gain":{"strength":2,"charisma":1},"hit":9,"attackMs":-120,"class":"equipment","kind":"sword","art":"mothersword","attackSheets":"mother","rarity":"common","desc":"A home-made blade cut from an old motherboard. Basic for now, but its empty sockets can take upgrades at MutaTech.","icon":"art/items/weapons/mothersword.webp","set":null},{"name":"NRG Headset","tab":"armor","price":370,"gain":{"charisma":1},"capGain":{"health":1,"energy":3},"hpRegen":1,"class":"equipment","slot":"head","art":"nrgHeadset","rarity":"common","desc":"Noise-cancelling headset with a charge loop. Full NRG set (3 pieces): +1 HP +1 CHSM +1 NRG and a new look.","icon":"art/items/armor/nrgHeadset.webp","set":"NRG"},{"name":"NRG Shirt","tab":"armor","price":590,"gain":{"charisma":2},"capGain":{"health":2,"energy":5},"hpRegen":1,"class":"equipment","slot":"chest","art":"nrgShirt","rarity":"common","desc":"Smart fabric with woven power lines. Full NRG set (3 pieces): +1 HP +1 CHSM +1 NRG and a new look.","icon":"art/items/armor/nrgShirt.webp","set":"NRG"},{"name":"NRG Sneakers","tab":"armor","price":390,"gain":{"charisma":1},"capGain":{"health":1,"energy":3},"speed":0.1,"class":"equipment","slot":"boots","art":"nrgSneakers","rarity":"common","desc":"Springy sneakers with glowing soles, 10% faster. Full NRG set (3 pieces): +1 HP +1 CHSM +1 NRG and a new look.","icon":"art/items/armor/nrgSneakers.webp","set":"NRG"},{"name":"Arduino Headset","tab":"armor","price":210,"gain":{},"capGain":{"health":1},"class":"equipment","slot":"head","art":"arduinoHeadset","rarity":"common","desc":"A DIY headset built from hobby parts, with empty pin headers for upgrades. Full Arduino set (3 pieces): +1 HP +1 CHSM and a new look.","icon":"art/items/armor/arduinoHeadset.webp","set":"Arduino"},{"name":"Arduino Shirt","tab":"armor","price":390,"gain":{},"capGain":{"health":1},"class":"equipment","slot":"chest","art":"arduinoShirt","rarity":"common","desc":"A teal tee with a microcontroller sewn on the chest. Full Arduino set (3 pieces): +1 HP +1 CHSM and a new look.","icon":"art/items/armor/arduinoShirt.webp","set":"Arduino"},{"name":"Arduino Sneakers","tab":"armor","price":230,"gain":{},"capGain":{"health":1},"speed":0.05,"class":"equipment","slot":"boots","art":"arduinoSneakers","rarity":"common","desc":"Canvas sneakers with sensor boards strapped on, 5% faster. Full Arduino set (3 pieces): +1 HP +1 CHSM and a new look.","icon":"art/items/armor/arduinoSneakers.webp","set":"Arduino"},{"name":"Tar","class":"resource","stack":64,"gain":{},"art":"tart","value":2,"rarity":"common","icon":"art/items/loot/tart.png","set":null},{"name":"Magic tar","class":"skill","gain":{},"art":"magicTart","value":90,"rarity":"rare","icon":"art/items/loot/magicTart.png","set":null},{"name":"Magic Nozzle","class":"skill","gain":{},"art":"magicNozzle","value":90,"rarity":"rare","desc":"The Pump Queen's fuel nozzle. Learn it: Fuel Spray.","icon":"art/items/skills/magicNozzle.webp","set":null},{"name":"Scrap","class":"resource","stack":64,"gain":{},"value":1,"art":"scrap","rarity":"common","icon":"art/items/loot/scrap.png","set":null},{"name":"MutaGen","class":"resource","stack":32,"gain":{},"value":26,"rarity":"rare","art":"mutagen","icon":"art/items/loot/mutagen.png","set":null},{"name":"Tar Orb","class":"upgrade","stack":16,"gain":{},"value":60,"rarity":"rare","art":"tarOrb","desc":"A magic orb that fuses magic power and body","consume":{"manaCap":1},"icon":"art/items/loot/tarOrb.png","set":null},{"name":"AI chip","class":"resource","stack":32,"gain":{},"value":24,"rarity":"rare","art":"aiChip","icon":"art/items/loot/aiChip.png","set":null},{"name":"Spore Sac","class":"resource","stack":64,"gain":{},"value":5,"rarity":"common","art":"sporeSac","desc":"A soft sac of glowing spores from a Sporeling.","icon":"art/items/loot/sporeSac.webp","set":null},{"name":"Loader Core","class":"resource","stack":16,"gain":{},"value":90,"rarity":"mythical","art":"loaderCore","desc":"The still-warm power core of an Overgrown Loader.","icon":"art/items/loot/loaderCore.webp","set":null},{"name":"BackBag","class":"bag","slots":2,"price":80,"rarity":"common","gain":{},"art":"invIcon","tab":"other","desc":"A worn street backpack with two pockets. Better than carrying loot in your hands.","icon":"art/items/bags/invIcon.png","set":null},{"name":"BackBag X","class":"bag","slots":4,"price":600,"rarity":"rare","gain":{"charisma":1},"art":"bagX","tab":"other","buyLevel":3,"desc":"A reinforced tactical pack with four compartments and neon trim. Carries more, and looks sharp doing it.","icon":"art/items/bags/bagX.png","set":null},{"name":"Courier Shell","class":"bag","slots":8,"price":1690,"rarity":"mythical","gain":{},"art":"courierShell","desc":"A hard-shell courier pack. Eight compartments behind one armoured hatch.","icon":"art/items/bags/courierShell.webp","set":null},{"name":"Vault Pack","class":"bag","slots":12,"price":4490,"rarity":"legendary","gain":{},"art":"vaultPack","keepMoney":0.1,"desc":"A pocket bank vault on your back. Twelve slots, and if you die, 10% of your money stays with you.","icon":"art/items/bags/vaultPack.webp","set":null},{"name":"baNano Sword","class":"equipment","kind":"sword","rarity":"rare","price":1200,"minLevel":4,"meleeArea":1.3,"attackMs":-140,"hit":24,"gain":{"strength":5,"charisma":3},"art":"bananoSword","attackSheets":"banano","desc":"A Banana sword mutated by MutaGen down to the nano level. Its living, self-sharpening peel glows acid green and cuts faster than ever.","icon":"art/items/weapons/bananoSword.webp","set":null}],"recipes":[{"make":"Tar Orb","count":1,"cost":[["Tar",10],["MutaGen",1]],"energy":20,"minLevel":2},{"make":"baNano Sword","count":1,"cost":[["Banana sword",1],["MutaGen",5]],"energy":30,"minLevel":4},{"make":"Courier Shell","count":1,"cost":[],"energy":0,"soon":true},{"make":"Vault Pack","count":1,"cost":[],"energy":0,"soon":true}],"sets":[{"name":"NRG","items":["NRG Headset","NRG Shirt","NRG Sneakers"],"gain":{"charisma":1},"capGain":{"health":1,"energy":1},"look":"nrg"},{"name":"Arduino","items":["Arduino Headset","Arduino Shirt","Arduino Sneakers"],"gain":{"charisma":1},"capGain":{"health":1},"look":"arduino"}],"spells":{"Magic tar":{"mana":3,"range":5,"speed":9,"rootMs":2000,"dot":[1,2],"ticks":2,"tickMs":1000},"Magic Nozzle":{"mana":3,"cone":true,"range":3.5,"halfAngle":0.6,"slow":0.4,"slowMs":3000,"dot":[1,1],"ticks":3,"tickMs":1000}},"rarity":{"common":"#ffffff","rare":"#4ea1ff","mythical":"#b36bff","legendary":"#ff9a2e","titanic":"#ff3b3b","transcendent":"#ff5fd2"},"foodClimb":{"Cheap noodles":1,"Beef brisket":3,"Dumplings":6.7,"NRG Shot":10},"scrap":{"equipShare":0.4,"scrapPerCost":0.01,"scrapPrice":2},"shopTabs":[{"key":"food","name":"Food"},{"key":"patches","name":"Patches"},{"key":"weapons","name":"Weapons"},{"key":"armor","name":"Armor"},{"key":"other","name":"Other"}],"enemies":[{"key":"drip","name":"Drip","exp":2,"hp":10,"atkMult":[0.1,0.12],"tarMult":0.08,"mana":3,"manaRegenMs":4000,"aggro":4,"stepMs":1000,"attackMs":1000,"windupMs":400,"spell":"Magic tar","respawnMs":[60000,90000],"lootMs":30000,"fadeMs":2000,"loot":{"money":[4,8],"tar":[0,1],"magicTarChance":0.025},"spawns":[[{"x":11,"y":7}],[{"x":8,"y":5},{"x":14,"y":9}]],"hpMult":1,"portrait":"art/enemies/drip/dripPortrait.png","hpByLevel":[10,12,14,17,21,26,32,38,45,53]},{"key":"scav","name":"Toxic Scav","exp":4,"hp":26,"aggro":5,"keep":3,"stepMs":1000,"sprayRange":3.5,"sprayHalfAngle":0.5,"sprayEveryMs":2500,"aimMs":280,"sprayMs":1400,"sprayTicks":[220,690,1180],"sprayMult":0.16,"respawnMs":[90000,120000],"lootMs":30000,"fadeMs":2000,"loot":{"money":[10,18],"tar":[0,1],"mutagenChance":0.1},"hpMult":1.8,"portrait":"art/enemies/scav/scavPortrait.png","hpByLevel":[18,22,25,31,38,47,58,68,81,95]},{"key":"drone","name":"Mav-1K","exp":[3,4],"hp":14,"aggro":3,"leash":10,"stepMs":500,"ramMult":0.15,"windupMs":250,"lowMs":700,"cooldownMs":1800,"slowChance":0.4,"slow":0.2,"slowMs":3000,"cloakPct":0.1,"cloakMs":3000,"cloakAlpha":0.02,"fleeDist":3,"repairPct":0.3,"respawnMs":[40000,100000],"lootMs":30000,"fadeMs":2000,"loot":{"money":[4,10],"aiChipChance":0.1},"hpMult":0.8,"portrait":"art/enemies/drone/dronePortrait.webp","hpByLevel":[8,10,11,14,17,21,26,30,36,42]},{"key":"spore","name":"Sporeling","exp":2,"reveal":2,"leash":8,"stepMs":700,"popMs":400,"windupMs":300,"attackMs":1500,"puffMult":0.05,"poisonMs":5000,"poisonPct":0.02,"cloudMs":3000,"respawnMs":[60000,90000],"lootMs":30000,"fadeMs":2000,"loot":{"money":[2,6],"sporeSacChance":0.5},"hpMult":0.7,"portrait":"art/enemies/sporeling/sporelingPortrait.webp","hpByLevel":[7,8,10,12,15,18,22,27,31,37]},{"key":"loader","name":"Overgrown Loader","size":2,"exp":20,"aggro":4,"leash":12,"stepMs":1000,"whipRange":5,"firstWhipMs":800,"whipEveryMs":3000,"whipWindupMs":400,"whipMs":800,"whipMult":0.1,"rootMs":1600,"slamWindupMs":550,"slamMs":1000,"slamEveryMs":2200,"slamMult":0.3,"slamR":2.5,"homeHealPerMin":1,"respawnMs":[300000,300000],"lootMs":60000,"fadeMs":3000,"loot":{"money":[40,80],"zoneMoney":true,"tar":[1,3],"coreChance":0.1,"aiChipChance":0.2},"hpMult":3,"portrait":"art/enemies/loader/loaderPortrait.webp","hpByLevel":[30,36,42,51,63,78,96,114,135,159]},{"key":"queen","name":"Pump Queen","size":2,"aggro":5,"leash":14,"dmgLevel":4,"dmgScale":0.8,"stepMs":[1500,1000],"headY":2.9,"slapWindupMs":450,"slapEveryMs":1500,"slapMult":[0.15,0.18],"sprayEveryMs":6000,"sprayWarnMs":600,"sprayMs":700,"sprayRange":4.5,"sprayHalfAngle":0.45,"sprayMult":0.05,"sprayTicks":3,"slow":0.4,"slowMs":3000,"summonEveryMs":[17000,12000],"summonN":[2,1],"summonMax":[4,3],"firstSummonMs":7000,"summonLevel":2,"roarMs":1500,"absorbR":8,"absorbHeal":0.05,"stage2Armor":0.9,"igniteEveryMs":15000,"firstIgniteMs":6000,"igniteThrowMs":600,"igniteFuseMs":1500,"igniteMult":0.3,"flameMs":1200,"puddles":[4,5],"burnStepMs":650,"trailMs":2000,"fireMult":0.06,"homeHealPerMin":2,"respawnMs":[600000,600000],"lootMs":60000,"fadeMs":3000,"exp":60,"loot":{"money":[80,120],"tar":[5,10],"queenRare":true},"hpMult":10.166666666666666,"portrait":"art/enemies/pumpQueen/queenPortrait.webp","hpByLevel":[102,122,142,173,214,264,325,386,458,539]}],"dmgTable":[0,0.1,0.4,0.7,1,1.2,1.4,1.6,1.8,2],"zones":[{"id":"0:0","type":"city","name":"city","level":0,"discoverExp":0,"foes":{},"places":["CredBank","MutaTech","HomeDome","Ripperdoc Clinic","ATB-Market","TradeCorp","TechVersity","Metro Station","Rogue"]},{"id":"0:1","type":"slums","name":"slums","level":1,"discoverExp":1,"foes":{"drip":4},"places":["Scrap Dealer"]},{"id":"1:0","type":"slums","name":"slums","level":1,"discoverExp":1,"foes":{"drip":4},"places":[]},{"id":"1:1","type":"slums","name":"slums","level":1,"discoverExp":2,"foes":{"drip":4},"places":[]},{"id":"1:2","type":"slums","name":"slums","level":2,"discoverExp":3,"foes":{"drip":4},"places":[]},{"id":"1:3","type":"slums","name":"slums","level":3,"discoverExp":4,"foes":{"drip":6},"places":[]},{"id":"2:1","type":"slums","name":"slums","level":2,"discoverExp":3,"foes":{"drip":4},"places":[]},{"id":"2:3","type":"slums","name":"slums","level":3,"discoverExp":5,"foes":{"drip":6},"places":[]},{"id":"2:4","type":"slums","name":"slums","level":4,"discoverExp":6,"foes":{"drip":6},"places":[]},{"id":"3:3","type":"slums","name":"slums","level":3,"discoverExp":6,"foes":{"drip":6},"places":[]},{"id":"3:2","type":"slums","name":"slums","level":3,"discoverExp":5,"foes":{"drip":6},"places":[]},{"id":"4:3","type":"slums","name":"slums","level":4,"discoverExp":7,"foes":{"drip":6},"places":[]},{"id":"5:3","type":"slums","name":"slums","level":5,"discoverExp":8,"foes":{"drip":8},"places":[]},{"id":"2:2","type":"greaser","name":"greaser","level":2,"discoverExp":4,"foes":{"queen":1,"drip":8},"places":[]},{"id":"1:-1","type":"factoryIn","name":"factory entrance","level":1,"discoverExp":2,"foes":{"drip":2,"drone":1},"places":[]},{"id":"1:-2","type":"factory","name":"abandoned factory","level":2,"discoverExp":3,"foes":{"drone":4},"places":[]},{"id":"1:-3","type":"factory","name":"abandoned factory","level":3,"discoverExp":4,"foes":{"drone":4},"places":[]},{"id":"2:-2","type":"factory","name":"abandoned factory","level":2,"discoverExp":4,"foes":{"drone":4},"places":[]},{"id":"2:-3","type":"factory","name":"abandoned factory","level":3,"discoverExp":5,"foes":{"drone":4},"places":[]},{"id":"0:-1","type":"lake","name":"toxic lake","level":1,"discoverExp":1,"foes":{"scav":2},"places":[]},{"id":"0:-2","type":"lake","name":"toxic lake","level":2,"discoverExp":2,"foes":{"scav":3},"places":[]},{"id":"-1:-1","type":"lake","name":"toxic lake","level":1,"discoverExp":2,"foes":{"scav":3},"places":[]},{"id":"-1:-2","type":"lake","name":"toxic lake","level":2,"discoverExp":3,"foes":{"scav":3},"places":[]},{"id":"-2:-3","type":"forest","name":"forest","level":3,"discoverExp":5,"foes":{"scav":2,"spore":3},"places":[]},{"id":"-2:-2","type":"forest","name":"forest","level":2,"discoverExp":4,"foes":{"spore":3},"places":[]},{"id":"-3:-3","type":"forest","name":"forest","level":3,"discoverExp":6,"foes":{"scav":1,"spore":2},"places":[]},{"id":"-3:-2","type":"forest","name":"forest","level":3,"discoverExp":5,"foes":{"loader":1,"spore":2},"places":[]},{"id":"-4:-2","type":"forest","name":"forest","level":4,"discoverExp":6,"foes":{"scav":2,"spore":2},"places":[]},{"id":"-4:-1","type":"forest","name":"forest","level":4,"discoverExp":5,"foes":{"scav":2,"spore":3},"places":[]},{"id":"-4:0","type":"forest","name":"forest","level":4,"discoverExp":4,"foes":{"loader":1,"spore":3},"places":[]},{"id":"-5:-1","type":"forest","name":"forest","level":5,"discoverExp":6,"foes":{"scav":2,"spore":3},"places":[]},{"id":"-6:-1","type":"forest","name":"forest","level":6,"discoverExp":7,"foes":{"loader":1,"spore":3},"places":[]},{"id":"-7:-1","type":"deepForest","name":"deep forest","level":7,"discoverExp":8,"foes":{"scav":1,"spore":7},"places":[]},{"id":"-7:0","type":"deepForest","name":"deep forest","level":7,"discoverExp":7,"foes":{"loader":1,"spore":8},"places":[]},{"id":"-8:-2","type":"deepForest","name":"deep forest","level":8,"discoverExp":10,"foes":{"loader":1,"scav":2,"spore":7},"places":[]},{"id":"-8:-1","type":"deepForest","name":"deep forest","level":8,"discoverExp":9,"foes":{"drone":6,"scav":6,"spore":8},"places":[]},{"id":"-8:0","type":"deepForest","name":"deep forest","level":8,"discoverExp":8,"foes":{"scav":2,"spore":7},"places":[]},{"id":"-9:-2","type":"deepForest","name":"deep forest","level":9,"discoverExp":11,"foes":{"scav":3,"spore":6},"places":[]},{"id":"-9:-1","type":"deepForest","name":"deep forest","level":9,"discoverExp":10,"foes":{"spore":9},"places":[]},{"id":"-10:-2","type":"deepForest","name":"deep forest","level":10,"discoverExp":12,"foes":{"scav":2,"spore":8},"places":[]},{"id":"-10:-1","type":"deepForest","name":"deep forest","level":10,"discoverExp":11,"foes":{"loader":1,"scav":3,"spore":8},"places":[]},{"id":"6:3","type":"slums","name":"slums","level":6,"discoverExp":9,"foes":{"drip":8},"places":[]},{"id":"6:4","type":"slums","name":"slums","level":6,"discoverExp":10,"foes":{"drip":8},"places":[]},{"id":"7:4","type":"slums","name":"slums","level":7,"discoverExp":11,"foes":{"drip":10},"places":[]}],"talents":[{"key":"chrome","name":"Chrome","color":"#4ea1ff","per":"+3% max HP, +5% HP regen per point","full":"+10% max HP","talents":[{"name":"Pain Correction","icon":"art/ui/talents/talentPainCorrection.webp","ranks":["Below 10% HP, take 50% less damage.","Below 15% HP, take 50% less damage.","Below 20% HP, take 50% less damage.","Below 25% HP, take 50% less damage."]},{"name":"VampTech","icon":"art/ui/talents/talentVampTech.webp","ranks":["Killing an enemy restores 8% of max HP.","Killing an enemy restores 12% of max HP.","Killing an enemy restores 16% of max HP.","Killing an enemy restores 20% of max HP."]},{"name":"ReZero Protocol","icon":"art/ui/talents/talentReZero.webp","ranks":["A killing blow leaves you at 1 HP and doubles regen for 4 s. Once every 90 s.","A killing blow leaves you at 5 HP and doubles regen for 6 s. Once every 90 s.","A killing blow leaves you at 10 HP and doubles regen for 8 s. Once every 90 s.","A killing blow leaves you at 20 HP and doubles regen for 10 s. Once every 90 s."]}]},{"key":"hustler","name":"Hustler","color":"#9dff5c","per":"+5 max NRG, +1 CHSM per point","full":"+10 max NRG","talents":[{"name":"Side Hustle","icon":"art/ui/talents/talentSideHustle.webp","ranks":["TradeCorp customer calls pay +5% money.","TradeCorp customer calls pay +10% money.","TradeCorp customer calls pay +15% money.","TradeCorp customer calls pay +20% money."]},{"name":"Commission","icon":"art/ui/talents/talentCommission.webp","ranks":["Every call has a 3% chance to refund 40% of the energy spent.","Every call has a 6% chance to refund 40% of the energy spent.","Every call has a 9% chance to refund 40% of the energy spent.","Every call has a 12% chance to refund 40% of the energy spent."]},{"name":"CEO Mindset","icon":"art/ui/talents/talentCeoMindset.webp","ranks":["After every 12 completed calls, the next customer call costs 0 energy.","After every 11 completed calls, the next customer call costs 0 energy.","After every 10 completed calls, the next customer call costs 0 energy.","After every 9 completed calls, the next customer call costs 0 energy."]}]},{"key":"overclock","name":"Overclock","color":"#e5484d","per":"+1 max mana, +0.3% crit per point","full":"+3% crit chance (above the cap)","talents":[{"name":"Quick Hands","icon":"art/ui/talents/talentQuickHands.webp","ranks":["Critical strikes deal +25% more damage.","Critical strikes deal +50% more damage.","Critical strikes deal +75% more damage.","Critical strikes deal +100% more damage."]},{"name":"Arcane Violence","icon":"art/ui/talents/talentArcaneViolence.webp","ranks":["When you are hit, gain +1 STR for 2 s.","When you are hit, gain +2 STR for 3 s.","When you are hit, gain +3 STR for 4 s.","When you are hit, gain +4 STR for 5 s."]},{"name":"System Overclock","icon":"art/ui/talents/talentSystemOverclock.webp","ranks":["Each crit adds an Overclock stack for 7 s: +3% attack speed and +1 STR each, up to 5. New crits refresh them.","Each crit adds an Overclock stack for 8 s: +3% attack speed and +1 STR each, up to 5. New crits refresh them.","Each crit adds an Overclock stack for 9 s: +5% attack speed and +1 STR each, up to 5. New crits refresh them.","Each crit adds an Overclock stack for 10 s: +5% attack speed and +2 STR each, up to 5. New crits refresh them."]}]}],"talentMax":4,"talentReset":100,"quests":[{"id":"slums","name":"Slums","lvl":1,"rarity":"common","boss":false,"goal":"Discover the slums.","need":1,"after":null,"pay":{"exp":10,"money":4}},{"id":"techversity","name":"Discovering TechVersity","lvl":2,"rarity":"common","boss":false,"goal":"Spend 1 talent point at TechVersity.","need":1,"after":null,"pay":{"exp":14,"money":6}},{"id":"weapon","name":"Weapon","lvl":2,"rarity":"common","boss":false,"goal":"Buy any weapon.","need":1,"after":"Slums","pay":{"exp":14,"money":6}},{"id":"slumProblems","name":"Slum problems","lvl":3,"rarity":"common","boss":false,"goal":"Kill 5 Drips.","need":5,"after":"Weapon","pay":{"exp":20,"money":8}},{"id":"queen","name":"The Queen","lvl":3,"rarity":"rare","boss":true,"goal":"Kill the Pump Queen in the greaser (2:2). Gear up first!","need":1,"after":"Slum problems","pay":{"exp":80,"money":32}}],"tutorial":{"name":"Rogue's lessons","lvl":1,"rarity":"legendary","pay":{"exp":40,"money":16},"steps":7},"deliveries":[{"zone":"slums 2:4","level":4,"seconds":180,"common":{"exp":28,"money":11},"rare":{"exp":56,"money":22}},{"zone":"slums 6:3","level":6,"seconds":270,"common":{"exp":55,"money":22},"rare":{"exp":110,"money":44}}],"deals":{"chances":[["call",false,0.941],["call",true,0.025],["sale",false,0.0245],["sale",true,0.005],["delivery",false,0.004],["delivery",true,0.0005]],"w":{"common":1.3,"rare":2},"salePool":{"common":["Tar","Scrap","Cheap noodles"],"rare":["MutaGen","AI chip","Tar Orb"]}},"promotions":[{"name":"Data Clerk","deals":200,"charisma":20,"mult":0.9,"desc":"Deals cost \u00d70.9 (NRG and $)."},{"name":"Neurodiversity Manager","deals":500,"charisma":50,"mult":0.8,"desc":"Deals cost \u00d70.8 (NRG and $)."},{"name":"AI Overseer","deals":1000,"charisma":100,"mult":0.7,"desc":"Deals cost \u00d70.7 (NRG and $)."}],"lbBuffs":{"exp":{"gain":{"charisma":1,"strength":1},"speed":0},"deals":{"gain":{"strength":1},"speed":0.1},"kills":{"gain":{"charisma":1},"speed":0.1}},"art":{"startScreen":"art/ui/startScreen.webp","hero":"art/hero/heroPortrait.webp","rogue":"art/npc/rogue.webp","chef":"art/npc/netizenChef.webp"},"states":{"root":{"label":"rooted","icon":"art/ui/statusRooted.png","color":"#ff2bd6","symbol":"\u26d3"},"slowed":{"label":"slowed","icon":"art/ui/statusSlowed.webp","color":"#4ea1ff","symbol":"\u224b"},"lb_exp":{"label":"Top 1 Exp","icon":null,"color":"#b58cff","symbol":"\u2605"},"lb_deals":{"label":"Top 1 Dealer","icon":null,"color":"#f5c542","symbol":"$"},"lb_kills":{"label":"Top 1 Slayer","icon":null,"color":"#e5484d","symbol":"\u2694"},"injured":{"label":"injured","icon":"art/ui/statusInjured.png","color":"#e5484d","symbol":"\u2665","healthShare":0.1,"speed":0.6},"rezero":{"label":"ReZero","icon":"art/ui/talents/talentReZero.webp","color":"#4ea1ff","symbol":"\u27f2"},"arcane":{"label":"Arcane Violence","icon":"art/ui/talents/talentArcaneViolence.webp","color":"#e5484d","symbol":"\u270a"},"overclock":{"label":"Overclock","icon":"art/ui/talents/talentSystemOverclock.webp","color":"#e5484d","symbol":"\u26a1"},"poison":{"label":"poisoned","icon":null,"color":"#9dff5c","symbol":"\u2620"},"rezeroCd":{"label":"ReZero recharging","icon":"art/ui/talents/talentReZero.webp","color":"#6f7d99","symbol":"\u27f2","dim":true},"ceo":{"label":"free call ready","icon":"art/ui/talents/talentCeoMindset.webp","color":"#9dff5c","symbol":"\u260e"}},"pileMinutes":10,"moveMs":180};
+const $ = s => document.querySelector(s);
+const esc = s => String(s ?? '').replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' })[c]);
+const pct = (x, d = 0) => `${+(x * 100).toFixed(d)}%`;
+const sec = ms => `${+(ms / 1000).toFixed(2)} s`;
+const range = a => Array.isArray(a) ? (a[0] === a[1] ? `${a[0]}` : `${a[0]}–${a[1]}`) : `${a}`;
+const STAT = { health: 'HP', energy: 'NRG', strength: 'STR', charisma: 'CHSM', mana: 'MANA', money: '$' };
+const RC = r => D.rarity[r] || '#fff';
+const rarityTag = r => `<span class="tag" style="color:${RC(r)}">${esc(r)}</span>`;
+const hpAt = L => D.levels[Math.max(1, Math.min(D.maxLevel, L)) - 1].hp;   // a level-L hero's max HP: enemy damage and HP are shares of it
+const dmg = (mult, L) => Math.round(hpAt(L) * mult);
+const card = (html, search, cls = '') => `<div class="card ${cls}" data-s="${esc(String(search).toLowerCase())}">${html}</div>`;
+const img = (src, cls = 'icon') => src ? `<img class="${cls}" src="${esc(src)}" alt="" loading="lazy" onerror="this.style.visibility='hidden'">` : `<div class="${cls}"></div>`;
+const statChips = o => Object.entries(o || {}).map(([k, v]) => `<span class="stat"><b>${v > 0 ? '+' : ''}${v}</b> ${STAT[k] || k}</span>`).join('');
+const table = (heads, rows) => `<div class="tablebox"><table><thead><tr>${heads.map(h => `<th>${h}</th>`).join('')}</tr></thead><tbody>${rows.map(r => `<tr>${r.map(c => `<td>${c}</td>`).join('')}</tr>`).join('')}</tbody></table></div>`;
+
+// ---------- where things live ----------
+const ZTYPE = {}; for (const z of D.zones) (ZTYPE[z.type] = ZTYPE[z.type] || []).push(z);
+const foeZones = k => D.zones.filter(z => z.foes[k]);
+const levelSpan = zs => { const l = zs.map(z => z.level); return l.length ? (Math.min(...l) === Math.max(...l) ? `${l[0]}` : `${Math.min(...l)}–${Math.max(...l)}`) : '—'; };
+const zoneNames = zs => [...new Set(zs.map(z => z.name))].join(', ');
+
+// ---------- BASICS ----------
+function basics() {
+  const L = D.levels, s = D.start;
+  const statCards = [
+    ['HP', `Health. You start with ${s.health} and max HP grows every level (${L[1].hp} at level 2, ${L[9].hp} at 10, ${L[19].hp} at 20). Regenerates ${D.levelMult.healthRegen > 1 ? 'about 1 point per minute (a little more every level)' : '1 point per minute'}. Below ${pct(D.states.injured.healthShare)} you are <b>injured</b> and walk ${pct(1 - D.states.injured.speed)} slower.`],
+    ['NRG', `Energy for TradeCorp calls and crafting. Max ${D.caps.energy} at level 1, +${pct(0.1)} per level (${L[9].nrg} at 10). Refill it with food or a HomeDome rest.`],
+    ['STR', `Strength: the damage of every hit. ${s.strength} at the start, your own STR grows ×${D.levelMult.strength} per level (${L[9].str} at 10, ${L[19].str} at 20). Weapons, talents and set bonuses add more.`],
+    ['CHSM', `Charisma: better TradeCorp deals and crit chance (+${pct(D.crit.perCha, 2)} crit per point, capped at ${pct(D.crit.cap)}). Patches from the ATB-Market raise it.`],
+    ['MANA', `Fuel for spells. 0 at level 1, +1 max mana per level; Tar Orbs add +1 more each. Regenerates about 1 point per minute.`],
+    ['HIT', `Hit chance: ${pct(D.hit.base)} against enemies of your level, 100% against lower levels, −${pct(D.hit.perLvl)} for every level the enemy is above you. Each HIT point (from weapons) adds +${pct(D.hit.perPt, 2)}, up to ${D.hit.cap} points.`],
+    ['Crit', `Critical strike: your STR is added to the hit once more. Chance = CHSM bonus + ${pct(D.crit.perLvl, 1)} per level + talents.`],
+    ['$', `Money. Earned at TradeCorp, from quests and from enemy loot. You lose what you carry when you die (see below).`],
+  ];
+  const kv = list => `<div class="keys">${list.map(([k, v]) => `<div class="key" data-s="${esc((k + ' ' + v).toLowerCase())}"><kbd>${esc(k)}</kbd><span>${esc(v)}</span></div>`).join('')}</div>`;
+  const statusList = Object.values(D.states).filter(st => !/^Top 1/.test(st.label)).map(st =>
+    card(`<div class="head">${st.icon ? img(st.icon) : `<div class="icon" style="display:grid;place-items:center;color:${st.color};font-size:22px">${esc(st.symbol)}</div>`}<h4 style="color:${st.color}">${esc(st.label)}</h4></div>`, st.label)).join('');
+  const lvRows = L.map(l => [l.L, l.L < D.maxLevel ? l.exp : 'max', l.hp, l.str, l.mana, l.nrg, `${l.crit}%`, l.quest ? `${l.quest.exp} exp · ${l.quest.money}$` : '—']);
+  const factor = D.dmgTable.map((f, i) => [`${i - 4 > 0 ? '+' : ''}${i - 4}`, `×${f}`]);
+  return `<section id="basics">
+    <h2><span class="k">01</span> Basics</h2><p class="lead">How to play, what your stats do and how you grow.</p>
+    <h3>Controls</h3>
+    <p class="muted" style="margin:0 0 8px">Computer</p>${kv(D.controls)}
+    <p class="muted" style="margin:16px 0 8px">Phone</p>${kv(D.phoneControls)}
+    <h3>Stats</h3>
+    <div class="grid small">${statCards.map(([k, t]) => card(`<h4 style="color:var(--cyan)">${k}</h4><p class="desc">${t}</p>`, k + ' ' + t)).join('')}</div>
+    <h3>Levels</h3>
+    <p class="muted">Exp comes from kills, quests, TradeCorp deals and discovering zones. A level up refills HP, NRG and mana and gives 1 talent point. Max level ${D.maxLevel}.</p>
+    ${table(['Level', 'Exp to next', 'Max HP', 'Own STR', 'Max mana', 'Max NRG', 'Crit bonus', 'Common quest pays'], lvRows)}
+    <h3>Level difference</h3>
+    <p class="muted">Enemies have their zone's level. The difference to your level scales the damage they deal to you and the exp they give: +20 points per level they're above you, −30 points per level below.</p>
+    ${table(['Enemy level − yours', 'Damage & exp'], factor)}
+    <p class="muted">Kill exp = enemy max HP × ${D.killExp} × that factor. Enemy damage = a share of a same-level hero's max HP × that factor (the shares are listed with each enemy).</p>
+    <h3>Statuses</h3>
+    <div class="grid small">${statusList}</div>
+    <h3>Dying</h3>
+    ${card(`<ul class="facts">
+      <li>Everything you carry (money, bag, gear, items) drops in a <b>loot pile</b> where you died. It stays for <b>${D.pileMinutes} minutes</b>: walk back and pick it up.</li>
+      <li>You wake up in the city with 1 HP and 1$.</li>
+      <li>The <b>Vault Pack</b> keeps 10% of your money safe.</li>
+      <li>HomeDome (city): rest for ${D.rest.price}$ to get back ${pct(D.rest.share.health)} of max HP, NRG and mana, once every ${D.rest.cooldownMs / 60000} minutes.</li></ul>`, 'death die pile respawn homedome rest vault', 'big')}
+  </section>`;
+}
+
+// ---------- ENEMIES ----------
+const lootLine = E => {
+  const l = E.loot || {}, out = [];
+  if (l.money) out.push(`${range(l.money)}$${l.zoneMoney ? ' + zone bonus (|x|+|y| of the zone)' : ''}`);
+  if (l.tar) out.push(`${range(l.tar)} Tar`);
+  const ch = { magicTarChance: 'Magic tar', mutagenChance: 'MutaGen', aiChipChance: 'AI chip', sporeSacChance: 'Spore Sac', coreChance: 'Loader Core' };
+  for (const k in ch) if (l[k]) out.push(`${ch[k]} ${pct(l[k], 1)}`);
+  if (l.queenRare) out.push('always 1 rare: Magic tar or Magic Nozzle (50/50)');
+  return out.join(' · ');
+};
+function enemyFacts(E) {
+  const lv = foeZones(E.key).map(z => z.level), L0 = lv.length ? Math.min(...lv) : 1;
+  const d = m => `×${m} (${dmg(m, L0)} to a level-${L0} hero)`;
+  const sp = D.spells['Magic tar'];
+  switch (E.key) {
+    case 'drip': return [
+      `Spots you within <b>${E.aggro} tiles</b> and chases at 1 tile per ${sec(E.stepMs)} until you leave the zone.`,
+      `Melee every ${sec(E.attackMs)} (${sec(E.windupMs)} wind-up): ×${E.atkMult[0]}–${E.atkMult[1]} (${range([dmg(E.atkMult[0], L0), dmg(E.atkMult[1], L0)])} to a level-${L0} hero).`,
+      `Gains 1 mana every ${sec(E.manaRegenMs)} once he's chasing; at ${E.mana} mana he throws <b>Magic Tar</b> (range ${sp.range} tiles): roots you for ${sec(sp.rootMs)} and burns ${d(E.tarMult)} per second for ${sp.ticks} s.`,
+    ];
+    case 'scav': return [
+      `Lives at research labs. Spots you within <b>${E.aggro} tiles</b>, then tries to keep <b>${E.keep} tiles</b> away (backs off when you come close). Never melees.`,
+      `<b>Toxic spray</b> every ${sec(E.sprayEveryMs)}: aims for ${sec(E.aimMs)}, then sprays a cone up to ${E.sprayRange} tiles for ${sec(E.sprayMs)}. ${E.sprayTicks.length} hits of ${d(E.sprayMult)} while you stand in it. Step out of the cone to dodge.`,
+    ];
+    case 'drone': return [
+      `Flies over buildings and water. Spots you within <b>${E.aggro} tiles</b>, gives up at ${E.leash}.`,
+      `<b>Dive ram</b>: rises for ${sec(E.windupMs)} (red light), then rams: ${d(E.ramMult)}, ${pct(E.slowChance)} chance to slow you ${pct(E.slow)} for ${sec(E.slowMs)}. Cooldown ${sec(E.cooldownMs)}.`,
+      `Your sword can only reach it for ${sec(E.lowMs)} right after a ram, while it's low. Spells always reach it.`,
+      `Once per life, at ${pct(E.cloakPct)} HP or less it <b>cloaks</b>, flies ${E.fleeDist} tiles away and repairs ${pct(E.repairPct)} of its HP over ${sec(E.cloakMs)}.`,
+    ];
+    case 'spore': return [
+      `Hides as a glowing mushroom next to mushroom patches; can't be hit while hidden. Pops up (${sec(E.popMs)}) when you come within <b>${E.reveal} tiles</b>, its group-mates a moment later.`,
+      `<b>Spore puff</b> next to you every ${sec(E.attackMs)} (${sec(E.windupMs)} inhale): ${d(E.puffMult)} + <b>Poison</b>: ${pct(E.poisonPct)} of your max HP per second for ${sec(E.poisonMs)}, and no health regen meanwhile.`,
+      `Bursts into a spore cloud when it dies (${sec(E.cloudMs)}): standing in it poisons you. Walks home and hides again ${E.leash}+ tiles from you.`,
+    ];
+    case 'loader': return [
+      `Mini-boss: blocks 2 × 2 tiles. Wakes when you come within <b>${E.aggro} tiles</b>, walks 1 tile per ${sec(E.stepMs)}.`,
+      `<b>Vine whip</b> at you up to ${E.whipRange} tiles away (first after ${sec(E.firstWhipMs)}, then every ${sec(E.whipEveryMs)}): a green circle marks your tile, ${sec(E.whipWindupMs)} later it lashes: ${d(E.whipMult)} and roots you for ${sec(E.rootMs)}. Step off the circle.`,
+      `<b>Ground slam</b> when you're next to it, every ${sec(E.slamEveryMs)}: a red circle (${E.slamR} tiles from its centre) pulses ${sec(E.slamWindupMs)}, then ${d(E.slamMult)} to everyone inside.`,
+      `Gives up when you are ${E.leash}+ tiles from its home and heals ${pct(E.homeHealPerMin)} of its HP per minute while walking back.`,
+    ];
+    case 'queen': {
+      const bd = m => { const f = 1 + 0.2 * (E.dmgLevel - L0); return Math.round(hpAt(E.dmgLevel) * m * E.dmgScale * f); };
+      const x = (m, name) => `×${+(m * E.dmgScale).toFixed(3)} (${bd(m)} to a level-${L0} hero${name ? ', ' + name : ''})`;
+      return { phases: [
+        ['Overview', [
+          `The first boss: living fuel that leaked from the gas station's tank. Every Drip is a drop of her. Blocks 2 × 2 tiles on the greaser gas station forecourt.`,
+          `Level ${L0}, but her own attacks hit like a level-${E.dmgLevel} enemy (shares of a level-${E.dmgLevel} hero's HP, ×${E.dmgScale}).`,
+          `Wakes when you come within <b>${E.aggro} tiles</b>. Gives up at ${E.leash}+ tiles from her home, walks back healing ${pct(E.homeHealPerMin / 2)} of her HP per 30 s and turns back into the pump once full. Leaving the zone resets her.`,
+        ]],
+        ['Stage 1 · The Pump (100% → 50% HP)', [
+          `Walks 1 tile per ${sec(E.stepMs[0])}.`,
+          `<b>Hose Slap</b> next to you every ${sec(E.slapEveryMs)} (${sec(E.slapWindupMs)} wind-up): ${x(E.slapMult[0])}.`,
+          `<b>Fuel Spray</b> every ${sec(E.sprayEveryMs)} when you're within 4 tiles: an orange cone (${E.sprayRange} tiles) warns for ${sec(E.sprayWarnMs)}, then sprays. Caught: ${pct(E.slow)} slower for ${sec(E.slowMs)} and ${E.sprayTicks} ticks of ${x(E.sprayMult)}.`,
+          `<b>Drip Pump</b>: ${E.summonN[0]} level-${E.summonLevel} Drips every ${sec(E.summonEveryMs[0])} (first after ${sec(E.firstSummonMs)}), at most ${E.summonMax[0]} of hers alive. They start with 1 mana.`,
+        ]],
+        ['Ignition (at 50% HP)', [
+          `She screams for ${sec(E.roarMs)} and swallows every Drip within ${E.absorbR} tiles, healing ${pct(E.absorbHeal)} of her max HP for each. Kill her Drips first!`,
+          `The pump shell bursts off.`,
+        ]],
+        ['Stage 2 · The Burning Blob', [
+          `Walks 1 tile per ${sec(E.stepMs[1])} and takes ${pct(1 - E.stage2Armor)} less damage.`,
+          `<b>Hose Slap</b>: ${x(E.slapMult[1])}.`,
+          `<b>Burning Drip</b>: ${E.summonN[1]} every ${sec(E.summonEveryMs[1])} (first 5 s after Ignition), at most ${E.summonMax[1]}. Faster, and leaves fire behind: ${x(E.fireMult)} per second while you stand in it.`,
+          `<b>Pump &amp; Ignite</b> every ${sec(E.igniteEveryMs)} (first after ${sec(E.firstIgniteMs)}) when you're within 8 tiles: ${range(E.puddles)} oil puddles, always one under you. ${sec(E.igniteFuseMs)} later they explode: ${x(E.igniteMult)}, then burn for ${sec(E.flameMs)}. Drips in a puddle start burning.`,
+        ]],
+      ] };
+    }
+  }
+  return [];
+}
+function enemies() {
+  const order = ['drip', 'scav', 'drone', 'spore', 'loader', 'queen'];
+  const list = order.map(k => D.enemies.find(e => e.key === k)).filter(Boolean);
+  const cards = list.map(E => {
+    const zs = foeZones(E.key), lv = zs.map(z => z.level), count = zs.reduce((t, z) => t + z.foes[E.key], 0);
+    const hp = [...new Set(lv)].sort((a, b) => a - b).slice(0, 4).map(l => `lvl ${l}: <b>${E.hpByLevel[l - 1]}</b>`).join(' · ');
+    const f = enemyFacts(E), boss = E.key === 'queen', mini = E.key === 'loader';
+    const exp = E.key === 'queen' ? `${E.exp} at your level (less once you out-level her)` : `max HP × ${D.killExp} (${Math.round(E.hpByLevel[(lv[0] || 1) - 1] * D.killExp)} for a lvl ${lv[0] || 1} at your level)`;
+    const resp = E.respawnMs ? `${range(E.respawnMs.map(m => Math.round(m / 1000)))} s` : '';
+    const body = Array.isArray(f) ? `<ul class="facts">${f.map(t => `<li>${t}</li>`).join('')}</ul>`
+      : f.phases.map(([t, items]) => `<div class="phase"><h5>${t}</h5><ul class="facts">${items.map(i => `<li>${i}</li>`).join('')}</ul></div>`).join('');
+    return card(`<div class="head">${img(E.portrait, 'portrait')}<div>
+        <h4>${esc(E.name)} ${boss ? '<span class="tag" style="color:var(--orange)">boss</span>' : mini ? '<span class="tag" style="color:var(--green)">mini-boss</span>' : ''}</h4>
+        <div class="muted" style="font-size:13px">${zs.length ? `${zoneNames(zs)} · level ${levelSpan(zs)} · ${count} in the world` : '—'}</div>
+        <div class="stats"><span class="stat">HP ${hp}</span><span class="stat">respawn <b>${resp}</b></span></div></div></div>
+      ${body}
+      <ul class="facts"><li><b>Loot:</b> ${lootLine(E)}</li><li><b>Exp:</b> ${exp}</li></ul>`,
+      [E.name, zoneNames(zs), lootLine(E)].join(' '), boss ? 'big' : '');
+  });
+  return `<section id="enemies"><h2><span class="k">02</span> Enemies &amp; bosses</h2>
+    <p class="lead">Beat an enemy, then face its body and press Space (or tap it) to loot. Loot stays for 30 s (bosses 60 s). Damage shown for a hero of the enemy's level; see Level difference for other levels.</p>
+    <div class="grid">${cards.join('')}</div></section>`;
+}
+
+// ---------- ITEMS ----------
+const howToGet = it => {
+  const out = [];
+  if (it.tab) out.push(`ATB-Market · ${(D.shopTabs.find(t => t.key === it.tab) || {}).name || it.tab}${it.buyLevel ? ` (from level ${it.buyLevel})` : it.minLevel && it.class === 'patch' ? ` (from level ${it.minLevel})` : ''}`);
+  const keys = { 'Magic tar': ['magicTarChance', 'queenRare'], 'MutaGen': ['mutagenChance'], 'AI chip': ['aiChipChance'], 'Spore Sac': ['sporeSacChance'], 'Loader Core': ['coreChance'], 'Tar': ['tar'], 'Magic Nozzle': ['queenRare'] };
+  for (const E of D.enemies) for (const k of keys[it.name] || []) if (E.loot && E.loot[k]) out.push(`loot: ${E.name}`);
+  const r = D.recipes.find(r => r.make === it.name);
+  if (r) out.push(r.soon ? 'MutaTech (recipe coming soon)' : `MutaTech: ${r.cost.map(([n, c]) => `${c} ${n}`).join(' + ')} + ${r.energy} NRG (level ${r.minLevel})`);
+  if (D.deals.salePool.common.includes(it.name) || D.deals.salePool.rare.includes(it.name)) out.push('TradeCorp sale deals');
+  if (it.name === 'Scrap') out.push('Scrap Dealer');
+  return [...new Set(out)].join(' · ') || '—';
+};
+function itemCard(it) {
+  const chips = [statChips(it.gain), statChips(it.capGain).replace(/<\/b> (HP|NRG)/g, '</b> max $1')];
+  if (it.hit) chips.push(`<span class="stat"><b>+${it.hit}</b> HIT</span>`);
+  if (it.attackMs) chips.push(`<span class="stat"><b>${-it.attackMs / 1000} s</b> faster swings</span>`);
+  if (it.meleeArea) chips.push(`<span class="stat"><b>×${it.meleeArea}</b> swing area</span>`);
+  if (it.speed) chips.push(`<span class="stat"><b>+${pct(it.speed)}</b> speed</span>`);
+  if (it.hpRegen) chips.push(`<span class="stat"><b>+${it.hpRegen}</b> HP/min</span>`);
+  if (it.slots) chips.push(`<span class="stat"><b>${it.slots}</b> slots</span>`);
+  if (it.keepMoney) chips.push(`<span class="stat">keeps <b>${pct(it.keepMoney)}</b> money on death</span>`);
+  if (it.minLevel && it.class !== 'patch') chips.push(`<span class="stat">level <b>${it.minLevel}</b> to equip</span>`);
+  if (it.stack) chips.push(`<span class="stat">stacks <b>${it.stack}</b></span>`);
+  if (it.consume && it.consume.manaCap) chips.push(`<span class="stat">use: <b>+${it.consume.manaCap}</b> max mana</span>`);
+  const sp = D.spells[it.name];
+  if (sp) chips.push(`<span class="stat"><b>${sp.mana}</b> mana</span>`);
+  const price = it.price ? `${it.price}$` : it.value ? `worth ${it.value}$` : '';
+  const extra = it.class === 'patch' ? ' · +12% price per install' : D.foodClimb[it.name] ? ` · +${D.foodClimb[it.name]}$ per 100 food bought` : '';
+  const spellText = it.name === 'Magic tar' ? `Spell: a blob of tar at the target (${sp.range} tiles): roots it ${sec(sp.rootMs)} and burns ${range(sp.dot)} per second for ${sp.ticks} s.`
+    : it.name === 'Magic Nozzle' ? `Spell <b>Fuel Spray</b>: a cone (${sp.range} tiles) hitting every enemy in it: ${pct(sp.slow)} slower for ${sec(sp.slowMs)} and ${range(sp.dot)} damage per second for ${sp.ticks} s.` : '';
+  return card(`<div class="head">${img(it.icon)}<div><h4 style="color:${RC(it.rarity)}">${esc(it.name)}</h4>
+      <div>${rarityTag(it.rarity || 'common')}${it.set ? `<span class="tag" style="color:var(--green)">${esc(it.set)} set</span>` : ''}<span class="muted" style="font-size:12.5px">${price}${extra}</span></div></div></div>
+    ${it.desc ? `<p class="desc">${esc(it.desc)}</p>` : ''}${spellText ? `<p class="desc">${spellText}</p>` : ''}
+    <div class="stats">${chips.join('')}</div>
+    <p class="desc faint" style="font-size:12.5px">Get it: ${howToGet(it)}</p>`, [it.name, it.rarity, it.class, it.set, it.desc, howToGet(it)].join(' '));
+}
+function items() {
+  const groups = [
+    ['Food', it => it.class === 'food'],
+    ['Patches (charisma)', it => it.class === 'patch'],
+    ['Weapons', it => it.kind === 'sword'],
+    ['Armor', it => it.slot],
+    ['Bags', it => it.class === 'bag'],
+    ['Spells', it => it.class === 'skill'],
+    ['Resources, loot & upgrades', it => ['resource', 'upgrade'].includes(it.class)],
+  ];
+  const sets = D.sets.map(st => card(`<h4 style="color:var(--green)">${esc(st.name)} set</h4>
+    <p class="desc">${st.items.map(esc).join(' + ')}</p><div class="stats">${statChips(st.gain)}${statChips(st.capGain).replace(/<\/b> (HP|NRG)/g, '</b> max $1')}<span class="stat">new look</span></div>`, st.name + ' set ' + st.items.join(' '))).join('');
+  const rec = D.recipes.map(r => [esc(r.make), r.soon ? '<span class="faint">coming soon</span>' : r.cost.map(([n, c]) => `${c} ${esc(n)}`).join(' + '), r.soon ? '' : `${r.energy} NRG`, r.soon ? '' : r.minLevel]);
+  return `<section id="items"><h2><span class="k">03</span> Items, shop &amp; sets</h2>
+    <p class="lead">Equipment goes to your bag: equip it from there (one weapon, head, chest and boots). Without a bag you have no inventory: buy a BackBag first.</p>
+    ${groups.map(([t, f]) => { const l = D.items.filter(f).sort((a, b) => (a.price || a.value || 0) - (b.price || b.value || 0)); return l.length ? `<h3>${t}</h3><div class="grid">${l.map(itemCard).join('')}</div>` : ''; }).join('')}
+    <h3>Sets</h3><p class="muted">Wear every piece of a set for its bonus and a new look.</p><div class="grid small">${sets}</div>
+    <h3>MutaTech crafting (city)</h3>${table(['Makes', 'Needs', 'Energy', 'Level'], rec)}
+    <h3>Scrap Dealer (slums 0:1)</h3>
+    ${card(`<ul class="facts"><li>Buys equipment for <b>${pct(D.scrap.equipShare)}</b> of its shop price plus ${pct(D.scrap.scrapPerCost)} of that in Scrap.</li><li>Buys resources for their full value (whole stack).</li><li>Sells Scrap for ${D.scrap.scrapPrice}$ each. Skills and equipped items can't be sold.</li></ul>`, 'scrap dealer sell', 'big')}
+  </section>`;
+}
+
+// ---------- TALENTS ----------
+function talents() {
+  const br = D.talents.map(b => card(`<h4>${esc(b.name)}</h4><p class="desc">Every point: ${esc(b.per)}<br>Full branch (12/12): ${esc(b.full)}</p>
+    ${b.talents.map((t, i) => `<div style="margin-top:12px"><div class="head">${img(t.icon)}<div><b>${i + 1}. ${esc(t.name)}</b>${i ? `<div class="faint" style="font-size:12px">needs ${D.talentMax}/${D.talentMax} in ${esc(b.talents[i - 1].name)}</div>` : ''}</div></div>
+      <div class="ranks">${t.ranks.map((r, k) => `<span>${k + 1}/${D.talentMax}</span><span>${esc(r)}</span>`).join('')}</div></div>`).join('')}`,
+    [b.name, b.per, b.full, ...b.talents.map(t => t.name + ' ' + t.ranks.join(' '))].join(' '), 'branch').replace('class="card branch"', `class="card branch" style="--c:${b.color}"`)).join('');
+  return `<section id="talents"><h2><span class="k">04</span> Talents</h2>
+    <p class="lead">Spend talent points at TechVersity (city). You get 1 point per level (${D.maxLevel - 1} by level ${D.maxLevel}). Each talent takes up to ${D.talentMax} points, and the next talent in a branch opens once the one before it is full. Resetting costs ${D.talentReset}$ × your level.</p>
+    <div class="grid">${br}</div></section>`;
+}
+
+// ---------- QUESTS & WORK ----------
+function quests() {
+  const qm = D.questMult;
+  const q = D.quests.map(r => [`<b style="color:${RC(r.rarity)}">${esc(r.name)}</b>${r.boss ? ' <span class="tag" style="color:var(--orange)">boss</span>' : ''}`, r.lvl, esc(r.rarity), esc(r.goal), r.after ? esc(r.after) : 'Rogue\'s lessons', `${r.pay.exp} exp · ${r.pay.money}$`]);
+  const t = D.tutorial;
+  const del = D.deliveries.map(d => [esc(d.zone), d.level, `${Math.floor(d.seconds / 60)}:${String(d.seconds % 60).padStart(2, '0')}`, `${d.common.exp} exp · ${d.common.money}$`, `${d.rare.exp} exp · ${d.rare.money}$`]);
+  const ch = D.deals.chances.map(([type, rare, p]) => [`${rare ? 'Rare ' : ''}${rare ? type : type[0].toUpperCase() + type.slice(1)}`, pct(p, 2)]);
+  const promo = D.promotions.map(p => [esc(p.name), p.deals, p.charisma, `×${p.mult}`]);
+  const lb = Object.entries(D.lbBuffs).map(([k, b]) => [({ exp: 'Top 1 Exp', deals: 'Top 1 Dealer', kills: 'Top 1 Slayer' })[k], `${Object.entries(b.gain).map(([s, n]) => `+${n} ${STAT[s]}`).join(' ')}${b.speed ? ` · +${pct(b.speed)} speed` : ''}`]);
+  return `<section id="quests"><h2><span class="k">05</span> Quests &amp; work</h2>
+    <p class="lead">Up to ${D.maxQuests} active quests at once (Q). Quest rewards: exp = (exp from the quest's level to the next) × 0.1 × rarity, money = the same × 0.04. Rarity: ${Object.entries(qm).map(([k, v]) => `${k} ×${v}`).join(', ')}. Boss quests pay double.</p>
+    <h3>The Rogue (city)</h3>
+    <p class="muted">${esc(t.name)}: her ${t.steps}-step tutorial and a 3-question quiz, level ${t.lvl} ${t.rarity}: ${t.pay.exp} exp · ${t.pay.money}$ (each wrong answer takes a little off). After it she offers these, one after another. Finished quests are handed in to her.</p>
+    ${table(['Quest', 'Level', 'Rarity', 'Goal', 'Unlocked by', 'Reward'], q)}
+    <h3>Deliveries (TradeCorp)</h3>
+    <p class="muted">A delivery deal gives you a parcel for the Netizen Chef's food cart. Get it there before the timer runs out. Scheduled = common, Priority = rare.</p>
+    ${table(['Destination', 'Level', 'Time', 'Scheduled', 'Priority'], del)}
+    <h3>TradeCorp deals (city)</h3>
+    <p class="muted">Three deals at a time; all reroll after you take one. Calls cost energy and pay money (more with level and charisma; rare calls pay ×${D.deals.w.rare} instead of ×${D.deals.w.common}). Sales sell you items at full price. Each deal also gives exp (calls: 1 + 1 per 5$ profit).</p>
+    <div class="grid"><div>${table(['Deal', 'Chance'], ch)}</div><div>${table(['Promotion', 'Deals', 'CHSM', 'Deal cost'], promo)}</div></div>
+    <h3>Leaderboard buffs</h3><p class="muted">Being number 1 on a leaderboard (L) gives you a buff while you hold the spot.</p>
+    ${table(['Spot', 'Buff'], lb)}
+  </section>`;
+}
+
+// ---------- WORLD ----------
+function world() {
+  const typeOrder = ['city', 'slums', 'greaser', 'factoryIn', 'factory', 'lake', 'forest', 'deepForest'];
+  const NAMES = { drip: 'Drip', scav: 'Toxic Scav', drone: 'Mav-1K', spore: 'Sporeling', loader: 'Overgrown Loader', queen: 'Pump Queen' };
+  const rows = typeOrder.filter(t => ZTYPE[t]).map(t => {
+    const zs = ZTYPE[t], foes = {};
+    for (const z of zs) for (const k in z.foes) foes[k] = (foes[k] || 0) + z.foes[k];
+    const places = [...new Set(zs.flatMap(z => z.places))];
+    return [`<b>${esc(zs[0].name)}</b>`, zs.length, levelSpan(zs), Object.entries(foes).map(([k, n]) => `${n} ${NAMES[k] || k}`).join(', ') || '<span class="faint">safe</span>', places.map(esc).join(', ') || '—'];
+  });
+  const city = [
+    ['ATB-Market', 'Shop: food, patches, weapons, armor and bags.'], ['TradeCorp', 'Work: customer calls, sales and deliveries; promotions from the Boss.'],
+    ['HomeDome', `Rest for ${D.rest.price}$: ${pct(D.rest.share.health)} of max HP, NRG and mana back, every ${D.rest.cooldownMs / 60000} min.`],
+    ['MutaTech', 'Crafting: Tar Orbs, the baNano Sword and more.'], ['TechVersity', 'Spend talent points.'], ['Rogue', 'Tutorial and quests.'],
+    ['Scrap Dealer', 'Slums 0:1: sell gear and loot, buy Scrap.'], ['Netizen Chef', 'Delivery destination in the slums.'],
+    ['Metro Station · CredBank · Ripperdoc Clinic', 'Coming soon.'],
+  ];
+  return `<section id="world"><h2><span class="k">06</span> World</h2>
+    <p class="lead">Zones have map coordinates (M opens the map). A zone's level is the bigger of its two coordinates, and every enemy there has that level. Discovering a zone gives |x| + |y| exp.</p>
+    ${table(['Area', 'Zones', 'Level', 'Enemies', 'Places'], rows)}
+    <h3>Places</h3><div class="grid small">${city.map(([n, t]) => card(`<h4 style="color:var(--cyan)">${esc(n)}</h4><p class="desc">${esc(t)}</p>`, n + ' ' + t)).join('')}</div>
+  </section>`;
+}
+
+// ---------- page ----------
+$('#banner').src = D.art.startScreen || '';
+$('#main').innerHTML = basics() + enemies() + items() + talents() + quests() + world();
+$('#foot').textContent = `Hustlepedia · numbers read from the game on ${new Date(D.version).toLocaleDateString('en-GB', { day: 'numeric', month: 'long', year: 'numeric' })}.`;
+// opened from the game in a new tab: "back" closes this tab and returns to the game
+$('#back').addEventListener('click', e => { if (window.opener) { e.preventDefault(); window.close(); } });
+
+// search: hides cards and table rows that don't match, and sections left empty
+$('#q').addEventListener('input', e => {
+  const q = e.target.value.trim().toLowerCase();
+  document.querySelectorAll('[data-s]').forEach(el => el.classList.toggle('hidden', !!q && !el.dataset.s.includes(q)));
+  document.querySelectorAll('tbody tr').forEach(tr => tr.classList.toggle('hidden', !!q && !tr.textContent.toLowerCase().includes(q)));
+  document.querySelectorAll('section').forEach(s => {
+    const any = !q || [...s.querySelectorAll('[data-s], tbody tr')].some(el => !el.classList.contains('hidden'));
+    s.classList.toggle('hidden', !any);
+  });
+});
+// highlight the tab of the section in view
+const tabs = [...document.querySelectorAll('#tabs a')];
+const io = new IntersectionObserver(es => es.forEach(en => { if (en.isIntersecting) tabs.forEach(a => a.classList.toggle('on', a.getAttribute('href') === '#' + en.target.id)); }), { rootMargin: '-40% 0px -55% 0px' });
+document.querySelectorAll('section').forEach(s => io.observe(s));
+</script>
+</body>
+</html>

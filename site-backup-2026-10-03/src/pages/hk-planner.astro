@@ -130,7 +130,7 @@ import Layout from '../layouts/Layout.astro';
 
 <div class="hk-wrap">
   <div class="hk-container">
-    <div id="readonly-banner" class="readonly-banner">📦 archived — this planner was frozen on 30 Aug 2026 and is view only</div>
+    <div id="readonly-banner" class="readonly-banner">👁 view only — you can see everything but not make changes</div>
 
     <div class="tabs">
       <button class="tab active" onclick="showTab('calendar')"><i class="ti ti-calendar"></i> Calendar</button>
@@ -229,9 +229,9 @@ import Layout from '../layouts/Layout.astro';
 <script is:inline>
   const themeToggle = document.querySelector('.toggle-switch');
   if (themeToggle) themeToggle.style.display = 'none';
-  // ARCHIVED: the planner is frozen. Its data was copied from Supabase (hk_data, row 1, last saved 30 Aug 2026 23:48)
-  // and lives here now: nothing is loaded from or saved to the database any more, and every login is view only.
-  const SNAPSHOT = {"study_days":["2026-6-22","2026-6-23","2026-6-24","2026-6-25","2026-6-27","2026-6-28","2026-6-29","2026-6-30","2026-7-1","2026-7-2","2026-7-3","2026-7-4","2026-7-5","2026-7-6","2026-7-7","2026-7-8","2026-7-9","2026-7-10","2026-7-11","2026-7-12","2026-7-13","2026-7-14","2026-7-15","2026-7-16","2026-7-17","2026-7-18","2026-7-19","2026-7-20","2026-7-21","2026-7-22","2026-7-23","2026-7-24","2026-7-25","2026-7-26","2026-7-27","2026-7-28","2026-7-29","2026-7-30","2026-7-31","2026-8-1","2026-8-2","2026-8-3","2026-8-4","2026-8-5","2026-8-6","2026-8-7","2026-8-8","2026-8-9","2026-8-10","2026-8-11","2026-8-12","2026-8-13","2026-8-14","2026-8-15","2026-8-16","2026-8-17","2026-8-18","2026-8-19","2026-8-20","2026-8-21","2026-8-22","2026-8-23","2026-8-24","2026-8-25","2026-8-26","2026-8-27","2026-8-28","2026-8-29","2026-8-30","2026-6-26"],"hours_log":{"2026-7-1":7.25,"2026-7-2":6.17,"2026-7-3":7,"2026-7-4":11.58,"2026-7-5":5.25,"2026-7-6":5,"2026-7-7":6,"2026-7-8":6.17,"2026-7-9":6.25,"2026-8-1":10,"2026-8-3":10.16,"2026-8-5":7.75,"2026-8-9":8.75,"2026-6-23":6.17,"2026-6-24":10.58,"2026-6-25":11,"2026-6-27":11.67,"2026-6-28":7.83,"2026-7-10":5.67,"2026-7-11":13,"2026-7-14":5.5,"2026-7-15":11.17,"2026-7-17":12,"2026-7-18":11.5,"2026-7-19":10,"2026-7-22":8.5,"2026-7-23":9,"2026-7-25":9,"2026-7-27":4.42,"2026-7-29":6.08,"2026-7-30":8.25,"2026-8-15":10,"2026-8-18":10.5,"2026-8-19":10.5,"2026-8-20":6.42,"2026-8-21":4.5,"2026-8-22":10,"2026-8-24":4.92,"2026-8-26":10.5,"2026-8-27":6.5,"2026-8-28":11.33,"2026-8-29":11.25},"goals_completed":{"debt":true,"gift":true,"rent1":true,"tickets":true},"updated_at":"2026-08-30T23:48:28.464"};
+  const SUPABASE_URL = 'https://brewadlywcjchngirykq.supabase.co';
+  const SUPABASE_KEY = 'sb_publishable_wSdiLiEAVlg9n20Lnud5qA_O0fgd9aQ';
+  const API = `${SUPABASE_URL}/rest/v1/hk_data`;
 
   // Sync dark mode with site toggle
   const hkWrap = document.querySelector('.hk-wrap');
@@ -241,16 +241,50 @@ import Layout from '../layouts/Layout.astro';
   });
   observer.observe(document.documentElement, { attributeFilter: ['class'] });
 
-  let readOnly = true;
+  let readOnly = false;
 
   async function dbLoad() {
-    studyDays = SNAPSHOT.study_days.slice();
-    hoursLog = { ...SNAPSHOT.hours_log };
-    goalsCompleted = { ...SNAPSHOT.goals_completed };
-    setSync('archived · 30 Aug 2026');
+    try {
+      setSync('loading...');
+      const res = await fetch(`${API}?id=eq.1`, {
+        headers: { 'apikey': SUPABASE_KEY, 'Authorization': `Bearer ${SUPABASE_KEY}` }
+      });
+      const rows = await res.json();
+      if (rows && rows[0]) {
+        studyDays = rows[0].study_days || [];
+        hoursLog = rows[0].hours_log || {};
+        goalsCompleted = rows[0].goals_completed || {};
+      }
+      setSync('synced ✓');
+    } catch(e) {
+      setSync('offline');
+    }
   }
 
-  async function dbSave() {}   // archived: nothing is saved
+  async function dbSave() {
+    if (readOnly) return;
+    try {
+      setSync('saving...');
+      await fetch(`${API}?id=eq.1`, {
+        method: 'PATCH',
+        headers: {
+          'apikey': SUPABASE_KEY,
+          'Authorization': `Bearer ${SUPABASE_KEY}`,
+          'Content-Type': 'application/json',
+          'Prefer': 'return=minimal'
+        },
+        body: JSON.stringify({
+          study_days: studyDays,
+          hours_log: hoursLog,
+          goals_completed: goalsCompleted,
+          updated_at: new Date().toISOString()
+        })
+      });
+      setSync('synced ✓');
+    } catch(e) {
+      setSync('sync failed');
+    }
+  }
 
   function setSync(msg) {
     const el = document.getElementById('sync-indicator');
@@ -266,9 +300,9 @@ import Layout from '../layouts/Layout.astro';
     const wrap = document.querySelector('.hk-wrap');
     const isDark = document.documentElement.classList.contains('dark');
     if (val === 'andrii') {
-      readOnly = true;
+      readOnly = false;
       document.getElementById('auth-overlay').style.display = 'none';
-      document.getElementById('readonly-banner').style.display = 'block';
+      document.getElementById('readonly-banner').style.display = 'none';
       if (themeToggle) themeToggle.style.display = '';
       if (isDark) wrap.classList.add('dark');
       dbLoad().then(() => { renderCalendar(); renderFinances(); renderCantonese(); });
@@ -282,7 +316,7 @@ import Layout from '../layouts/Layout.astro';
     }
   }
 
-  const TODAY = new Date(2026,7,30);   // archived: the planner shows the day of its last save
+  const TODAY = new Date();
   TODAY.setHours(0,0,0,0);
   const STUDY_START = new Date(2026,5,22);
   const STUDY_END   = new Date(2026,7,30);

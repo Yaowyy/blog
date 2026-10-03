@@ -2016,6 +2016,7 @@
         { left: 'save', right: account ? '' : 'account needed', gapBefore: true, act() { account ? openSlots('save') : openWindow('guest', 0, fromHere()); } },
         { left: 'load game', right: account ? '' : 'account needed', act() { account ? openSlots('load') : openWindow('guest', 0, fromHere()); } },
         { left: 'settings', right: '', gapBefore: true, act() { openWindow('settings', 0, fromHere()); } },
+        { left: 'hustlepedia', right: '', act() { window.open('hustlepedia.html', '_blank'); } },   // all game info, in a new tab (the game waits here in its menu)
         account ? { left: 'log out', right: heroName || '', gapBefore: true, act() { openWindow('logout', 1, fromHere()); } }
                 : { left: 'create account / log in', right: '', gapBefore: true, act() { openWindow('guest', 0, fromHere()); } },
       ];

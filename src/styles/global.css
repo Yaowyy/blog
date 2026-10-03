@@ -1,26 +1,112 @@
 @import "tailwindcss";
 @plugin "@tailwindcss/typography";
 
+/* dark mode follows the .dark class the footer switch puts on <html> */
+@custom-variant dark (&:where(.dark, .dark *));
+
+/* black & white palette: every colour on the site comes from these tokens */
 :root {
   --bg: #ffffff;
-  --text: #111827;
-  --text-muted: #6b7280;
-  --text-faint: #d1d5db;
-  --border: #e5e7eb;
-  --nav-border: #e5e7eb;
+  --fg: #0a0a0a;
+  --muted: #525252;
+  --faint: #a3a3a3;
+  --line: #e5e5e5;
+  /* old names, still used by the archived Hong Kong page */
+  --text: var(--fg);
+  --text-muted: var(--muted);
+  --text-faint: var(--faint);
+  --border: var(--line);
+  --nav-border: var(--line);
 }
 
 .dark {
-  --bg: #0f0f0f;
-  --text: #f3f4f6;
-  --text-muted: #9ca3af;
-  --text-faint: #374151;
-  --border: #1f1f1f;
-  --nav-border: #1f1f1f;
+  --bg: #0a0a0a;
+  --fg: #fafafa;
+  --muted: #a3a3a3;
+  --faint: #737373;
+  --line: #262626;
+}
+
+@theme inline {
+  --color-bg: var(--bg);
+  --color-fg: var(--fg);
+  --color-muted: var(--muted);
+  --color-faint: var(--faint);
+  --color-line: var(--line);
+  --font-sans: 'Inter', ui-sans-serif, system-ui, -apple-system, 'Segoe UI', sans-serif;
 }
 
 body {
   background-color: var(--bg);
-  color: var(--text);
+  color: var(--fg);
+  -webkit-font-smoothing: antialiased;
   transition: background-color 0.2s ease, color 0.2s ease;
 }
+
+::selection { background: var(--fg); color: var(--bg); }
+
+/* small uppercase section label */
+.label {
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+  font-size: 11px;
+  font-weight: 500;
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+  color: var(--muted);
+  margin-bottom: 1.5rem;
+}
+
+/* square project plates */
+.plate {
+  position: relative;
+  display: block;
+  aspect-ratio: 1 / 1;
+  overflow: hidden;
+  border: 1px solid var(--line);
+  transition: border-color 0.25s ease, transform 0.25s ease;
+}
+.plate:hover { border-color: var(--fg); transform: translateY(-2px); }
+.plate-arrow {
+  position: absolute;
+  top: 1rem;
+  right: 1rem;
+  width: 2rem;
+  height: 2rem;
+  display: grid;
+  place-items: center;
+  border: 1px solid currentColor;
+  border-radius: 999px;
+  font-size: 0.9rem;
+  transition: transform 0.25s ease;
+}
+.plate:hover .plate-arrow { transform: rotate(45deg); }
+
+/* page sections sit inside the .prose <main>: keep them in the site's colours, not the typography plugin's greys */
+.not-prose { color: var(--fg); }
+
+/* blog feed: one post per screen. The menu sticks to the top, every post fills the rest of the screen and the
+   page snaps from post to post (the footer is the last stop) */
+html.feed { scroll-snap-type: y mandatory; scroll-padding-top: var(--nav-h, 70px); }
+html.feed nav { position: sticky; top: 0; z-index: 20; background: var(--bg); }
+html.feed footer { scroll-snap-align: end; }
+.post-page {
+  height: calc(100svh - var(--nav-h, 70px));
+  scroll-snap-align: start;
+  scroll-snap-stop: always;
+  display: flex;
+  flex-direction: column;
+  padding: 2.5rem 0 2rem;
+  overflow: hidden;
+}
+.post-page + .post-page { border-top: 1px solid var(--line); }
+/* the post's text: as much as fits on the screen, fading out at the bottom */
+.post-body {
+  flex: 1;
+  min-height: 0;
+  overflow: hidden;
+  -webkit-mask-image: linear-gradient(to bottom, #000 75%, transparent);
+  mask-image: linear-gradient(to bottom, #000 75%, transparent);
+}
+.post-body > h1:first-child { display: none; }   /* the title is already shown above */

@@ -2,19 +2,28 @@
 import Layout from '../layouts/Layout.astro';
 const postFiles = import.meta.glob('./posts/*.md', { eager: true });
 const posts = Object.values(postFiles) as any[];
-const sorted = posts.sort((a, b) => new Date(b.frontmatter.date) - new Date(a.frontmatter.date));
+const sorted = posts.sort((a, b) => +new Date(b.frontmatter.date) - +new Date(a.frontmatter.date));
+
+const fmtDate = (d: string) => new Date(d).toLocaleDateString('en-GB', { day: 'numeric', month: 'long', year: 'numeric' });
+const words = (post: any) => (post.rawContent ? post.rawContent() : '').split(/\s+/).filter(Boolean).length;
+const readTime = (post: any) => Math.max(1, Math.round(words(post) / 200));
+// the post's text only (not its page layout with the menu): the compiled HTML of the markdown
+const bodies = await Promise.all(sorted.map(async (post: any) => await post.compiledContent()));
 ---
 
-<Layout page="blog">
-  <div class="not-prose">
-    <h1 class="text-5xl font-medium tracking-tight mb-8">Blog</h1>
-    <div class="divide-y divide-gray-100">
-      {sorted.map(post => (
-        <a href={post.url} class="flex justify-between items-baseline py-4 group">
-          <span class="text-sm font-medium group-hover:text-gray-400 transition-colors">{post.frontmatter.title}</span>
-          <span class="text-xs text-gray-300">{new Date(post.frontmatter.date).toLocaleDateString('en-GB', { month: 'short', year: 'numeric' })}</span>
-        </a>
-      ))}
-    </div>
+<!-- every post is one screen tall and shows the first screenful of its text; scrolling snaps to the next post -->
+<Layout page="blog" feed>
+  <div class="text-fg">   {/* not .not-prose: the post text inside uses the typography styles */}
+    {sorted.map((post, i) => (
+      <article class="post-page">
+        <p class="text-[11px] uppercase tracking-[0.2em] text-muted mb-3">{fmtDate(post.frontmatter.date)} · {readTime(post)} min read</p>
+        <h2 class="text-4xl sm:text-5xl font-semibold tracking-tight leading-[1.05] mb-6">
+          <a href={post.url} class="hover:underline decoration-1 underline-offset-4">{post.frontmatter.title}</a>
+        </h2>
+        <div class="post-body prose prose-neutral dark:prose-invert max-w-none" set:html={bodies[i]} />
+        <a href={post.url} class="text-sm font-semibold mt-4 self-start hover:text-muted transition-colors">Continue reading →</a>
+      </article>
+    ))}
+    {!sorted.length && <p class="text-center text-muted py-20">No posts yet.</p>}
   </div>
 </Layout>

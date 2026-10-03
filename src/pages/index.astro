@@ -3,34 +3,60 @@ import Layout from '../layouts/Layout.astro';
 ---
 
 <Layout page="home">
-  <div class="not-prose space-y-16">
+  <div class="not-prose space-y-20">
 
-    <div>
-      <p class="text-xs uppercase tracking-widest text-gray-300 mb-4">who is this guy</p>
-      <p class="text-gray-500 text-lg leading-relaxed max-w-md">Marketing student exploring front-end development, data analysis & marketing research.</p>
-    </div>
+    <section>
+      <p class="label">who is this guy</p>
+      <h1 class="text-4xl sm:text-5xl font-semibold tracking-tight leading-[1.05] mb-5">Andrii Kashevskyi</h1>
+      <p class="text-muted text-lg leading-relaxed max-w-md">Marketing student exploring front-end development, data analysis &amp; marketing research.</p>
+    </section>
 
-    <div>
-      <p class="text-xs uppercase tracking-widest text-gray-300 mb-6">my projects</p>
-      <a href="https://calmservers.com" target="_blank" class="border border-gray-100 rounded-xl p-5 flex justify-between items-center hover:border-gray-200 transition-colors group">
-        <div>
-          <p class="text-sm font-medium mb-1">calmservers.com</p>
-          <p class="text-xs text-gray-400">Rust game server community</p>
-        </div>
-        <span class="text-gray-200 group-hover:text-gray-400 transition-colors">↗</span>
-      </a>
-    </div>
+    <section>
+      <p class="label">my projects</p>
+      <div class="grid grid-cols-1 sm:grid-cols-2 gap-5">
 
-    <div>
-      <p class="text-xs uppercase tracking-widest text-gray-300 mb-6">readme</p>
-      <div class="divide-y divide-gray-100">
+        <!-- Neon Hustle: the game's start screen -->
+        <a href="/game.html" target="_blank" class="plate group bg-fg">
+          <img src="/art/ui/startScreen.webp" alt="Neon Hustle: two characters on a rainy neon street" loading="lazy"
+               class="absolute inset-0 w-full h-full object-cover transition duration-500 group-hover:scale-105"
+               style="object-position: 42% 40%;" />
+          <div class="absolute inset-0 bg-linear-to-t from-black/90 via-black/35 to-transparent"></div>
+          <span class="plate-arrow text-white">↗</span>
+          <div class="absolute left-5 right-5 bottom-5 text-white">
+            <p class="text-[11px] uppercase tracking-[0.18em] text-white/60 mb-1">browser game</p>
+            <p class="text-2xl font-semibold tracking-tight">Neon Hustle</p>
+            <p class="text-sm text-white/70 mt-1">A cyberpunk hustle you can play on desktop or phone</p>
+          </div>
+        </a>
+
+        <!-- Rust server: the server banner over a blurred copy of itself -->
+        <a href="https://calmservers.com" target="_blank" class="plate group bg-black">
+          <img src="/projects/calmservers-banner.webp" alt="" aria-hidden="true"
+               class="absolute inset-0 w-full h-full object-cover scale-125 blur-xl opacity-60" />
+          <img src="/projects/calmservers-banner.webp" alt="EU Calm x2 Rust server banner: solo friendly, max team 5" loading="lazy"
+               class="absolute left-0 right-0 top-[14%] w-full h-auto shadow-2xl transition duration-500 group-hover:scale-105" />
+          <div class="absolute inset-0 bg-linear-to-t from-black/90 via-black/20 to-transparent"></div>
+          <span class="plate-arrow text-white">↗</span>
+          <div class="absolute left-5 right-5 bottom-5 text-white">
+            <p class="text-[11px] uppercase tracking-[0.18em] text-white/60 mb-1">game server</p>
+            <p class="text-2xl font-semibold tracking-tight">calmservers.com</p>
+            <p class="text-sm text-white/70 mt-1">Rust game server community</p>
+          </div>
+        </a>
+
+      </div>
+    </section>
+
+    <section>
+      <p class="label">readme</p>
+      <div class="divide-y divide-line border-y border-line">
         <a href="/posts/first-post" class="flex justify-between items-baseline py-4 group">
-          <span class="text-sm font-medium group-hover:text-gray-400 transition-colors">My First Post</span>
-          <span class="text-xs text-gray-300">Jun 2026</span>
+          <span class="text-sm font-medium group-hover:text-muted transition-colors">My First Post</span>
+          <span class="text-xs text-faint">Jun 2026</span>
         </a>
       </div>
-      <a href="/blog" class="text-xs text-gray-300 hover:text-gray-500 transition-colors mt-4 inline-block">all posts →</a>
-    </div>
+      <a href="/blog" class="text-xs text-muted hover:text-fg transition-colors mt-4 inline-block">all posts →</a>
+    </section>
 
   </div>
 </Layout>

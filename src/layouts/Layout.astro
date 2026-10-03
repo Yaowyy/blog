@@ -1,6 +1,6 @@
 ---
 import '../styles/global.css';
-const { page = 'home' } = Astro.props;
+const { page = 'home', feed = false } = Astro.props;   // feed: the blog list, one post per screen with scroll snapping
 
 const logos = {
   home: 'andrii.kashevskyi',
@@ -10,134 +10,112 @@ const logos = {
   hk: 'andrii.香港',
 };
 
-const navLinks = {
-  home: [
-    { href: '/blog', label: 'blog' },
-    { href: '/portfolio', label: 'portfolio' },
-    { href: '/contact', label: 'contact' },
-    { href: '/hk-planner', label: '香港' },
-  ],
-  blog: [
-    { href: '/', label: 'home' },
-    { href: '/portfolio', label: 'portfolio' },
-    { href: '/contact', label: 'contact' },
-    { href: '/hk-planner', label: '香港' },
-  ],
-  portfolio: [
-    { href: '/', label: 'home' },
-    { href: '/blog', label: 'blog' },
-    { href: '/contact', label: 'contact' },
-    { href: '/hk-planner', label: '香港' },
-  ],
-  contact: [
-    { href: '/', label: 'home' },
-    { href: '/blog', label: 'blog' },
-    { href: '/portfolio', label: 'portfolio' },
-    { href: '/hk-planner', label: '香港' },
-  ],
-  hk: [
-    { href: '/', label: 'home' },
-    { href: '/blog', label: 'blog' },
-    { href: '/portfolio', label: 'portfolio' },
-    { href: '/contact', label: 'contact' },
-  ],
-};
+// the archived Hong Kong planner is not linked from anywhere (it still works at /hk-planner)
+const navLinks = [
+  { href: '/blog', label: 'blog', page: 'blog' },
+  { href: '/portfolio', label: 'portfolio', page: 'portfolio' },
+  { href: '/contact', label: 'contact', page: 'contact' },
+];
 ---
 
 <!doctype html>
-<html lang="en">
+<html lang="en" class:list={[feed && 'feed']}>
   <head>
     <meta charset="UTF-8" />
-    <meta name="viewport" content="width=device-width" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
     <link rel="icon" type="image/png" href="/favicon.png" />
     <meta name="generator" content={Astro.generator} />
+    {page === 'hk' && <meta name="robots" content="noindex, nofollow" />}
     <title>{logos[page]}</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet" />
+    <script is:inline>
+      // set the theme before the page paints, so there is no white flash in dark mode
+      (() => {
+        const saved = localStorage.getItem('theme');
+        if (saved === 'dark' || (!saved && window.matchMedia('(prefers-color-scheme: dark)').matches)) document.documentElement.classList.add('dark');
+      })();
+    </script>
     <style>
       @keyframes fadein {
-        from { opacity: 0; }
-        to { opacity: 1; }
+        from { opacity: 0; transform: translateY(6px); }
+        to { opacity: 1; transform: none; }
       }
-      main {
-        animation: fadein 1s ease forwards;
-      }
-      
+      main { animation: fadein 0.6s ease forwards; }
+
       .toggle-switch {
         position: relative;
         display: inline-block;
-        width: 44px;
-        height: 26px;
+        width: 40px;
+        height: 22px;
         cursor: pointer;
       }
       .toggle-switch input { opacity: 0; width: 0; height: 0; position: absolute; }
-
       .slider {
         position: absolute;
         inset: 0;
-        background: #e5e7eb;
+        background: var(--bg);
+        border: 1px solid var(--fg);
         border-radius: 999px;
         transition: background 0.3s ease;
       }
       .slider::before {
         content: '';
         position: absolute;
-        width: 20px;
-        height: 20px;
+        width: 14px;
+        height: 14px;
         left: 3px;
         top: 3px;
-        background: white;
+        background: var(--fg);
         border-radius: 50%;
-        box-shadow: 0 1px 4px rgba(0,0,0,0.18), 0 0.5px 1px rgba(0,0,0,0.1);
-        transition: transform 0.3s cubic-bezier(0.34, 1.56, 0.64, 1);
+        transition: transform 0.3s cubic-bezier(0.34, 1.56, 0.64, 1), background 0.3s ease;
       }
-
-      .toggle-switch input:checked + .slider {
-        background: #1a1916;
-      }
-      .toggle-switch input:checked + .slider::before {
-        transform: translateX(18px);
-      }
+      .toggle-switch input:checked + .slider { background: var(--fg); }
+      .toggle-switch input:checked + .slider::before { transform: translateX(18px); background: var(--bg); }
     </style>
   </head>
-  <body class="bg-white text-gray-900 font-sans">
-    
+  <body class="bg-bg text-fg font-sans min-h-screen flex flex-col">
+
     <!-- Navigation -->
-    <nav class="border-b border-gray-200 px-4 py-4">
-      <div class="max-w-2xl mx-auto flex justify-between items-center">
-        <a href="/" class="text-2xl font-bold tracking-tight group">
+    <nav class="border-b border-line px-4 py-5">
+      <div class="max-w-2xl mx-auto flex flex-wrap justify-between items-center gap-x-6 gap-y-2">
+        <a href="/" class="text-xl font-semibold tracking-tight group">
           <span class="group-hover:hidden">{logos[page]}</span>
           <span class="hidden group-hover:inline">andrii.kashevskyi</span>
         </a>
-        <div class="flex gap-6 text-gray-400" style="font-size: 15px;">
-          {navLinks[page].map(link => (
-          <a href={link.href} class="hover:text-gray-900 transition-colors">{link.label}</a>
+        <div class="flex gap-4 sm:gap-6 text-sm">
+          {navLinks.map(link => (
+            <a href={link.href} class:list={['transition-colors border-b pb-0.5', link.page === page ? 'text-fg border-fg' : 'text-muted border-transparent hover:text-fg']}>{link.label}</a>
           ))}
         </div>
       </div>
     </nav>
 
     <!-- Page content -->
-    <main class={page === 'hk' ? 'w-full p-0' : 'max-w-2xl mx-auto px-4 py-12 prose'}>
+    <main class={page === 'hk' ? 'w-full p-0 flex-1' : feed ? 'flex-1 w-full max-w-2xl mx-auto px-4' : 'flex-1 w-full max-w-2xl mx-auto px-4 py-14 prose prose-neutral dark:prose-invert'}>
       <slot />
     </main>
 
     <!-- Footer -->
-    <footer class="border-t border-gray-200 mt-16 px-4 py-6 flex items-center justify-center gap-4 text-sm text-gray-400">
-      <span>© 2026 Andrii</span>
-      <label class="toggle-switch" aria-label="Toggle dark mode">
-        <input type="checkbox" id="dark-toggle" />
-        <span class="slider"></span>
-      </label>
+    <footer class:list={['border-t border-line px-4 py-6', !feed && 'mt-16']}>
+      <div class="max-w-2xl mx-auto flex items-center justify-between text-xs text-muted">
+        <span>© 2026 Andrii Kashevskyi</span>
+        <label class="toggle-switch" aria-label="Toggle dark mode">
+          <input type="checkbox" id="dark-toggle" />
+          <span class="slider"></span>
+        </label>
+      </div>
     </footer>
 
     <script>
+      // feed pages snap one post per screen: the posts sit under the sticky menu, so the screen minus its height is one page
+      const nav = document.querySelector('nav');
+      const setNavH = () => document.documentElement.style.setProperty('--nav-h', (nav?.offsetHeight || 70) + 'px');
+      setNavH(); addEventListener('resize', setNavH);
+
       const toggle = document.getElementById('dark-toggle') as HTMLInputElement;
-      const saved = localStorage.getItem('theme');
-
-      if (saved === 'dark' || (!saved && window.matchMedia('(prefers-color-scheme: dark)').matches)) {
-        document.documentElement.classList.add('dark');
-        toggle.checked = true;
-      }
-
+      toggle.checked = document.documentElement.classList.contains('dark');
       toggle.addEventListener('change', () => {
         const isDark = toggle.checked;
         document.documentElement.classList.toggle('dark', isDark);
