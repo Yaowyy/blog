@@ -526,7 +526,7 @@
   Object.defineProperty(canvas, 'width', { get: () => LW, set: v => { LW = v; fitBacking(); } });
   Object.defineProperty(canvas, 'height', { get: () => LH, set: v => { LH = v; fitBacking(); } });
   function fitBacking() {
-    const r = canvas.getBoundingClientRect(), dpr = Math.min(window.devicePixelRatio || 1, matchMedia('(pointer: coarse)').matches ? 2 : 4);   // phones: at most 2x (3x screens fill 2.25x more pixels for little visible gain)
+    const r = canvas.getBoundingClientRect(), dpr = window.devicePixelRatio || 1;
     let k = r.width && r.height ? Math.min(r.width / LW, r.height / LH) * dpr : 1;
     k = Math.min(k, Math.sqrt(9e6 / (LW * LH)));   // at most ~9 million pixels (4K), so big retina screens stay fast
     const pw = Math.max(1, Math.round(LW * k)), ph = Math.max(1, Math.round(LH * k));
@@ -540,24 +540,6 @@
   new ResizeObserver(() => fitBacking()).observe(canvas);
   addEventListener('resize', () => fitBacking());
   const MONO = 'ui-monospace, "SF Mono", Menlo, Consolas, monospace';
-  // neon glow around a box (outline or filled), blurred once into a small picture and reused, instead of shadowBlur every frame
-  // (a live blur is one of the slowest things a canvas can do, especially on phones). lw = line width, 0 = filled; r = corner radius.
-  const glowCache = new Map();
-  function glowBox(x, y, w, h, color, blur, lw = 0, r = 0) {
-    const t = ctx.getTransform(), k = Math.max(0.5, Math.round(Math.hypot(t.a, t.b) * 4) / 4);   // real pixels per unit, so it stays sharp
-    blur = Math.max(1, Math.round(blur)); const pad = blur * 1.5 + lw;
-    const key = `${Math.round(w)}|${Math.round(h)}|${color}|${blur}|${lw}|${r}|${k}`;
-    let c = glowCache.get(key);
-    if (!c) {
-      if (glowCache.size > 400) glowCache.clear();
-      c = document.createElement('canvas'); c.width = Math.ceil((Math.round(w) + 2 * pad) * k); c.height = Math.ceil((Math.round(h) + 2 * pad) * k);
-      const g = c.getContext('2d'); g.scale(k, k); g.shadowColor = color; g.shadowBlur = blur * k;
-      g.beginPath(); if (r && g.roundRect) g.roundRect(pad, pad, Math.round(w), Math.round(h), r); else g.rect(pad, pad, Math.round(w), Math.round(h));
-      if (lw) { g.strokeStyle = color; g.lineWidth = lw; g.stroke(); } else { g.fillStyle = color; g.fill(); }
-      glowCache.set(key, c);
-    }
-    ctx.drawImage(c, x - pad, y - pad, Math.round(w) + 2 * pad, Math.round(h) + 2 * pad);
-  }
 
   // ---- rules --------------------------------------------------------------
   const START_STATS = { health: 10, strength: 1, mana: 0, charisma: 1, money: 0, energy: 10 };
@@ -621,15 +603,15 @@
       desc: 'A tiny vial of neon-blue fuel. A huge energy kick, no healing at all. +10$ per 100 food bought.' },
     { name: 'Smile',   tab: 'patches', class: 'patch', price: 30,  gain: { charisma: 1 }, patch: true, art: 'smilePatch', rarity: 'common',
       desc: 'Cheap social firmware. Every install makes you a little more likeable. +15% price per install.' },
-    { name: 'Social',  tab: 'patches', class: 'patch', minLevel: 2, price: 80,  gain: { charisma: 2 }, patch: true, art: 'socialPatch', rarity: 'common',
+    { name: 'Social',  tab: 'patches', class: 'patch', minLevel: 2, price: 90,  gain: { charisma: 2 }, patch: true, art: 'socialPatch', rarity: 'common',
       desc: 'A small-talk module for the street. Twice the charm of Smile. +15% price per install.' },
     { name: 'Persona', tab: 'patches', class: 'patch', minLevel: 3, price: 240, gain: { charisma: 3 }, patch: true, art: 'personaPatch', rarity: 'common',
       desc: 'A premium personality overlay. The biggest charisma boost per install. +15% price per install.' },
     // class 'equipment': goes to the inventory, gives its bonus only once equipped (I → A/D → Space). Never stacks (1 per slot).
     // Any number can be bought and carried (buying one you already have asks first); only one per equipment slot is worn.
-    { name: 'Banana sword', tab: 'weapons', buyLevel: 2, meleeArea: 1.2, price: 260, gain: { strength: 1, charisma: 1 }, hit: 6, attackMs: -100, class: 'equipment', kind: 'sword', art: 'bananaSword', rarity: 'common',   // attackMs: swings 0.1 s faster
+    { name: 'Banana sword', tab: 'weapons', buyLevel: 2, meleeArea: 1.2, price: 260, gain: { strength: 1, charisma: 1 }, hit: 5, attackMs: -100, class: 'equipment', kind: 'sword', art: 'bananaSword', rarity: 'common',   // attackMs: swings 0.1 s faster
       desc: 'A curved yellow blade that hits hard and swings fast. Goes to your inventory: equip it there. Only one sword can be equipped.' },
-    { name: 'Mothersword', tab: 'weapons', buyLevel: 3, meleeArea: 1.25, price: 390, gain: { strength: 2, charisma: 1 }, hit: 10, attackMs: -120, class: 'equipment', kind: 'sword', art: 'mothersword', attackSheets: 'mother', rarity: 'common',
+    { name: 'Mothersword', tab: 'weapons', buyLevel: 3, meleeArea: 1.25, price: 390, gain: { strength: 2, charisma: 1 }, hit: 9, attackMs: -120, class: 'equipment', kind: 'sword', art: 'mothersword', attackSheets: 'mother', rarity: 'common',
       desc: 'A home-made blade cut from an old motherboard. Basic for now, but its empty sockets can take upgrades at MutaTech.' },
     // armor (Armor tab): capGain raises max HP / NRG while worn, hpRegen adds health per minute, speed = move speed bonus
     { name: 'NRG Headset', tab: 'armor', price: 370, gain: { charisma: 1 }, capGain: { health: 1, energy: 3 }, hpRegen: 1, class: 'equipment', slot: 'head', art: 'nrgHeadset', rarity: 'common',
@@ -650,24 +632,18 @@
   // class 'resource': stacks (up to `stack` per inventory slot), used for crafting later.
   // class 'skill': doesn't stack; Space in the inventory learns it and puts it in an ability slot (effects come later).
   const LOOT_ITEMS = [
-    { name: 'Tar',        class: 'resource', stack: 64, gain: {}, art: 'tart', value: 2, rarity: 'common',   // value: worth per piece (the ATB-Market sells Tar for this and buys resources for half)
-      desc: 'Sticky black tar from the slums. A crafting material.' },
+    { name: 'Tar',        class: 'resource', stack: 64, gain: {}, art: 'tart', value: 2, rarity: 'common' },   // value: price per piece (the Scrap Dealer pays this for resources)
     { name: 'Magic tar',  class: 'skill', gain: {}, art: 'magicTart', value: 90, rarity: 'rare' },
     { name: 'Magic Nozzle', class: 'skill', gain: {}, art: 'magicNozzle', value: 90, rarity: 'rare', desc: 'The Pump Queen\'s fuel nozzle. Learn it: Fuel Spray.' },
-    { name: 'Scrap',      class: 'resource', stack: 64, gain: {}, value: 80, art: 'scrap', rarity: 'rare' },   // from scrapping gear at the Scrap Dealer; rare TradeCorp sale offers
+    { name: 'Scrap',      class: 'resource', stack: 64, gain: {}, value: 1, art: 'scrap', rarity: 'common' },   // from selling equipment; also sold by the Scrap Dealer
     // not obtainable yet (code only; the cheat menu can give them)
-    { name: 'MutaGen',    class: 'resource', stack: 32, gain: {}, value: 36, rarity: 'rare', art: 'mutagen' },
-    { name: 'Tar Orb',    class: 'upgrade',  stack: 16, gain: {}, value: 70, rarity: 'rare', art: 'tarOrb',   // crafted at MutaTech; Space in the inventory consumes one: +1 mana cap
+    { name: 'MutaGen',    class: 'resource', stack: 32, gain: {}, value: 26, rarity: 'rare', art: 'mutagen' },
+    { name: 'Tar Orb',    class: 'upgrade',  stack: 16, gain: {}, value: 60, rarity: 'rare', art: 'tarOrb',   // crafted at MutaTech; Space in the inventory consumes one: +1 mana cap
       desc: 'A magic orb that fuses magic power and body', consume: { manaCap: 1 } },
-    { name: 'AI chip',    class: 'resource', stack: 32, gain: {}, value: 35, rarity: 'rare', art: 'aiChip' },
-    // forest enemies' loot (sold at the ATB-Market for now; MutaTech recipes later)
+    { name: 'AI chip',    class: 'resource', stack: 32, gain: {}, value: 24, rarity: 'rare', art: 'aiChip' },
+    // forest enemies' loot (sold at the Scrap Dealer for now; MutaTech recipes later)
     { name: 'Spore Sac',  class: 'resource', stack: 64, gain: {}, value: 5, rarity: 'common', art: 'sporeSac', desc: 'A soft sac of glowing spores from a Sporeling.' },
-    // harvested: hold Space (hold A on phones) for 5 s on a glowing pile in the world (see HARVEST)
-    { name: 'Copper Wire', class: 'resource', stack: 64, gain: {}, value: 3, rarity: 'common', art: 'copperWire', desc: 'Old copper cable pulled out of a slum junction box.' },
-    { name: 'Neon Moss', class: 'resource', stack: 64, gain: {}, value: 4, rarity: 'common', art: 'neonMoss', desc: 'Glowing moss scraped off fallen logs and rusty wrecks in the forests.' },
-    { name: 'Sludge Crystal', class: 'resource', stack: 64, gain: {}, value: 6, rarity: 'common', art: 'sludgeCrystal', desc: 'A toxic crystal grown out of the lakeshore sludge. Still warm.' },
-    { name: 'Glowcap Truffle', class: 'resource', stack: 16, gain: {}, value: 45, rarity: 'rare', art: 'glowcapTruffle', desc: 'A rare glowing truffle dug up from under the deep forest trees.' },
-    { name: 'Loader Core', class: 'resource', stack: 16, gain: {}, value: 110, rarity: 'mythical', art: 'loaderCore', desc: 'The still-warm power core of an Overgrown Loader.' },
+    { name: 'Loader Core', class: 'resource', stack: 16, gain: {}, value: 90, rarity: 'mythical', art: 'loaderCore', desc: 'The still-warm power core of an Overgrown Loader.' },
     // bags: class 'bag', worn in the bag slot (the backpack tile in the bar); slots = inventory size while worn.
     // Sold in the ATB-Market (Other tab). A bag can only be swapped when the worn bag holds nothing but the new bag.
     { name: 'BackBag', class: 'bag', slots: 2, price: 80, rarity: 'common', gain: {}, art: 'invIcon', tab: 'other',
@@ -679,14 +655,14 @@
       desc: 'A hard-shell courier pack. Eight compartments behind one armoured hatch.' },
     { name: 'Vault Pack', class: 'bag', slots: 12, price: 4490, rarity: 'legendary', gain: {}, art: 'vaultPack', keepMoney: 0.1,
       desc: 'A pocket bank vault on your back. Twelve slots, and if you die, 10% of your money stays with you.' },
-    // crafted at MutaTech (Banana sword + 5 MutaGen + 30 energy, hero lvl 4). price: its value (not sold in shops; the Scrap Dealer scraps it for 1.25% of it in Scrap).
+    // crafted at MutaTech (Banana sword + 5 MutaGen + 30 energy, hero lvl 4). price: its value (not sold in shops yet; the Scrap Dealer pays 40%).
     // meleeArea: melee area × 1.3; minLevel: hero level needed to equip. Uses the Banana sword picture until it has its own art.
-    { name: 'baNano Sword', class: 'equipment', kind: 'sword', rarity: 'rare', price: 1150, minLevel: 4, meleeArea: 1.3, attackMs: -140, hit: 24,
+    { name: 'baNano Sword', class: 'equipment', kind: 'sword', rarity: 'rare', price: 1200, minLevel: 4, meleeArea: 1.3, attackMs: -140, hit: 24,
       gain: { strength: 5, charisma: 3 }, art: 'bananoSword', attackSheets: 'banano',
       desc: 'A Banana sword mutated by MutaGen down to the nano level. Its living, self-sharpening peel glows acid green and cuts faster than ever.' },
   ];
-  // Scrap Dealer (slums): scraps armor, weapons and bags from the bag (not worn ones) for round(full price × 1.25%) Scrap, no money.
-  // Refused when the scrap wouldn't fit. Resources, skills and upgrades are sold at the ATB-Market instead (Resources tab).
+  // Scrap Dealer (slums): buys equipment for 40% of its shop price plus 1% of that price in scrap (rounded down),
+  // resources for 100% of their value (whole stack at once), and sells scrap for 2$ each. Skills and equipped items can't be sold.
   // MutaTech (city): crafting station for magic items. Each recipe: what it makes, what it costs (items + energy).
   const RECIPES = [
     { make: 'Tar Orb', count: 1, cost: [['Tar', 10], ['MutaGen', 1]], energy: 20, minLevel: 2 },
@@ -694,10 +670,7 @@
     { make: 'Courier Shell', count: 1, cost: [], energy: 0, soon: true },   // soon: listed, recipe not ready yet
     { make: 'Vault Pack', count: 1, cost: [], energy: 0, soon: true },
   ];
-  const SCRAP_DEALER = { scrapPerCost: 0.0125 };
-  // ATB-Market, Resources tab: sells Tar at its full value; buys resources, upgrades and skills for half their value, rounded down per piece
-  const SHOP_SELL = { share: 0.5, classes: ['resource', 'upgrade', 'skill'], buy: ['Tar'] };
-  const sellUnit = name => Math.floor(((itemDef(name) || {}).value || 0) * SHOP_SELL.share);
+  const SCRAP_DEALER = { equipShare: 0.4, scrapPerCost: 0.01, scrapPrice: 2 };
   const BAG_ITEMS = () => LOOT_ITEMS.filter(it => it.class === 'bag');
   const ABILITY_SLOTS = 3;   // spell slots in the bar; keys 1 2 3 cast them
   // spells (learned from 'skill' items). Magic tar: a projectile toward the closest enemy, up to `range` tiles.
@@ -706,7 +679,7 @@
     'Magic tar': { mana: 3, range: 5, speed: 9, rootMs: 2000, dot: [1, 2], ticks: 2, tickMs: 1000 },   // root 2 s + 1-2 damage per second for 2 s
     // Magic Nozzle (Fuel Spray): a cone of burning fuel at once, `range` tiles, `halfAngle` radians each side. Every enemy in it
     // (hit roll each) is slowed by `slow` for `slowMs` and takes dot[0]-dot[1] damage every second, `ticks` times.
-    'Magic Nozzle': { mana: 3, cone: true, range: 3.5, halfAngle: 0.6, slow: 0.4, slowMs: 3000, dot: [1, 2], ticks: 3, tickMs: 1000 },   // 1-2 damage per second for 3 s
+    'Magic Nozzle': { mana: 3, cone: true, range: 3.5, halfAngle: 0.6, slow: 0.4, slowMs: 3000, dot: [1, 1], ticks: 3, tickMs: 1000 },
   };
   // critical strike (any attack: melee and spells): 0.03% per charisma point, capped at 15%. A crit adds the hero's strength to the damage.
   const CRIT_PER_CHA = 0.0003, CRIT_CAP = 0.15;
@@ -732,7 +705,7 @@
   const capName = v => v ? v.charAt(0).toUpperCase() + v.slice(1) : v;   // names start with a capital letter
   // ATB-Market tabs (A/D or a click); each shop item names its tab
   const SHOP_TABS = [{ key: 'food', name: 'Food' }, { key: 'patches', name: 'Patches' }, { key: 'weapons', name: 'Weapons' },
-                     { key: 'armor', name: 'Armor' }, { key: 'other', name: 'Other' }, { key: 'resources', name: 'Resources' }];   // Resources: buy Tar, sell from the bag   // Armor and Other: empty for now
+                     { key: 'armor', name: 'Armor' }, { key: 'other', name: 'Other' }];   // Armor and Other: empty for now
   const FOOD = 'Cheap noodles';   // the food item: its price inflates with work shifts instead of rising on purchase
   // item names used by older saves -> current names
   const OLD_NAMES = { 'tart': 'Tar', 'magic tart': 'Magic tar', 'tar': 'Tar', 'magic tar': 'Magic tar', 'scrap': 'Scrap', 'food': FOOD,
@@ -759,7 +732,7 @@
   const CALL_LINES = ['A client wants their contract checked.', 'Someone needs a loan explained. Slowly.', 'A shop owner is angry about a late order.',
                       'A tourist is lost and wants directions.', 'A gang boss wants to renegotiate. Politely.', 'A robot keeps calling to sell you insurance.'];
   const RARE_CALL_LINES = ['A corporate VIP asks for you by name.', 'A rich collector wants a private deal.'];
-  const SALE_POOL = { common: ['Tar', 'Cheap noodles'], rare: ['MutaGen', 'AI chip', 'Tar Orb', 'Scrap'] };
+  const SALE_POOL = { common: ['Tar', 'Scrap', 'Cheap noodles'], rare: ['MutaGen', 'AI chip', 'Tar Orb'] };
   const MAX_QUESTS = 5;   // active quests at the same time (deliveries + the Rogue's quests; her tutorial doesn't count)
   const pick = a => a[Math.floor(Math.random() * a.length)];
   function rollDeal(lvl, cha, foodPrice, force = null) {   // force: [type, rare] (cheat menu)
@@ -795,8 +768,6 @@
     greaser:    { name: 'greaser', floor: 'groundSlums' },   // a slums district
     forest:     { name: 'forest', floor: 'groundLake' },     // dead forest: lake-shore mud with fallen leaves
     deepForest: { name: 'deep forest', floor: 'groundLake' },   // same floor and passages as the forest, more leaves
-    wasteland:  { name: 'industrial wasteland', floor: 'groundWasteland' },   // north of the abandoned factory: scrapyards, Scrap Crawlers
-    pit:        { name: 'industrial pit', floor: 'groundPit' },   // 4:-4, the future second boss arena (Scrap Crawlers for now)
   };
   const ZONE_LIST = {
     '0:0': 'city',
@@ -809,8 +780,6 @@
     '-7:-1': 'deepForest', '-7:0': 'deepForest', '-8:-2': 'deepForest', '-8:-1': 'deepForest', '-8:0': 'deepForest',
     '-9:-2': 'deepForest', '-9:-1': 'deepForest', '-10:-2': 'deepForest', '-10:-1': 'deepForest',
     '6:3': 'slums', '6:4': 'slums', '7:4': 'slums',
-    '3:-3': 'wasteland', '3:-2': 'wasteland', '4:-3': 'wasteland', '4:-2': 'wasteland', '4:-1': 'wasteland',
-    '5:-4': 'wasteland', '5:-3': 'wasteland', '5:-2': 'wasteland', '6:-2': 'wasteland', '4:-4': 'pit',
   };
   // passages between neighbouring zones: [zone, zone, where along the shared edge (0 = top/left end, 1 = bottom/right end)]
   const PASSAGES = [
@@ -831,9 +800,6 @@
     ['-8:-2', '-9:-2', 0.49], ['-8:-1', '-9:-1', 0.18], ['-9:-2', '-10:-2', 0.51], ['-9:-1', '-10:-1', 0.18], ['-10:-2', '-10:-1', 0.54],
     // slums far north
     ['6:3', '5:3', 0.47], ['6:3', '6:4', 0.9], ['7:4', '6:4', 0.49],
-    // industrial wasteland (north of the abandoned factory; only way in: 2:-3 -> 3:-3) and the industrial pit 4:-4
-    ['3:-3', '2:-3', 0.07], ['3:-3', '3:-2', 0.86], ['4:-2', '3:-2', 0.5], ['4:-3', '4:-2', 0.5], ['4:-2', '4:-1', 0.41],
-    ['5:-2', '4:-2', 0.5], ['5:-3', '5:-2', 0.11], ['5:-4', '5:-3', 0.89], ['5:-4', '4:-4', 0.09], ['6:-2', '5:-2', 0.91],
   ];
   const coordOf = id => id.split(':').map(Number);
   // zone numbers for levels and exp: negative coordinates count as positive (-3:-3 works like 3:3)
@@ -912,7 +878,7 @@
   for (const id in ZONE_LIST) {
     const type = ZONE_LIST[id], [a, b] = coordOf(id), seed = 7331 + (a + 5) * 97 + (b + 5) * 13;
     AREAS[id] = { id, type, name: ZONE_TYPES[type].name, walls: [], exits: ZONE_EXITS[id],
-                  decals: type === 'slums' || type === 'greaser' || type === 'wasteland' || type === 'pit' ? { ...SLUMS_DECALS, seed }
+                  decals: type === 'slums' || type === 'greaser' ? { ...SLUMS_DECALS, seed }
                         : type === 'forest' ? { ...FOREST_DECALS, seed } : type === 'deepForest' ? { ...DEEP_FOREST_DECALS, seed } : type === 'lake' ? { ...LAKE_DECALS, seed } : false,   // factory: clean floor for now
                   drips: type === 'slums' ? (Math.max(Math.abs(a), Math.abs(b)) >= 3 ? 2 : 1) : 0 };
     AREAS[id].foes = [];   // other enemies living here besides the Drips: { kind, spawn } (spawn tile counted from 1)
@@ -1463,22 +1429,6 @@
     }
     // factory entrance: 2 Drips and 1 Mav-1K drone
     for (const id of zonesOf('factoryIn')) { foeSomewhere(id, 'drip'); foeSomewhere(id, 'drip'); foeSomewhere(id, 'drone'); }
-    // industrial wasteland + pit (added last, so the older zones roll out exactly as before): 6-8 container stacks per zone,
-    // then Scrap Crawler packs of 3 hidden in scrap piles: 2 packs at zone level 3-4, 3 at level 5+ and in the pit.
-    // A pack: 3 tiles within 2 tiles of a centre tile (diagonals count as 1).
-    for (const id of [...zonesOf('wasteland'), ...zonesOf('pit')]) for (let i = 0, n = 6 + Math.floor(rnd() * 3); i < n; i++) place(id, 'cont');
-    for (const id of [...zonesOf('wasteland'), ...zonesOf('pit')]) {
-      const A = AREAS[id], packs = ZONE_LIST[id] === 'pit' || zoneLevel(id) >= 5 ? 3 : 2;
-      for (let p = 0, t = 0; p < packs && t < 400; t++) {
-        const cx = 3 + Math.floor(rnd() * (COLS - 6)), cy = 3 + Math.floor(rnd() * (ROWS - 6));
-        if (!tileOk(A, cx, cy) || behindTall(id, cx, cy)) continue;
-        const spots = [];
-        for (let y = cy - 2; y <= cy + 2; y++) for (let x = cx - 2; x <= cx + 2; x++) if (tileOk(A, x, y) && !behindTall(id, x, y)) spots.push([x, y]);
-        const pick = shuffle(spots).slice(0, 3);
-        if (pick.length < 3 || !farFromFoes(A, pick, -1)) continue;
-        const g = newGroup(); for (const [x, y] of pick) addFoe(A, 'crawler', x, y, g); p++;
-      }
-    }
   }
   const footCX = w => { const f = foot(w); return (f.x0 + f.x1 + 1) / 2; };   // footprint centre, in tiles
   const START = { x: 21, y: 11 };   // 0-based: just below HomeDome
@@ -1494,27 +1444,12 @@
   // Damage: a share of the hero's max HP at his level (see npcDamage): melee ×0.10–0.12 per hit, Magic Tar ×0.08 per tick.
   const DRIP = { name: 'Drip', exp: 2, hp: 10, atkMult: [0.10, 0.12], tarMult: 0.08, mana: 3, manaRegenMs: 4000, aggro: 4, stepMs: 1000, attackMs: 1000,
                  windupMs: 400, spell: 'Magic tar', respawnMs: [60000, 90000], lootMs: 30000, fadeMs: 2000,
-                 loot: { money: [4, 8], tar: [0, 1], magicTarChance: 0.03 },   // rolled when he dies, taken with Space
+                 loot: { money: [4, 8], tar: [0, 1], magicTarChance: 0.025 },   // rolled when he dies, taken with Space
                  spawns: [[{ x: 11, y: 7 }], [{ x: 8, y: 5 }, { x: 14, y: 9 }]] };   // spawn tiles (from 1) for 1 and for 2 Drips
   // hero melee area: a half-disc whose flat side is the front edge of the hero's tile, facing where he looks.
   // Radius 1.2 tiles covers the whole tile in front and a little beyond; a melee weapon makes the area 20% bigger
   // (radius × √1.2). Every living enemy whose body (radius 0.25 tiles) touches the area is hit.
   const MELEE = { radius: 1.2, weaponArea: 1.2, bodyR: 0.25, flashMs: 180 };
-  // knockback on a melee hit: the enemy's picture is nudged away from the hero and eases back (looks only; his tile doesn't change).
-  // Distance in tiles: fists 0.1, a weapon 0.1 more per rarity step (common 0.2, rare 0.3, mythical 0.4 … transcendent 0.7).
-  // Then: crit × 2; enemy's HP above the hero's HP × 0.5 (else × 1). It stops short of walls, buildings and anything else
-  // the enemy couldn't walk into (flying drones ignore that). outMs to the furthest point, backMs to return.
-  // harvesting: glowing piles in the world. Hold Space (phones: hold A) for holdMs while standing on or facing one; moving,
-  // letting go, opening a window or taking damage cancels it. Each pile gives 1 item, then hides and regrows after cooldownMs
-  // (game time) on another random tile: 2-4 tiles from an enemy's home in its zone (so there's always danger), else anywhere free.
-  // Common: 1 per zone of its types. Rare: 1 per 2 zones (zones paired in map order; it regrows in either of the two).
-  const HARVEST = { holdMs: 4000, near: [2, 4], kinds: [
-    { key: 'copper', item: 'Copper Wire', art: 'copperWireNode', zones: ['slums', 'wasteland', 'pit'], per: 1, cooldownMs: 5 * 60000, w: 1.25 },
-    { key: 'moss', item: 'Neon Moss', art: 'neonMossNode', zones: ['forest', 'deepForest'], per: 1, cooldownMs: 5 * 60000, w: 1.5 },
-    { key: 'sludge', item: 'Sludge Crystal', art: 'sludgeCrystalNode', zones: ['lake'], per: 1, cooldownMs: 5 * 60000, w: 1.05 },
-    { key: 'glowcap', item: 'Glowcap Truffle', art: 'glowcapNode', zones: ['deepForest'], per: 2, cooldownMs: 10 * 60000, w: 1.5 },
-  ] };
-  const KNOCKBACK = { fists: 0.1, perRarity: 0.1, crit: 2, tougher: 0.5, outMs: 60, backMs: 200 };
   const MELEE_KINDS = ['sword'];   // equipment kinds that count as melee weapons
   const HERO_ATTACK_MS = 1000;   // hero: Space while facing an enemy hits for `strength`, at most once per second
   // sprite calibration (px in each image): body = hood top to puddle bottom, ax = puddle centre in a cell
@@ -1528,7 +1463,7 @@
   const SCAV = { name: 'Toxic Scav', exp: 4, hp: 26, aggro: 5, keep: 3, stepMs: 1000, sprayRange: 3.5, sprayHalfAngle: 0.5,
                  sprayEveryMs: 2500, aimMs: 280, sprayMs: 1400, sprayTicks: [220, 690, 1180], sprayMult: 0.16,   // aim 0.28 s, spray 1.4 s with damage checks at 0.22 / 0.69 / 1.18 s into it, next aim 2.5 s after this one started; damage per hit: 16% of a same-level hero's max HP (npcDamage)
                  respawnMs: [90000, 120000], lootMs: 30000, fadeMs: 2000,
-                 loot: { money: [10, 18], tar: [0, 1], mutagenChance: 0.15 } };
+                 loot: { money: [10, 18], tar: [0, 1], mutagenChance: 0.1 } };
   // Mav-1K: a flying attack drone of the abandoned factory, 2 in each of its 4 zones. Flies over buildings and water (drawn above
   // everything, with a small shadow on the ground). Patrols: 2 tiles one way, then back and forth over 3. Locks on within `aggro`
   // tiles and rushes in; next to the hero it rises for 0.2 s (red beeping light), then rams: level + 1 damage (+ his level − hero
@@ -1537,7 +1472,7 @@
   // When a hit leaves it at 10% of max HP or less (once per life) it cloaks (2% visible, can't be targeted), flies 3 tiles away and repairs 30% of max HP over 3 s.
   const DRONE = { name: 'Mav-1K', exp: [3, 4], hp: 14, aggro: 3, leash: 10, stepMs: 500, ramMult: 0.15, windupMs: 250, lowMs: 700, cooldownMs: 1800,
                   slowChance: 0.4, slow: 0.2, slowMs: 3000, cloakPct: 0.1, cloakMs: 3000, cloakAlpha: 0.02, fleeDist: 3, repairPct: 0.3,
-                  respawnMs: [40000, 100000], lootMs: 30000, fadeMs: 2000, loot: { money: [4, 10], aiChipChance: 0.15 } };
+                  respawnMs: [40000, 100000], lootMs: 30000, fadeMs: 2000, loot: { money: [4, 10], aiChipChance: 0.1 } };
   // Sporeling (deep forest): a small mushroom mutant hiding as a glowing mushroom, in groups of 2-3 around every mushroom patch.
   // Hidden it can't be targeted or hit. It pops up (0.4 s) when the hero comes within `reveal` tiles (its group-mates within
   // 3 tiles pop up 0.1-0.3 s later), then chases. Next to the hero it puffs spores (wind-up 0.3 s, every 1.5 s): a small hit + Poison.
@@ -1556,7 +1491,7 @@
   // Loot money: 40-80$ plus the zone's |x| + |y|.
   const LOADER = { name: 'Overgrown Loader', size: 2, exp: 20, aggro: 4, leash: 12, stepMs: 1000, whipRange: 5, firstWhipMs: 800, whipEveryMs: 3000, whipWindupMs: 400,
                    whipMs: 800, whipMult: 0.1, rootMs: 1600, slamWindupMs: 550, slamMs: 1000, slamEveryMs: 2200, slamMult: 0.3, slamR: 2.5, homeHealPerMin: 1,
-                   respawnMs: [300000, 300000], lootMs: 60000, fadeMs: 3000, loot: { money: [40, 80], zoneMoney: true, tar: [1, 3], coreChance: 0.08, aiChipChance: 0.25 } };
+                   respawnMs: [300000, 300000], lootMs: 60000, fadeMs: 3000, loot: { money: [40, 80], zoneMoney: true, tar: [1, 3], coreChance: 0.1, aiChipChance: 0.2 } };
   // Pump Queen (the first boss, greaser 2:2): the living fuel that leaked out of the gas station's tank; every Drip is a drop of her.
   // Blocks 2 x 2 tiles like the Loader, sits on the gas station forecourt and wakes when the hero comes within `aggro` tiles of
   // her body. Level 2 (the zone's), but her own attacks hit like a level `dmgLevel` enemy (bossDamage).
@@ -1577,20 +1512,11 @@
                   igniteEveryMs: 15000, firstIgniteMs: 6000, igniteThrowMs: 600, igniteFuseMs: 1500, igniteMult: 0.3, flameMs: 1200, puddles: [4, 5],
                   burnStepMs: 650, trailMs: 2000, fireMult: 0.06, homeHealPerMin: 2,
                   respawnMs: [600000, 600000], lootMs: 60000, fadeMs: 3000, exp: 60,
-                  loot: { money: [80, 120], tar: [5, 10], queenRare: true, queenTarShare: 0.75 } };   // + one spell: Magic tar 75% / Magic Nozzle 25%
-  // Scrap Crawler (industrial wasteland + pit): a small spider-like salvage bot, in packs of 3, hidden in scrap piles (can't be
-  // targeted or hit). When the hero comes within `reveal` tiles of one, it and its pack-mates within 4 tiles burst out (0.5 s).
-  // Fast (1 tile / 0.45 s). Pounce: when the hero is 2-3 tiles away in a straight or diagonal line, a red line shows the 3 tiles
-  // in front of it for 0.5 s, then it leaps along it (0.25 s), stopping at walls, other enemies and right before the hero.
-  // Whoever is on the line when it leaps takes ×0.12 and is slowed 20% for 2 s. Cooldown 3 s. Next to the hero it bites
-  // (0.3 s wind-up, every 1.2 s, ×0.06). 10+ tiles from home it walks back and hides again. Loot: 3-7$, 5% AI chip.
-  const CRAWLER = { name: 'Scrap Crawler', reveal: 4, leash: 10, stepMs: 450, popMs: 500, windupMs: 500, leapMs: 250, pounceRange: [2, 3], pounceLen: 3,
-                    pounceMult: 0.12, pounceCdMs: 3000, slow: 0.2, slowMs: 2000, biteWindupMs: 300, biteEveryMs: 1200, biteMult: 0.06,
-                    respawnMs: [60000, 90000], lootMs: 30000, fadeMs: 2000, loot: { money: [3, 7], aiChipChance: 0.05 } };
-  const ENEMY = { drip: DRIP, scav: SCAV, drone: DRONE, spore: SPORE, loader: LOADER, queen: QUEEN, crawler: CRAWLER };
+                  loot: { money: [80, 120], tar: [5, 10], queenRare: true } };   // + Magic tar or Magic Nozzle, 50/50
+  const ENEMY = { drip: DRIP, scav: SCAV, drone: DRONE, spore: SPORE, loader: LOADER, queen: QUEEN };
   // enemy max health = round(the hero's max HP at the enemy's level × the enemy's hpMult). Every new enemy gets its own hpMult.
   // Drip ×1: 10 / 12 / 14 / 17 / 21 at lvl 1-5 · Mav-1K ×0.8: 8 / 10 / 11 / 14 / 17 · Toxic Scav ×1.8: 18 / 22 / 25 / 31 / 38
-  CRAWLER.hpMult = 0.6; DRIP.hpMult = 1; DRONE.hpMult = 0.8; SCAV.hpMult = 1.8; SPORE.hpMult = 0.7; LOADER.hpMult = 3; QUEEN.hpMult = 122 / 12;   // Pump Queen: 122 HP at level 2
+  DRIP.hpMult = 1; DRONE.hpMult = 0.8; SCAV.hpMult = 1.8; SPORE.hpMult = 0.7; LOADER.hpMult = 3; QUEEN.hpMult = 122 / 12;   // Pump Queen: 122 HP at level 2
   const enemyMaxHp = (kind, zoneId) => Math.max(1, Math.round(heroHealthCap(10, zoneLevel(zoneId)) * (ENEMY[kind].hpMult ?? 1)));
   const ET = d => ENEMY[d.kind || 'drip'];   // an enemy's type (rules)
   // Scav sheets are cut to the hero's scale (277 px tall ≈ HERO_H tiles): ax = feet centre, foot = px from the cell bottom to the soles
@@ -1603,9 +1529,6 @@
   const FOE_PX = 128;
   const SPORE_ART = { idle: {frames:  1,  cellW:  146,  cellH:  138,  ax:  78,  foot:  3}, popup: {frames:  4,  cellW:  157,  cellH:  175,  ax:  85,  foot:  3},   // popup 0 = disguised as a mushroom
                       walk: {frames:  4,  cellW:  145,  cellH:  149,  ax:  75,  foot:  3}, attack: {frames:  4,  cellW:  160,  cellH:  162,  ax:  84,  foot:  3}, hurt: {frames:  2,  cellW:  162,  cellH:  152,  ax:  82,  foot:  3} };
-  const CRAWLER_ART = { idle: { frames: 1, cellW: 174, cellH: 142, ax: 87, foot: 4 }, hidden: { frames: 1, cellW: 180, cellH: 106, ax: 90, foot: 4 },
-                        emerge: { frames: 4, cellW: 181, cellH: 190, ax: 90, foot: 4 }, walk: { frames: 4, cellW: 183, cellH: 150, ax: 91, foot: 9 },
-                        pounce: { frames: 4, cellW: 191, cellH: 182, ax: 95, foot: 9 }, hurt: { frames: 2, cellW: 180, cellH: 134, ax: 90, foot: 8 } };   // 0 crouch, 1-2 airborne, 3 landing
   const LOADER_ART = { idle: {frames:  1,  cellW:  340,  cellH:  325,  ax:  173,  foot:  3}, walk: {frames:  4,  cellW:  317,  cellH:  303,  ax:  161,  foot:  3},
                        whip: {frames:  4,  cellW:  437,  cellH:  349,  ax:  300,  foot:  3}, slam: {frames:  4,  cellW:  342,  cellH:  324,  ax:  172,  foot:  3}, hurt: {frames:  2,  cellW:  367,  cellH:  304,  ax:  207,  foot:  3} };
 
@@ -1649,7 +1572,7 @@
     heroMotherSide: 'art/hero/heroMotherSide.webp', heroMotherDown: 'art/hero/heroMotherDown.webp', heroMotherUp: 'art/hero/heroMotherUp.webp',   // Mothersword attacks
     heroBananoSide: 'art/hero/heroBananoSide.png', heroBananoDown: 'art/hero/heroBananoDown.png', heroBananoUp: 'art/hero/heroBananoUp.png',   // baNano Sword attacks
     ground:       'art/world/ground/ground.webp',   // seamless street floor, no joints (repeats every 6 x 6 tiles)
-    groundSlums: 'art/world/ground/groundSlums.jpg', groundFactory: 'art/world/ground/groundFactory.jpg', groundLake: 'art/world/ground/groundLake.jpg', groundWasteland: 'art/world/ground/groundWasteland.jpg', groundPit: 'art/world/ground/groundPit.jpg',   // zone floors, same repeat
+    groundSlums: 'art/world/ground/groundSlums.jpg', groundFactory: 'art/world/ground/groundFactory.jpg', groundLake: 'art/world/ground/groundLake.jpg',   // zone floors, same repeat
     forestTL: 'art/world/big/forestTL.webp', forestTR: 'art/world/big/forestTR.webp', forestBL: 'art/world/big/forestBL.webp', forestBR: 'art/world/big/forestBR.webp',   // big forest grove quarters (see BIG)
     factoryTL: 'art/world/big/factoryTL.webp', factoryTR: 'art/world/big/factoryTR.webp', factoryBL: 'art/world/big/factoryBL.webp', factoryBR: 'art/world/big/factoryBR.webp',   // big factory quarters
     lakeTL: 'art/world/big/lakeTL.webp', lakeTR: 'art/world/big/lakeTR.webp', lakeBL: 'art/world/big/lakeBL.webp', lakeBR: 'art/world/big/lakeBR.webp',   // toxic lake quarters (see LAKE)
@@ -1681,8 +1604,7 @@
     sporelingIdle: 'art/enemies/sporeling/sporelingIdle.webp', sporelingPopup: 'art/enemies/sporeling/sporelingPopup.webp', sporelingWalk: 'art/enemies/sporeling/sporelingWalk.webp',
     sporelingAttack: 'art/enemies/sporeling/sporelingAttack.webp', sporelingHurt: 'art/enemies/sporeling/sporelingHurt.webp', sporelingPortrait: 'art/enemies/sporeling/sporelingPortrait.webp', sporeCloud: 'art/enemies/sporeling/sporeCloud.webp',
     loaderIdle: 'art/enemies/loader/loaderIdle.webp', loaderWalk: 'art/enemies/loader/loaderWalk.webp', loaderWhip: 'art/enemies/loader/loaderWhip.webp', loaderSlam: 'art/enemies/loader/loaderSlam.webp',
-    loaderHurt: 'art/enemies/loader/loaderHurt.webp', loaderPortrait: 'art/enemies/loader/loaderPortrait.webp', sporeSac: 'art/items/loot/sporeSac.webp', copperWire: 'art/items/loot/copperWire.webp', neonMoss: 'art/items/loot/neonMoss.webp', sludgeCrystal: 'art/items/loot/sludgeCrystal.webp', glowcapTruffle: 'art/items/loot/glowcapTruffle.webp',
-    copperWireNode: 'art/world/harvest/copperWireNode.webp', neonMossNode: 'art/world/harvest/neonMossNode.webp', sludgeCrystalNode: 'art/world/harvest/sludgeCrystalNode.webp', glowcapNode: 'art/world/harvest/glowcapNode.webp', loaderCore: 'art/items/loot/loaderCore.webp',
+    loaderHurt: 'art/enemies/loader/loaderHurt.webp', loaderPortrait: 'art/enemies/loader/loaderPortrait.webp', sporeSac: 'art/items/loot/sporeSac.webp', loaderCore: 'art/items/loot/loaderCore.webp',
     scavPortrait: 'art/enemies/scav/scavPortrait.png', scavSpray: 'art/enemies/scav/scavSpray.png',   // portrait, toxic spray cone (points left, nozzle at the right end)
     mutagen: 'art/items/loot/mutagen.png', tarOrb: 'art/items/loot/tarOrb.png', aiChip: 'art/items/loot/aiChip.png',   // item icons
     // city buildings (loaded, placed once the layout is drawn)
@@ -1700,14 +1622,7 @@
     fallenSatellite: 'art/buildings/fallenSatellite.webp', containerStack: 'art/buildings/containerStack.webp',   // scenery (decorative)
    // destroyed buildings (decorative)   // scrap resource icon
     heroPortrait: 'art/hero/heroPortrait.webp',
-    crawlerIdle: 'art/enemies/crawler/crawlerIdle.webp', crawlerHidden: 'art/enemies/crawler/crawlerHidden.webp', crawlerEmerge: 'art/enemies/crawler/crawlerEmerge.webp',
-    crawlerWalk: 'art/enemies/crawler/crawlerWalk.webp', crawlerPounce: 'art/enemies/crawler/crawlerPounce.webp', crawlerHurt: 'art/enemies/crawler/crawlerHurt.webp',
-    crawlerPortrait: 'art/enemies/crawler/crawlerPortrait.webp',
   };
-  // big 2 x 3 floor decals: 4 per zone type (BIG_DECALS), art/world/decals/<sheet>1-4.webp
-  const BIG_DECALS = { city: 'cityBig', slums: 'slumsBig', greaser: 'greaserBig', factoryIn: 'factoryInBig', factory: 'factoryBig',
-                       wasteland: 'wastelandBig', pit: 'pitBig', lake: 'lakeBig', forest: 'forestBig' };   // deep forest: none yet (sheet being redone)
-  for (const sheet of Object.values(BIG_DECALS)) for (let i = 1; i <= 4; i++) ART_SRC[sheet + i] = `art/world/decals/${sheet}${i}.webp`;
   const ART = Object.fromEntries(Object.entries(ART_SRC).map(([k, src]) => { const im = new Image(); im.src = src; return [k, im]; }));
   const ready = im => im && im.complete && im.naturalWidth > 0;
   // pictures load from the moment the page opens (the start screen doubles as the loading screen); a missing file counts as done
@@ -1931,8 +1846,6 @@
     const prices = { ...startPrices(), ...renameKeys(saved.prices) };
     const startLevels = () => Object.fromEntries(SHOP_ITEMS.filter(it => it.patch).map(it => [it.name, 0]));
     const levels = { ...startLevels(), ...renameKeys(saved.levels) };   // installed level of each patch
-    const rebasePatch = (name) => { let p = startPrices()[name]; for (let i = 0; i < (levels[name] || 0); i++) p = raisePrice(p); prices[name] = p; };   // Social's start price changed (90 → 80$): rebuild it from the installed level
-    rebasePatch('Social');
     deals = saved.deals && saved.deals.every(d => d && d.type) ? saved.deals : newDeals();
     const quests = saved.quests ? saved.quests.map(q => q.kind === 'delivery' ? { ...q, until: q.left ?? 0 } : q) : [];   // active quests: { name, desc, rare, from }
     // ---- the Rogue's quests (after her tutorial is done or skipped) -------------------------------------------------
@@ -2019,7 +1932,6 @@
     // each row: { left, right, act() -> message }
     function rows() {
       if (!ui) return [];
-      if (ui.kind === 'shop' && SHOP_TABS[tabOf()].key === 'resources') return resourceRows();
       if (ui.kind === 'shop') return shopList(SHOP_TABS[tabOf()].key).map(it => {
         const gains = Object.entries(it.gain);
         const owned = (it.kind || it.slot || it.class === 'bag') && (carried().some(x => x.name === it.name) || bag === it.name);   // equipment: shown as owned, can still be bought (asks first)
@@ -2320,7 +2232,7 @@
     function snapshot() {
       return { x: player.x, y: player.y, fx: facing.x, fy: facing.y, stats: statsNoBuffs(), deals, prices: { ...prices }, dealsDone, foodBought, itemsV2: true, sets: [...activeSets], promotion, kills, dripKills, queenKills, weaponBought, rogueDone: [...rogueDone], cheated: runCheated, quests: quests.map(q => q.kind === 'delivery' ? { ...q, left: Math.max(0, q.until - gameTime) } : { ...q }),
                inventory: inventory.map(it => ({ ...it })), equipped: equipped.map(it => ({ ...it })), skills: [...skills],
-               weaponsV: 2, areaName, restReadyAt, levels: { ...levels }, manaCap: CAP_BASE.mana, energyCap: CAP_BASE.energy, level: hero.level, exp: hero.exp, strengthLevel: hero.level, bag, talents: JSON.parse(JSON.stringify(talents)), ceoCalls, tut, tutV: 3, tutN, tutQuiz: { ...tutQuiz }, discovered: [...discovered], enemies: saveEnemies(), harvest: saveHarvest(),
+               weaponsV: 2, areaName, restReadyAt, levels: { ...levels }, manaCap: CAP_BASE.mana, energyCap: CAP_BASE.energy, level: hero.level, exp: hero.exp, strengthLevel: hero.level, bag, talents: JSON.parse(JSON.stringify(talents)), ceoCalls, tut, tutV: 3, tutN, tutQuiz: { ...tutQuiz }, discovered: [...discovered], enemies: saveEnemies(),
                piles: piles.map(p => ({ ...p, gear: p.gear.map(it => ({ ...it })), items: p.items.map(it => ({ ...it })), left: Math.max(0, p.until - gameTime), until: undefined })) };
     }
     function applySave(s) {
@@ -2334,7 +2246,7 @@
       dripKills = s.dripKills || 0; queenKills = s.queenKills || 0; weaponBought = !!s.weaponBought; rogueDone.clear(); for (const id of s.rogueDone || []) rogueDone.add(id);
       quests.length = 0; quests.push(...(s.quests || []).map(q => q.kind === 'delivery' ? { ...q, until: gameTime + (q.left ?? 0) } : q));
       for (const k in prices) delete prices[k]; for (const k in levels) delete levels[k];
-      Object.assign(prices, startPrices(), renameKeys(s.prices)); Object.assign(levels, startLevels(), renameKeys(s.levels)); rebasePatch('Social');
+      Object.assign(prices, startPrices(), renameKeys(s.prices)); Object.assign(levels, startLevels(), renameKeys(s.levels));
       inventory.length = 0; inventory.push(...renameItems(s.inventory));
       bag = s.bag !== undefined ? s.bag : !inventory.length ? null : inventory.length <= 2 ? 'BackBag' : 'BackBag X';   // saves from before bags: a bag that fits what they carry
       if (s.bag === undefined && bag === 'BackBag X') stats.charisma += 1;
@@ -2355,7 +2267,7 @@
       restReadyAt = s.restReadyAt || 0; rootedUntil = 0; slowUntil = 0; poisonUntil = 0; floaters.length = 0; closePanels();
       discovered.clear(); for (const id of s.discovered || ['0:0']) discovered.add(AREA_ALIAS[id] || id);
       const sa = AREA_ALIAS[s.areaName] || s.areaName, area = AREAS[sa] ? sa : '0:0';
-      areaName = area; spawnAllDrips(); loadEnemies(s.enemies); loadHarvest(s.harvest);   // enemies come back as saved (older saves: all spawned)
+      areaName = area; spawnAllDrips(); loadEnemies(s.enemies);   // enemies come back as saved (older saves: all spawned)
       enterArea(area, s.x ?? START.x, s.y ?? START.y, s.fx || 1, true);
       facing.x = s.fx ?? 1; facing.y = s.fy ?? 0;
       if (!free(player.x, player.y)) { player.x = START.x; player.y = START.y; fromX = player.x; fromY = player.y; }
@@ -2402,68 +2314,34 @@
       lastAutosave = lastWrite = Date.now(); writeSlot(1);
     }
     setInterval(() => { if (Date.now() - lastAutosave >= AUTOSAVE_MS) autosave(); }, 10000);
-    // Scrap Dealer window: one row per inventory slot. Armor, weapons and bags become Scrap (no money); the rest isn't bought here.
-    const scrapFor = def => Math.round((def.price || 0) * SCRAP_DEALER.scrapPerCost);
-    function scrapRoomAfter(idx) {   // how much Scrap fits once the item in slot idx has left the bag
-      const max = (itemDef('Scrap') || {}).stack || 1;
-      let room = (invSlots() - (inventory.length - 1)) * max;
-      inventory.forEach((x, i) => { if (i !== idx && x.name === 'Scrap' && !x.quest) room += Math.max(0, max - (x.count || 1)); });
-      return room;
-    }
+    // Scrap Dealer window: first row buys 1 scrap, then one row per inventory slot to sell it
     function scrapRows() {
-      const done = msg => { ui.cursor = Math.max(0, Math.min(ui.cursor, inventory.length - 1)); return msg; };
-      return inventory.map((it, idx) => {
+      const S = SCRAP_DEALER, done = msg => { ui.cursor = Math.min(ui.cursor, inventory.length); return msg; };
+      const list = [{ left: 'buy Scrap', item: { name: 'Scrap' }, pic: 'scrap', right: `-${S.scrapPrice}$`, act() {
+        if (stats.money < S.scrapPrice) return `Not enough money (${S.scrapPrice}$).`;
+        if (addItem('Scrap', 1)) return fullMsg();
+        stats.money -= S.scrapPrice; return `Bought 1 Scrap for ${S.scrapPrice}$.`;
+      } }];
+      inventory.forEach((it, idx) => {
         const def = itemDef(it.name) || {}, n = it.count || 1;
-        const row = { left: `scrap ${it.name}`, item: { name: it.name, count: n }, pic: it.name };
-        if ((def.class === 'equipment' || def.class === 'bag') && !it.quest) {
-          const scrap = scrapFor(def);
-          row.right = `+${scrap} scrap`;
+        const row = { left: `sell ${it.name}`, item: { name: it.name, count: n }, pic: it.name };
+        if (def.class === 'equipment' || def.class === 'bag') {
+          const money = Math.round(def.price * S.equipShare), scrap = Math.floor(def.price * S.scrapPerCost);
+          row.right = `+${money}$${scrap ? `  +${scrap} scrap` : ''}`;
           row.act = () => {
-            if (inventory[idx] !== it) return '';
-            if (scrap > scrapRoomAfter(idx)) return `No room for ${scrap} Scrap in your ${bag || 'hands'}.`;
-            inventory.splice(idx, 1);
-            if (scrap) addItem('Scrap', scrap);
-            return done(`Scrapped ${it.name}: +${scrap} Scrap.`);
+            inventory.splice(idx, 1); stats.money += money;
+            const lost = scrap ? addItem('Scrap', scrap) : 0;
+            return done(`Sold ${it.name}: +${money}$${scrap ? `, +${scrap - lost} scrap` : ''}${lost ? ` (${lost} scrap didn't fit)` : ''}.`);
           };
+        } else if (def.class === 'resource') {
+          const money = (def.value || 0) * n;
+          row.right = `×${n}  +${money}$`;
+          row.act = () => { inventory.splice(idx, 1); stats.money += money; return done(`Sold ${n} ${it.name}: +${money}$.`); };
         } else {
           row.right = "won't buy";
-          row.act = () => SHOP_SELL.classes.includes(def.class) ? `The dealer only takes gear. Sell ${it.name} at the ATB-Market in the city (Resources tab).` : `The dealer doesn't buy ${def.class === 'food' ? 'food' : 'that'}.`;
+          row.act = () => `The dealer doesn't buy ${def.class === 'skill' ? 'skills' : 'that'}.`;
         }
-        return row;
-      });
-    }
-    // ATB-Market, Resources tab: a row to buy Tar, then one row per sellable stack in the bag (Space: a small sell 1 / sell all menu)
-    const sellable = it => it && !it.quest && SHOP_SELL.classes.includes((itemDef(it.name) || {}).class) && sellUnit(it.name) > 0;
-    function sellOpts(idx) {
-      const it = inventory[idx], n = it.count || 1, u = sellUnit(it.name);
-      return n > 1 ? [{ label: `Sell 1  +${u}$`, act: 'shopSell', n: 1 }, { label: `Sell all (${n})  +${u * n}$`, act: 'shopSell', n }]
-                   : [{ label: `Sell  +${u}$`, act: 'shopSell', n: 1 }];
-    }
-    function shopSell(idx, name, n) {
-      const it = inventory[idx]; if (!it || it.name !== name || !sellable(it)) return '';
-      n = Math.min(n, it.count || 1); const u = sellUnit(name), left = (it.count || 1) - n;
-      if (left > 0) it.count = left; else inventory.splice(idx, 1);
-      stats.money += u * n; renderStats();
-      if (ui && ui.kind === 'shop') ui.cursor = Math.max(0, Math.min(ui.cursor, rows().length - 1));
-      return `Sold ${n > 1 ? n + ' × ' : ''}${name}: +${u * n}$.`;
-    }
-    function resourceRows() {
-      const list = SHOP_SELL.buy.map(name => {
-        const def = itemDef(name) || {}, price = def.value || 0;
-        return { left: name, shopItem: { it: def, price, buy: true }, act() {
-          if (stats.money < price) return `Not enough money for ${name}.`;
-          if (addItem(name, 1)) return fullMsg();
-          stats.money -= price; renderStats(); return `Bought 1 ${name} for ${price}$.`;
-        } };
-      });
-      inventory.forEach((it, idx) => {
-        if (!sellable(it)) return;
-        const def = itemDef(it.name) || {}, n = it.count || 1, u = sellUnit(it.name);
-        list.push({ left: `sell ${it.name}`, shopItem: { it: def, price: u, sell: { n, idx } }, act() {
-          const r = rowRects.find(b => !b.panel && b.i === ui.cursor && b.tab == null) || { x: canvas.width / 2, y: canvas.height / 2, w: 0, h: 0 };
-          const D = menuDims(); itemMenu = { shop: true, idx, name: it.name, x: r.x + r.w - D.w - 150, y: r.y + r.h - 16, cursor: 0, opts: sellOpts(idx) };   // just left of the price, under the row
-          return '';
-        } });
+        list.push(row);
       });
       return list;
     }
@@ -2534,20 +2412,6 @@
           const alive = drips.filter(d => !d.dead).sort((a, b) => cheb(a.x, a.y, player.x, player.y) - cheb(b.x, b.y, player.x, player.y));
           if (!alive.length) { drips.forEach((d, i) => { drips[i] = makeDrip(d.spawn, areaName, d.kind); }); return 'The enemies are back.'; }
           drip = alive[0]; damageDrip(drip.hp, 'cheat', '#8a8a8a'); return 'Drip defeated. His loot is on the puddle.';
-        }),
-        (() => {   // Scrap Crawlers (testing): wake the nearest pack, or defeat the nearest awake one
-          const cr = drips.filter(d => d.kind === 'crawler' && !d.dead).sort((a, b) => cheb(a.x, a.y, player.x, player.y) - cheb(b.x, b.y, player.x, player.y));
-          const awake = cr.filter(d => !d.hidden);
-          return row('Crawlers', !cr.length ? 'none alive here' : awake.length ? `defeat nearest (${awake.length} awake)` : `wake nearest pack (${cr.length} hidden)`, () => {
-            if (!cr.length) return 'No living Scrap Crawlers in this zone.';
-            if (awake.length) { drip = awake[0]; damageDrip(drip.hp, 'cheat', '#8a8a8a'); return 'Scrap Crawler defeated.'; }
-            revealCrawler(cr[0]); return 'The nearest pack is awake.';
-          });
-        })(),
-        row('go to wasteland', 'industrial wasteland 3:-3', () => {
-          ui = null; WALLS = AREAS['3:-3'].walls;
-          let x = 3, y = Math.floor(ROWS / 2); for (let r = 0; r < 12 && !free(x, y); r++) x++;
-          enterArea('3:-3', x, y, 1);
         }),
         (() => {   // teleport through the zones in map order
           const ids = Object.keys(ZONE_LIST), next = ids[(ids.indexOf(areaName) + 1) % ids.length];
@@ -2953,7 +2817,6 @@
         if (lootable()) { playSfx('interact'); lootTarget = lootable(); openWindow('loot'); return; }
         const w = wallAt(player.x + facing.x, player.y + facing.y);
         if (w && w.opens) { playSfx('interact'); openWindow(w.opens); return; }
-        const hv = harvestable(); if (hv) { startHarvest(hv); return; }   // a glowing pile here or in front: hold to harvest
       }
       heroAttack();
     }
@@ -2967,8 +2830,7 @@
       const n = it.count || 1, def = itemDef(it.name) || {}, opts = [];
       const use = it.quest ? null : def.class === 'equipment' ? 'Equip' : def.class === 'food' ? 'Eat' : def.class === 'skill' ? 'Learn' : def.class === 'bag' ? 'Wear' : def.consume ? 'Use' : null;
       if (use) opts.push({ label: use, act: 'use' });
-      if (ui && ui.kind === 'scrap') { const row = scrapRows()[idx]; if (row && row.right !== "won't buy") opts.push({ label: `Scrap  ${row.right}`, act: 'sell' }); }
-      if (ui && ui.kind === 'shop' && SHOP_TABS[tabOf()].key === 'resources' && sellable(it)) opts.push(...sellOpts(idx));
+      if (ui && ui.kind === 'scrap') { const row = scrapRows()[idx + 1]; if (row && row.right !== "won't buy") opts.push({ label: `Sell  ${row.right.replace(/\s+/g, ' ').trim()}`, act: 'sell' }); }
       if (!it.quest) { if (n > 1) opts.push({ label: 'Throw away 1', n: 1 }, { label: `Throw away all (${n})`, n }); else opts.push({ label: 'Throw away', n: 1 }); }
       if (!opts.length) { if (panels.inventory) panels.inventory.msg = `That ${it.name} is for a delivery. Bring it to the Netizen Chef.`; itemMenu = null; return; }
       itemMenu = { idx, name: it.name, x, y, cursor: 0, opts };
@@ -2986,8 +2848,7 @@
       }
       if (!o || !inventory[m.idx] || inventory[m.idx].name !== m.name) return;
       if (o.act === 'use') { if (panels.inventory) { focus = 'inventory'; panels.inventory.cursor = m.idx; useSelected(panels.inventory); } return; }
-      if (o.act === 'shopSell') { const msg = shopSell(m.idx, m.name, o.n); if (ui) ui.msg = msg; if (panels.inventory) panels.inventory.msg = msg; return; }
-      if (o.act === 'sell') { const row = ui && ui.kind === 'scrap' && scrapRows()[m.idx]; if (row) { const msg = row.act(); if (panels.inventory) panels.inventory.msg = msg || ''; ui.msg = msg || ''; renderStats(); } return; }
+      if (o.act === 'sell') { const row = ui && ui.kind === 'scrap' && scrapRows()[m.idx + 1]; if (row) { const msg = row.act(); if (panels.inventory) panels.inventory.msg = msg || ''; ui.msg = msg || ''; renderStats(); } return; }
       const keep = ui && ui.kind !== 'throw' ? ui : null;   // throwing from inside a window (e.g. the Scrap Dealer): come back to it
       ui = { kind: 'throw', cursor: 1, msg: '', back: keep }; focus = 'window'; held.clear(); tapped.clear(); ui.throwIdx = m.idx; ui.throwName = m.name; ui.throwN = o.n;   // cursor starts on "No"
     }
@@ -3011,7 +2872,7 @@
         const ry = y + 8 + i * D.rowH;
         if (i === m.cursor) { ctx.fillStyle = 'rgba(255, 220, 0, 0.14)'; ctx.fillRect(x + 6, ry, D.w - 12, D.rowH - 4); }
         for (let fs = D.font; fs > 12; fs--) { ctx.font = (o.act ? '600 ' : '') + fs + 'px ' + MONO; if (ctx.measureText(o.label).width <= D.w - 36) break; }
-        ctx.fillStyle = o.act === 'use' ? '#9dff5c' : o.act === 'sell' || o.act === 'shopSell' ? '#f5c542' : i === m.cursor ? '#fff' : '#cfcfcf';
+        ctx.fillStyle = o.act === 'use' ? '#9dff5c' : o.act === 'sell' ? '#f5c542' : i === m.cursor ? '#fff' : '#cfcfcf';
         ctx.fillText(o.label, x + 18, ry + D.rowH / 2 - 2);
       });
     }
@@ -3136,25 +2997,13 @@
     const statesPerRow = P => Math.max(1, Math.floor(((P.w || 300 * P.k) + STATE_GAP * P.k) / ((STATE_ICON + STATE_GAP) * P.k)));
     // buffs and debuffs (Top-1 bonuses, injured, slowed, rooted) in a row right under the hero plate, left-aligned with it;
     // timed ones show the seconds left. Wraps to a second row if there are many.
-    const dimIcons = new Map();   // greyed status icons, made once (a canvas filter every frame is slow on phones)
-    function dimIcon(im) {
-      let c = dimIcons.get(im); if (c) return c;
-      c = document.createElement('canvas'); c.width = im.naturalWidth; c.height = im.naturalHeight;
-      const g = c.getContext('2d'); g.filter = 'grayscale(1) brightness(0.6)'; g.drawImage(im, 0, 0);
-      if (g.filter !== 'grayscale(1) brightness(0.6)') {   // no canvas filters (older Safari): grey it by hand
-        try { const d = g.getImageData(0, 0, c.width, c.height), p = d.data;
-        for (let i = 0; i < p.length; i += 4) { const v = (0.3 * p[i] + 0.59 * p[i + 1] + 0.11 * p[i + 2]) * 0.6; p[i] = p[i + 1] = p[i + 2] = v; }
-        g.putImageData(d, 0, 0); } catch (e) {}
-      }
-      dimIcons.set(im, c); return c;
-    }
     function drawStates() {
       if (mobUI() && !phudEl.offsetHeight) return;   // the plate is hidden (e.g. behind a window): so is its buff row
       const list = heroStates(), P = plateBox(), k = P.k, size = STATE_ICON * k, gap = STATE_GAP * k, perRow = statesPerRow(P);
       list.forEach((s, i) => {
         const def = STATES[s.key], x = P.x + (i % perRow) * (size + gap), y = P.y + P.h + 6 * k + Math.floor(i / perRow) * (size + gap), im = ART[def.icon];
         ctx.save();
-        if (ready(im)) { ctx.imageSmoothingQuality = 'high'; ctx.drawImage(def.dim ? dimIcon(im) : im, x, y, size, size); }
+        if (ready(im)) { ctx.imageSmoothingQuality = 'high'; if (def.dim) { ctx.filter = 'grayscale(1) brightness(0.6)'; } ctx.drawImage(im, x, y, size, size); ctx.filter = 'none'; }
         else {   // placeholder badge until the icon art exists
           ctx.fillStyle = 'rgba(27, 34, 51, 0.9)'; rr(x, y, size, size, 6 * k); ctx.fill();
           ctx.strokeStyle = def.color; ctx.lineWidth = 2.5 * k; ctx.stroke();
@@ -3181,7 +3030,7 @@
     // enemy footprint: 1 tile, or size x size tiles for big ones (Overgrown Loader: x..x+1, y-1..y; x, y = bottom-left tile)
     const foeSize = d => ENEMY[d.kind || 'drip'].size || 1;
     // time per tile: Burning Drips are faster, the Pump Queen walks faster in stage 2
-    const stepOf = d => d.leapAt != null && d.leapAt === d.stepStart ? CRAWLER.leapMs : d.burning ? QUEEN.burnStepMs : d.kind === 'queen' ? QUEEN.stepMs[(d.stage || 1) - 1] : ET(d).stepMs;
+    const stepOf = d => d.burning ? QUEEN.burnStepMs : d.kind === 'queen' ? QUEEN.stepMs[(d.stage || 1) - 1] : ET(d).stepMs;
     // can't take a step right now: stuck in Magic Tar, or waiting out a slow (Magic Nozzle) after the last step
     const foeHeld = d => gameTime < (d.stunUntil || 0) || gameTime < (d.slowHold || 0);
     const foeHeadY = d => d.kind === 'loader' ? 2.4 : d.kind === 'queen' ? QUEEN.headY : 0.9;   // floating text height over its feet row, tiles
@@ -3215,7 +3064,6 @@
         for (const f of AREAS[id].extraFoes || []) zoneDrips[id].push(makeDrip(f.spawn, id, f.kind));   // no twins (e.g. the satellite's drones)
       }
       drips = zoneDrips[areaName] || []; drip = null;
-      resetHarvest();   // every harvest pile fresh (a save puts them back after)
     }
     // enemy timers in saves. Game time restarts at 0 on every page load, so times are stored relative:
     // how long ago a Drip died and how long until he respawns. Living Drips keep their health.
@@ -3270,7 +3118,7 @@
                          : { home: sx, target: sx + dir };
       return { kind, patrol, home: { x: sx, y: sy }, lowUntil: 0, cloakUntil: 0, repairNext: 0, repaired: false, returning: false, flee: null, ramAt: -1e9, ramDir: null, x: sx, y: sy, fromX: sx, fromY: sy, stepStart: -1e9, hp: enemyMaxHp(kind, zoneId), maxHp: enemyMaxHp(kind, zoneId), mana: 0, manaT: 0, spawn, nextSpray: 0, spray: null,
                aggro: false, nextAttack: 0, attackStart: -1e9, hitAt: 0, hurtStart: -1e9, dead: false, deadAt: 0, lookX: -1,
-               hidden: kind === 'spore' || kind === 'crawler', popStart: -1e9, act: null, nextWhip: 0, stage: 1 };
+               hidden: kind === 'spore', popStart: -1e9, act: null, nextWhip: 0, stage: 1 };
     }
 
     function updateDrips() {
@@ -3313,7 +3161,6 @@
       if (drip.kind === 'scav') { updateScav(); return; }
       if (drip.kind === 'drone') { updateDrone(); return; }
       if (drip.kind === 'spore') { updateSpore(); return; }
-      if (drip.kind === 'crawler') { updateCrawler(); return; }
       if (drip.kind === 'loader') { updateLoader(); return; }
       if (drip.kind === 'queen') { updateQueen(); return; }
       const dist = cheb(player.x, player.y, drip.x, drip.y);
@@ -3468,69 +3315,6 @@
       if (d.hitAt || t - d.attackStart < 700 || t - d.stepStart < S.stepMs) return;
       if (dist === 1) { if (t >= d.nextAttack) { d.attackStart = t; d.hitAt = t + S.windupMs; d.nextAttack = t + S.attackMs; } return; }
       if (foeHeld(d)) return;
-      groundStep(d, player.x, player.y);
-    }
-    // ---- Scrap Crawler (see CRAWLER) ----
-    function revealCrawler(d) {   // it and its hidden pack-mates within 4 tiles burst out of their scrap piles
-      const t = gameTime;
-      for (const o of drips) if (o.kind === 'crawler' && !o.dead && o.hidden && cheb(o.x, o.y, d.x, d.y) <= 4) {
-        o.hidden = false; o.aggro = true; o.returning = false; o.act = null; o.popStart = t + (o === d ? 0 : 80 + Math.random() * 220);
-        o.nextAttack = o.popStart + CRAWLER.popMs; o.nextPounce = o.popStart + CRAWLER.popMs + 300; if (player.x !== o.x) o.lookX = player.x > o.x ? 1 : -1;
-      }
-    }
-    function pounceLine(d, dx, dy) {   // up to pounceLen tiles in front of it, stopping before walls and other enemies
-      const out = [];
-      for (let i = 1; i <= CRAWLER.pounceLen; i++) {
-        const x = d.x + dx * i, y = d.y + dy * i;
-        if (!free(x, y) || exitAt(x, y) || takenByDrip(x, y, d)) break;
-        if (dx && dy && (!free(x - dx, y) || !free(x, y - dy))) break;   // no corner cutting
-        out.push([x, y]);
-      }
-      return out;
-    }
-    function updateCrawler() {
-      const C = CRAWLER, d = drip, t = gameTime, dist = cheb(player.x, player.y, d.x, d.y);
-      if (d.hidden) { if (dist <= C.reveal && stats.health > 0) revealCrawler(d); return; }
-      if (t - d.popStart < C.popMs) return;   // bursting out
-      const a = d.act;
-      if (a && a.kind === 'pounce') {   // holding the telegraph, then the leap
-        if (t < a.hitAt) return;
-        d.act = null; d.nextPounce = t + C.pounceCdMs;
-        const hit = stats.health > 0 && a.tiles.some(([x, y]) => x === player.x && y === player.y);
-        let land = null;
-        for (const [x, y] of a.tiles) { if ((x === player.x && y === player.y) || takenByDrip(x, y, d)) break; land = [x, y]; }
-        if (land) { d.fromX = d.x; d.fromY = d.y; d.x = land[0]; d.y = land[1]; d.stepStart = d.leapAt = t; }
-        d.landAt = t + C.leapMs;
-        if (hit) {
-          hurtHero(npcDamage(C.pounceMult), '#e5484d');
-          if (stats.health > 0) { slowAmt = t < slowUntil ? Math.max(slowAmt, C.slow) : C.slow; slowUntil = Math.max(slowUntil, t + C.slowMs); }
-        }
-        return;
-      }
-      if (t - d.stepStart < (d.leapAt === d.stepStart ? C.leapMs + 200 : 0)) return;   // just landed
-      if (d.returning) {   // walks home, then buries itself again
-        if (t - d.stepStart < C.stepMs) return;
-        const home = (x, y) => cheb(x, y, d.home.x, d.home.y);
-        if ((d.x === d.home.x && d.y === d.home.y) || !groundStep(d, d.home.x, d.home.y, home)) { d.returning = false; d.hidden = true; d.aggro = false; if (target === d) target = null; }
-        return;
-      }
-      if (cheb(d.x, d.y, d.home.x, d.home.y) >= C.leash || stats.health <= 0) { d.returning = true; d.aggro = false; d.hitAt = 0; return; }
-      if (player.x !== d.x) d.lookX = player.x > d.x ? 1 : -1;
-      if (d.hitAt && t >= d.hitAt) {   // the bite lands if the hero is still next to it
-        d.hitAt = 0;
-        if (cheb(player.x, player.y, d.x, d.y) <= 1 && stats.health > 0) hurtHero(npcDamage(C.biteMult), '#e5484d');
-      }
-      if (d.hitAt || t - d.attackStart < 500) return;
-      if (dist === 1) { if (t >= d.nextAttack) { d.attackStart = t; d.hitAt = t + C.biteWindupMs; d.nextAttack = t + C.biteEveryMs; } return; }
-      const dx = player.x - d.x, dy = player.y - d.y;
-      if (dist >= C.pounceRange[0] && dist <= C.pounceRange[1] && t >= (d.nextPounce || 0) && !foeHeld(d) && (!dx || !dy || Math.abs(dx) === Math.abs(dy))) {
-        const tiles = pounceLine(d, Math.sign(dx), Math.sign(dy));
-        if (tiles.length >= dist) {   // a clear line all the way to the hero
-          d.act = { kind: 'pounce', start: t, hitAt: t + C.windupMs, tiles, dir: [Math.sign(dx), Math.sign(dy)] };
-          d.attackStart = -1e9; return;
-        }
-      }
-      if (t - d.stepStart < C.stepMs || foeHeld(d)) return;
       groundStep(d, player.x, player.y);
     }
     // Poison on the hero (Sporelings): ticks every second while it lasts, stops health regen
@@ -3727,7 +3511,7 @@
     }
 
     // ---- Mav-1K drone (see DRONE) ----
-    const cloaked = d => (d.kind === 'drone' && d.cloakUntil > gameTime) || ((d.kind === 'spore' || d.kind === 'crawler') && d.hidden);   // can't be targeted or hit
+    const cloaked = d => (d.kind === 'drone' && d.cloakUntil > gameTime) || (d.kind === 'spore' && d.hidden);   // can't be targeted or hit
     const droneLow = d => d.kind !== 'drone' || gameTime < d.lowUntil;   // melee can only reach a drone right after its ram
     const droneFree = (x, y, d) => inGrid(x, y) && !exitAt(x, y) && !takenByDrip(x, y, d) && !(x === player.x && y === player.y);
     function droneStep(d, tx, ty) {   // one step (8 directions, over walls and water) toward a tile; false if nothing gets closer
@@ -3826,7 +3610,6 @@
     const npcDamage = (mult, lvl = npcLevel()) => Math.round(heroHealthCap(10, lvl) * mult * levelDmgFactor(lvl - hero.level));
     // an enemy's hit lands on the hero (0 damage: a grey "0", no blink)
     function hurtHero(dmg, color) {
-      harvesting = null;   // any hit stops a harvest
       if (dmg <= 0) { float('0', '#8a8a8a', player.x + 0.5, player.y - 0.6); return; }
       const pc = tal('chrome', 0);   // Pain Correction
       if (pc && stats.health <= CAPS.health * [0.10, 0.15, 0.20, 0.25][pc - 1]) dmg = Math.max(1, Math.round(dmg * 0.5));
@@ -3852,115 +3635,6 @@
     const hitChance = (enemyLvl = npcLevel()) => enemyLvl < hero.level ? 1 : Math.max(0, Math.min(1, HIT_BASE + HIT_PER_PT * hitPts() - HIT_PER_LVL * (enemyLvl - hero.level)));
     const heroHits = () => Math.random() < hitChance();   // every enemy in a fight lives in the hero's zone, so has its level
     function heroMissed(d) { d.aggro = true; d.returning = false; float('miss', '#8a8a8a', d.x + (foeSize(d) === 2 ? 1 : 0.5), d.y - foeHeadY(d)); }
-    // ---- harvesting (HARVEST) ----
-    let harvestNodes = [], harvesting = null, spaceDown = false;   // harvesting: { node, start, x, y }
-    function resetHarvest() {   // new game / load / page open: every pile ready, tiles picked when the hero first enters the zone
-      harvestNodes = []; harvesting = null;
-      for (const K of HARVEST.kinds) {
-        const ids = Object.keys(ZONE_LIST).filter(id => K.zones.includes(ZONE_LIST[id]) && AREAS[id]);
-        for (let i = 0; i < ids.length; i += K.per) {
-          const zones = ids.slice(i, i + K.per);
-          harvestNodes.push({ id: `${K.key}:${zones[0]}`, K, zones, zone: zones[Math.floor(Math.random() * zones.length)], x: null, y: null, readyAt: 0, prev: null });
-        }
-      }
-    }
-    const saveHarvest = () => harvestNodes.map(n => ({ id: n.id, zone: n.zone, x: n.x, y: n.y, left: Math.max(0, n.readyAt - gameTime) }));
-    function loadHarvest(list) {
-      for (const h of list || []) { const n = harvestNodes.find(o => o.id === h.id); if (!n || !n.zones.includes(h.zone)) continue;
-        Object.assign(n, { zone: h.zone, x: h.x ?? null, y: h.y ?? null, readyAt: gameTime + (h.left || 0) }); }
-    }
-    function placeNode(n) {   // a tile in the current zone (n.zone === areaName): near an enemy's home, never on the last tile
-      const taken = (x, y) => (n.prev && n.prev.zone === areaName && n.prev.x === x && n.prev.y === y) || (x === player.x && y === player.y)
-        || harvestNodes.some(o => o !== n && o.zone === areaName && o.x === x && o.y === y);
-      const ok = (x, y) => free(x, y) && !exitAt(x, y) && !taken(x, y);
-      const homes = (zoneDrips[areaName] || []).filter(d => !d.summoned && d.home).map(d => d.home);
-      const [lo, hi] = HARVEST.near, near = [];
-      for (const h of homes) for (let y = h.y - hi; y <= h.y + hi; y++) for (let x = h.x - hi; x <= h.x + hi; x++)
-        if (cheb(x, y, h.x, h.y) >= lo && ok(x, y)) near.push([x, y]);
-      let pool = near;
-      if (!pool.length) for (let y = 1; y < ROWS - 1; y++) for (let x = 1; x < COLS - 1; x++) if (ok(x, y)) pool.push([x, y]);
-      const t = pool[Math.floor(Math.random() * pool.length)];
-      if (t) { n.x = t[0]; n.y = t[1]; }
-    }
-    function zoneNodes() {   // piles of the current zone, placed
-      const out = [];
-      for (const n of harvestNodes) if (n.zone === areaName) { if (n.x == null) placeNode(n); if (n.x != null) out.push(n); }
-      return out;
-    }
-    const nodeReady = n => gameTime >= n.readyAt;
-    function harvestable() {   // a ready pile under the hero or on the tile he faces
-      if (moving) return null;
-      const list = zoneNodes().filter(nodeReady);
-      return list.find(n => n.x === player.x && n.y === player.y) || list.find(n => n.x === player.x + facing.x && n.y === player.y + facing.y) || null;
-    }
-    const roomFor = name => { const def = itemDef(name) || {}, max = def.stack || 1;
-      return inventory.length < invSlots() || inventory.some(it => it.name === name && !it.quest && (it.count || 1) < max); };
-    function startHarvest(n) {
-      if (!roomFor(n.K.item)) { float(bag ? 'bag full' : 'no bag', '#e5484d', player.x + 0.5, player.y - 1.2); return; }
-      harvesting = { node: n, start: gameTime, x: player.x, y: player.y };
-    }
-    function updateHarvest() {   // every frame: cancel or finish the hold
-      const h = harvesting; if (!h) return;
-      const n = h.node;
-      if (!spaceDown || moving || player.x !== h.x || player.y !== h.y || anyOpen() || !nodeReady(n) || n.zone !== areaName || stats.health <= 0) { harvesting = null; return; }
-      if (gameTime - h.start < HARVEST.holdMs) return;
-      harvesting = null;
-      if (addItem(n.K.item, 1)) { float(bag ? 'bag full' : 'no bag', '#e5484d', player.x + 0.5, player.y - 1.2); return; }
-      float(`+1 ${n.K.item}`, rarityOf(n.K.item) === 'common' ? '#9dff5c' : rarityColor(n.K.item), n.x + 0.5, n.y - 0.6); playSfx('interact'); renderStats();
-      n.prev = { zone: n.zone, x: n.x, y: n.y }; n.readyAt = gameTime + n.K.cooldownMs;
-      n.zone = n.zones[Math.floor(Math.random() * n.zones.length)]; n.x = n.y = null;   // regrows on another tile (maybe the paired zone)
-      if (n.zone === areaName) placeNode(n);
-    }
-    function drawHarvest() {   // the piles of this zone, on the ground under everyone
-      const t = performance.now();
-      for (const n of zoneNodes()) {
-        if (!nodeReady(n)) continue;
-        const im = ART[n.K.art], cx = (n.x + 0.5) * TILE, base = (n.y + 1) * TILE - 4;
-        if (im && ready(im)) {
-          const w = n.K.w * TILE, h = w * im.naturalHeight / im.naturalWidth;
-          ctx.save(); ctx.globalAlpha = 0.9 + 0.1 * Math.sin(t / 500 + n.x); ctx.imageSmoothingQuality = 'high'; ctx.drawImage(im, cx - w / 2, base - h, w, h); ctx.restore();
-        } else { ctx.fillStyle = rarityColor(n.K.item); ctx.beginPath(); ctx.arc(cx, base - TILE * 0.3, TILE * 0.25, 0, Math.PI * 2); ctx.fill(); }
-      }
-    }
-    function drawHarvestHint() {   // drawn over everything in the world: the "hold Space" hint or the hold ring
-      const h = harvesting, near = !h && !anyOpen() ? harvestable() : null;
-      const n = h ? h.node : near;
-      if (!n) return;
-      const cx = (n.x + 0.5) * TILE, top = (n.y + 1) * TILE - n.K.w * TILE * 0.85 - 14;
-      ctx.save(); ctx.textAlign = 'center'; ctx.textBaseline = 'bottom'; ctx.font = '600 24px ' + MONO;
-      ctx.lineWidth = 5; ctx.strokeStyle = '#000';
-      const label = h ? 'harvesting…' : `${n.K.item} · hold ${touchOn() ? 'A' : 'Space'}`;
-      ctx.strokeText(label, cx, top - (h ? 44 : 0)); ctx.fillStyle = rarityOf(n.K.item) === 'common' ? '#fff' : rarityColor(n.K.item); ctx.fillText(label, cx, top - (h ? 44 : 0));
-      if (h) {   // progress ring above the pile
-        const p = Math.min(1, (gameTime - h.start) / HARVEST.holdMs), ry = top - 22, R = 18;
-        ctx.lineWidth = 6; ctx.strokeStyle = 'rgba(0, 0, 0, 0.7)'; ctx.beginPath(); ctx.arc(cx, ry, R, 0, Math.PI * 2); ctx.stroke();
-        ctx.strokeStyle = '#ffdc00'; ctx.beginPath(); ctx.arc(cx, ry, R, -Math.PI / 2, -Math.PI / 2 + p * Math.PI * 2); ctx.stroke();
-      }
-      ctx.restore();
-    }
-    function knock(d, crit) {   // start a knockback, pointing from the hero to the enemy
-      const keep = drip; drip = d; const c = foeCentre(dripPos(), d); drip = keep;
-      const dx = c.x - (player.x + 0.5), dy = c.y - (player.y + 0.5), len = Math.hypot(dx, dy);
-      const ux = len > 0.01 ? dx / len : facing.x, uy = len > 0.01 ? dy / len : facing.y, k = Math.hypot(ux, uy) || 1;
-      const w = equipped.find(it => MELEE_KINDS.includes(it.kind)), step = w ? Object.keys(RARITY).indexOf(rarityOf(w.name)) + 1 : 0;   // fists 0, common 1, rare 2…
-      let dist = (KNOCKBACK.fists + KNOCKBACK.perRarity * Math.max(0, step)) * (crit ? KNOCKBACK.crit : 1) * (d.hp > stats.health ? KNOCKBACK.tougher : 1);
-      const bx = ux / k, by = uy / k;
-      if (d.kind !== 'drone') {   // walk the push out in small steps; stop where his leading edge would enter a blocked tile
-        const half = foeSize(d) / 2; let ok = 0;
-        for (let i = 1, n = Math.ceil(dist / 0.02); i <= n; i++) { const t = Math.min(dist, i * 0.02); if (!free(Math.floor(c.x + bx * (t + half)), Math.floor(c.y + by * (t + half)))) break; ok = t; }
-        dist = ok;
-      }
-      d.kb = dist > 0 ? { at: gameTime, dx: bx, dy: by, dist } : null;
-    }
-    function knockOffset(d) {   // current nudge in canvas px: quick ease-out, then a slower ease back
-      const kb = d.kb; if (!kb || d.dead) return null;
-      const t = gameTime - kb.at, { outMs, backMs } = KNOCKBACK;
-      if (t < 0 || t >= outMs + backMs) { d.kb = null; return null; }
-      const u = t < outMs ? t / outMs : (t - outMs) / backMs;
-      const p = t < outMs ? 1 - (1 - u) ** 2 : 1 - u * u * (3 - 2 * u);   // out: ease-out; back: smoothstep
-      return { x: kb.dx * kb.dist * p * TILE, y: kb.dy * kb.dist * p * TILE };
-    }
-    function withKnock(d, paint) { const o = knockOffset(d); if (!o) return paint(); ctx.save(); ctx.translate(o.x, o.y); paint(); ctx.restore(); }
     function heroAttack() {
       if (gameTime < heroNextAttack) return;
       heroNextAttack = gameTime + heroAttackMs();
@@ -3969,7 +3643,7 @@
       if (facing.x) lookX = facing.x;
       const crit = Math.random() < critChance(), dmg = Math.round(heroStr() * (crit ? 2 + critBonus() : 1));   // a crit adds strength once more (+ Quick Hands)
       let landed = false;
-      for (const d of meleeTargets()) { drip = d; if (!heroHits()) { heroMissed(d); continue; } landed = true; knock(d, crit); damageDrip(dmg, crit ? `-${dmg} crit!` : `-${dmg}`, crit ? '#ffe600' : '#fff'); }
+      for (const d of meleeTargets()) { drip = d; if (!heroHits()) { heroMissed(d); continue; } landed = true; damageDrip(dmg, crit ? `-${dmg} crit!` : `-${dmg}`, crit ? '#ffe600' : '#fff'); }
       if (crit && landed) onHeroCrit();
     }
     // time between swings: 1 s with fists; equipment can shorten it (attackMs, e.g. banana sword -100 ms), at least 0.3 s
@@ -4017,7 +3691,6 @@
       drip.hurtStart = gameTime; drip.aggro = true; drip.returning = false;
       float(text, color, drip.x + foeSize(drip) / 2, drip.y - foeHeadY(drip));
       if (drip.kind === 'spore' && drip.hidden) revealSpore(drip);
-      if (drip.kind === 'crawler' && drip.hidden) revealCrawler(drip);
       if (drip.kind === 'drone' && drip.hp > 0 && drip.hp <= drip.maxHp * DRONE.cloakPct && !drip.repaired) droneCloak(drip);   // once per life, at 10% HP or less
       if (drip.hp <= 0) {   // nothing is given yet: the loot waits on his puddle
         drip.dead = true; drip.deadAt = gameTime; drip.hitAt = 0; drip.dot = null; drip.stunUntil = 0; kills++; if ((drip.kind || 'drip') === 'drip' && !drip.summoned) dripKills++; if (drip.kind === 'queen') queenKills++;
@@ -4045,7 +3718,7 @@
         if (L.aiChipChance && Math.random() < L.aiChipChance) items.push({ name: 'AI chip', count: 1 });
         if (L.sporeSacChance && Math.random() < L.sporeSacChance) items.push({ name: 'Spore Sac', count: 1 });
         if (L.coreChance && Math.random() < L.coreChance) items.push({ name: 'Loader Core', count: 1 });
-        if (L.queenRare) items.push({ name: Math.random() < (L.queenTarShare ?? 0.5) ? 'Magic tar' : 'Magic Nozzle', count: 1 });   // Pump Queen: one spell, Magic tar 75% / Magic Nozzle 25%
+        if (L.queenRare) items.push({ name: Math.random() < 0.5 ? 'Magic tar' : 'Magic Nozzle', count: 1 });   // Pump Queen: one rare, 50/50
         const zm = L.zoneMoney ? zoneCoords(areaName).reduce((a, b) => a + b, 0) : 0;   // Loader: + |x| + |y| of its zone
         drip.loot = { money: rand(L.money[0] + zm, L.money[1] + zm), items };
         gainExp(T.exp && drip.kind === 'queen' ? Math.round(T.exp * levelDmgFactor(npcLevel() - hero.level)) : killExp(drip, levelDmgFactor(npcLevel() - hero.level)));
@@ -4425,7 +4098,7 @@
       lastFrame = now;
       syncChef();
       if (dt) { checkDeliveries(); checkRogueQuests(); for (let i = piles.length - 1; i >= 0; i--) if (gameTime >= piles[i].until) piles.splice(i, 1);
-        updateDrips(); updateQueenFx(); updateHarvest(); updateProjectiles(dt); updateHeroDot(); updatePoison(); updateHeroMana(); updateHeroHealth(); }
+        updateDrips(); updateQueenFx(); updateProjectiles(dt); updateHeroDot(); updatePoison(); updateHeroMana(); updateHeroHealth(); }
       // keys still held when Tart wears off (or a blocking enemy moves): start walking again
       if (!moving && !comboTimer && held.size && !anyOpen()) tryStep(now);
       let rx = player.x, ry = player.y;
@@ -4503,7 +4176,6 @@
       const B = GROUND_REPEAT * TILE;
       for (let y = 0; y < WORLD_H; y += B) for (let x = 0; x < WORLD_W; x += B) gx.drawImage(im, x, y, B, B);
       drawRoads(gx);
-      if (bigDecalsReady()) placeBigDecals(gx);
       if (AREAS[areaName].decals) placeDecals(gx);
       const lake = AREAS[areaName].lake;   // toxic lake quarter, flat on the ground
       if (lake && ready(ART[lake.art])) gx.drawImage(ART[lake.art], lake.x, lake.y);
@@ -4524,7 +4196,7 @@
       lake: { art: 'passageLake', along: 2, depth: 2 }, factory: { art: 'passageFactory', along: 2, depth: 1 },
       slums: { art: 'passageSlums', along: 2, depth: 2 },
     };
-    const PASSAGE_GROUP = id => ({ forest: 'forest', deepForest: 'forest', lake: 'lake', factory: 'factory', wasteland: 'factory', pit: 'factory', slums: 'slums', greaser: 'slums' })[ZONE_LIST[id]] || null;
+    const PASSAGE_GROUP = id => ({ forest: 'forest', deepForest: 'forest', lake: 'lake', factory: 'factory', slums: 'slums', greaser: 'slums' })[ZONE_LIST[id]] || null;
     const PASSAGE_OVERRIDE = { '-1:-2|-2:-2': 'forest', '1:-1|0:-1': 'lake' };   // mixed passages drawn with one kind on both sides
     // Chosen once per passage (both sides use the same picture), fixed seed per passage:
     // forest: the long trail or the stepping stones at random, but stepping stones wherever the long trail would overlap
@@ -4611,31 +4283,6 @@
       { name: 'leaves',      weight: 2,   size: 0.8,  turn: 'free' },
     ];
     const DECAL_CHANCE = 1 / 6;   // city: share of free tiles that get a detail (areas can override: decals.chance)
-    // big 2 x 3 decals (BIG_DECALS): 6-9 per zone, fixed seed per zone, any quarter turn and mirror (a turned one covers 3 x 2).
-    // Never on buildings, the city wall / wire, roads, lake water, big map pieces or within 2 tiles of a passage; never overlapping.
-    const bigDecalSheet = () => BIG_DECALS[ZONE_LIST[areaName]];
-    const bigDecalsReady = () => { const sh = bigDecalSheet(); return !sh || [1, 2, 3, 4].every(i => ready(ART[sh + i])); };
-    function placeBigDecals(gx) {
-      const sh = bigDecalSheet(); if (!sh) return;
-      const [a, b] = coordOf(areaName);
-      let seed = 900001 + (a + 20) * 131 + (b + 20) * 17;
-      const rnd = () => (seed = (seed * 16807) % 2147483647) / 2147483647;
-      const nearExit = (x, y) => AREAS[areaName].exits.some(e => e.tiles.some(([tx, ty]) => Math.abs(tx - x) <= 2 && Math.abs(ty - y) <= 2));
-      const bad = (x, y) => !inGrid(x, y) || roadAt(x, y) || wallAt(x, y) || coilAt(x, y) || lakeAt(x, y) || bigAt(x, y) || nearExit(x, y);
-      const used = new Set(), n = 6 + Math.floor(rnd() * 4);
-      for (let k = 0, t = 0; k < n && t < 600; t++) {
-        const quarter = Math.floor(rnd() * 4), w = quarter % 2 ? 3 : 2, h = quarter % 2 ? 2 : 3;
-        const x0 = Math.floor(rnd() * (COLS - w + 1)), y0 = Math.floor(rnd() * (ROWS - h + 1));
-        let ok = true;
-        for (let y = y0; y < y0 + h && ok; y++) for (let x = x0; x < x0 + w && ok; x++) if (bad(x, y) || used.has(x + ',' + y)) ok = false;
-        if (!ok) continue;
-        for (let y = y0 - 1; y <= y0 + h; y++) for (let x = x0 - 1; x <= x0 + w; x++) used.add(x + ',' + y);   // a 1-tile gap between big decals
-        const im = ART[sh + (1 + Math.floor(rnd() * 4))], fx = rnd() < 0.5 ? -1 : 1;
-        gx.save(); gx.translate((x0 + w / 2) * TILE, (y0 + h / 2) * TILE); gx.rotate(quarter * Math.PI / 2); gx.scale(fx, 1);
-        gx.drawImage(im, -TILE, -1.5 * TILE, 2 * TILE, 3 * TILE); gx.restore();
-        k++;
-      }
-    }
     function placeDecals(gx) {
       const sheet = ART.decals;
       if (!ready(sheet)) return;
@@ -4699,10 +4346,9 @@
       const wantTar = AREAS[areaName].exits.length > 0 && AREAS[areaName].exits.every(e => { const st = passageStyle(areaName, e.to); return ready(st ? ART[st.art] : ART.tar); });
       const wantLake = !!AREAS[areaName].lake && ready(ART[AREAS[areaName].lake.art]);
       const wantRoad = !!AREAS[areaName].road && ROAD_PIECES.every(k => ready(ART[k]));
-      const wantBig = !!bigDecalSheet() && bigDecalsReady();
-      if (!groundLayer || groundLayer.gs !== groundScale() || (wantDecals && !groundLayer.hasDecals) || (wantWire && !groundLayer.hasWire) || (wantTar && !groundLayer.hasTar) || (wantLake && !groundLayer.hasLake) || (wantRoad && !groundLayer.hasRoad) || (wantBig && !groundLayer.hasBig)) {
+      if (!groundLayer || groundLayer.gs !== groundScale() || (wantDecals && !groundLayer.hasDecals) || (wantWire && !groundLayer.hasWire) || (wantTar && !groundLayer.hasTar) || (wantLake && !groundLayer.hasLake) || (wantRoad && !groundLayer.hasRoad)) {
         groundLayer = buildGround();
-        if (groundLayer) { groundLayer.hasDecals = wantDecals; groundLayer.hasWire = wantWire; groundLayer.hasTar = wantTar; groundLayer.hasLake = wantLake; groundLayer.hasRoad = wantRoad; groundLayer.hasBig = wantBig; }
+        if (groundLayer) { groundLayer.hasDecals = wantDecals; groundLayer.hasWire = wantWire; groundLayer.hasTar = wantTar; groundLayer.hasLake = wantLake; groundLayer.hasRoad = wantRoad; }
       }
       if (groundLayer) ctx.drawImage(groundLayer, 0, 0, WORLD_W, WORLD_H);
 
@@ -4746,7 +4392,6 @@
         ctx.moveTo(-8, -12); ctx.lineTo(8, 0); ctx.lineTo(-8, 12); ctx.stroke(); ctx.restore();
       }
       drawPiles();
-      drawHarvest();
       drawSporeClouds(); drawFoeTelegraphs(); drawQueenGround();
       for (const e of drips) if (e.kind === 'drone' && !e.dead) { drip = e; drawDroneShadow(e); }   // drones' shadows on the ground, under buildings
 
@@ -4759,7 +4404,7 @@
       if (gameTime < rootedUntil) drawTart(rx, ry);
       // hero and enemies: lower on screen is drawn in front; a beaten enemy lies flat under everyone
       const actors = [{ y: ry, draw: () => drawHeroSprite(rx, ry) }];
-      for (const e of drips) { if (e.kind === 'drone' && !e.dead) continue; drip = e; const d = dripPos(); actors.push({ y: e.dead ? -1e9 : d.y, draw: () => { drip = e; withKnock(e, () => drawDrip(d)); } }); }
+      for (const e of drips) { if (e.kind === 'drone' && !e.dead) continue; drip = e; const d = dripPos(); actors.push({ y: e.dead ? -1e9 : d.y, draw: () => { drip = e; drawDrip(d); } }); }
       actors.sort((a, b) => a.y - b.y).forEach(a => a.draw());
       // buildings in front of the hero: see-through (40%) while they cover him or a walking enemy, fading over about 0.2 s
       const bodies = [{ x0: (rx + 0.2) * TILE, x1: (rx + 0.8) * TILE, y0: (ry + 1 - 1.5) * TILE, y1: (ry + 1) * TILE }];
@@ -4778,7 +4423,7 @@
         if (im && ready(im)) for (let c = 0; c < COLS && !covers; c++) if (b.depth[c] > ry && hits(c * TILE, (c + 1) * TILE, b.y, b.y + im.naturalHeight)) covers = true;
         if (b && fadeTo(b, covers) < 1) { ctx.save(); ctx.globalAlpha = b.fade; drawBig(true, ry); ctx.restore(); } else drawBig(true, ry);   // columns that cover the hero
       }
-      for (const e of drips) if (e.kind === 'drone' && !e.dead) { drip = e; withKnock(e, () => drawDrone(e)); }   // flying: above everything
+      for (const e of drips) if (e.kind === 'drone' && !e.dead) { drip = e; drawDrone(e); }   // flying: above everything
       drawMeleeFlash();
       drawProjectiles();
       // the Rogue: turns toward the hero when he is within 2 tiles; a '!' over her head until the tutorial starts
@@ -4799,7 +4444,6 @@
         ctx.fillStyle = '#9b5cff'; ctx.strokeStyle = '#000'; ctx.lineWidth = 4;
         ctx.beginPath(); ctx.moveTo(x - 20, y - 28); ctx.lineTo(x + 20, y - 28); ctx.lineTo(x, y); ctx.closePath(); ctx.stroke(); ctx.fill();
       }
-      drawHarvestHint();
       drawFloaters();
       // name of the tile the yellow highlight is on
       const looked = wallAt(Math.round(rx) + facing.x, Math.round(ry) + facing.y);
@@ -4840,7 +4484,7 @@
         if (!ui) drawItemMenu();
         if (ui) drawWindow();
       }
-      if (ui && (ui.kind === 'quests' || (ui.kind === 'shop' && itemMenu && itemMenu.shop))) drawItemMenu();   // quest cancel menu / shop sell menu on top of the window
+      if (ui && ui.kind === 'quests') drawItemMenu();   // quest cancel menu sits on top of the quest list
       drawDeliveryHud();
     }
 
@@ -5014,21 +4658,6 @@
       else ok = cell('sporelingIdle', 'idle', 0);
       if (!ok) { ctx.fillStyle = '#5b3fd6'; ctx.beginPath(); ctx.ellipse(cx, feet - 40, 34, 24, 0, Math.PI, 0); ctx.fill(); ctx.fillStyle = '#e8dccb'; ctx.fillRect(cx - 10, feet - 40, 20, 38); }
     }
-    function drawCrawlerBody(cx, feet, t) {
-      const A = CRAWLER_ART, C = CRAWLER, k = FOE_K, pop = t - drip.popStart, neon = drip.hidden ? [] : dripNeon(), a = drip.act;
-      const cell = (key, name, f) => ready(ART[key]) && (drawScavCell(ART[key], A[name], f, cx, feet, neon, k), true);
-      let ok;
-      if (drip.hidden || pop < 0) ok = cell('crawlerHidden', 'hidden', 0);   // looks like a scrap pile
-      else if (pop < C.popMs) ok = cell('crawlerEmerge', 'emerge', Math.min(3, Math.floor(pop / (C.popMs / 4))));
-      else if (a && a.kind === 'pounce') ok = cell('crawlerPounce', 'pounce', 0);   // crouched, about to leap
-      else if (drip.leapAt === drip.stepStart && t - drip.stepStart < C.leapMs) ok = cell('crawlerPounce', 'pounce', t - drip.stepStart < C.leapMs / 2 ? 1 : 2);
-      else if (drip.landAt && t - drip.landAt >= 0 && t - drip.landAt < 200) ok = cell('crawlerPounce', 'pounce', 3);
-      else if (t - drip.attackStart < 450) ok = cell('crawlerPounce', 'pounce', t - drip.attackStart < C.biteWindupMs ? 0 : 3);   // bite
-      else if (t - drip.hurtStart < 300) ok = cell('crawlerHurt', 'hurt', 0);
-      else if (walkFrame(t) >= 0) ok = cell('crawlerWalk', 'walk', walkFrame(t));
-      else ok = cell('crawlerIdle', 'idle', 0);
-      if (!ok) { ctx.fillStyle = '#8a4a24'; ctx.beginPath(); ctx.ellipse(cx, feet - 34, 40, 26, 0, 0, Math.PI * 2); ctx.fill(); ctx.fillStyle = '#ff3b3b'; ctx.beginPath(); ctx.arc(cx - 14, feet - 38, 7, 0, Math.PI * 2); ctx.fill(); }
-    }
     function drawLoaderBody(cx, feet, t) {
       const A = LOADER_ART, L = LOADER, k = FOE_K, neon = dripNeon(), a = drip.act;
       const cell = (key, name, f) => ready(ART[key]) && (drawScavCell(ART[key], A[name], f, cx, feet, neon, k), true);
@@ -5063,16 +4692,7 @@
         if (d.dead || !a || t >= a.hitAt + 300 || d.kind === 'queen') continue;
         const pulse = 0.5 + 0.5 * Math.sin(t / 60);
         ctx.save();
-        if (a.kind === 'pounce') {   // Scrap Crawler: the tiles it will leap over, a pulsing red line
-          if (t < a.hitAt) {
-            const grow = Math.min(1, (t - a.start) / 150);
-            ctx.globalAlpha = 0.18 + 0.2 * pulse; ctx.fillStyle = '#e5484d';
-            for (const [x, y] of a.tiles) ctx.fillRect(x * TILE + 8, y * TILE + 8, TILE - 16, TILE - 16);
-            const [ex, ey] = a.tiles[a.tiles.length - 1], sx = (d.x + 0.5) * TILE, sy = (d.y + 0.5) * TILE;
-            ctx.globalAlpha = 0.75; ctx.strokeStyle = '#ff3b3b'; ctx.lineWidth = 6; ctx.lineCap = 'round';
-            ctx.beginPath(); ctx.moveTo(sx, sy); ctx.lineTo(sx + ((ex + 0.5) * TILE - sx) * grow, sy + ((ey + 0.5) * TILE - sy) * grow); ctx.stroke();
-          }
-        } else if (a.kind === 'whip') {   // pulsing green circle (up to 40%) on the tile it will lash
+        if (a.kind === 'whip') {   // pulsing green circle (up to 40%) on the tile it will lash
           if (t < a.hitAt) { ctx.globalAlpha = 0.2 + 0.2 * pulse; ctx.fillStyle = '#3fbf3f'; ctx.beginPath(); ctx.arc((a.tx + 0.5) * TILE, (a.ty + 0.5) * TILE, 0.42 * TILE, 0, Math.PI * 2); ctx.fill(); }
         } else {   // pulsing red circle: the slam area (body + 1.5 tiles)
           const cx = (d.x + 1) * TILE, cy = d.y * TILE, R = LOADER.slamR * TILE;
@@ -5161,9 +4781,9 @@
         // cracked price display: the face, two amber digit-eyes
         ctx.fillStyle = '#0b0d12'; ctx.fillRect(-0.42 * T, -1.92 * T, 0.84 * T, 0.5 * T); ctx.strokeRect(-0.42 * T, -1.92 * T, 0.84 * T, 0.5 * T);
         const on = d.aggro ? 0.75 + 0.25 * Math.sin(t / (roar ? 30 : 140)) : 0.25;
-        const eyes = [[-0.3 * T, -1.82 * T, 0.18 * T, 0.26 * T], [0.12 * T, -1.82 * T, 0.18 * T, 0.26 * T]];
-        if (d.aggro) { ctx.save(); ctx.globalAlpha *= on; for (const r of eyes) glowBox(...r, '#ffb020', 14); ctx.restore(); }
-        else { ctx.fillStyle = `rgba(255, 176, 32, ${on})`; for (const r of eyes) ctx.fillRect(...r); }
+        ctx.fillStyle = `rgba(255, 176, 32, ${on})`; ctx.shadowColor = '#ffb020'; ctx.shadowBlur = d.aggro ? 14 : 0;
+        ctx.fillRect(-0.3 * T, -1.82 * T, 0.18 * T, 0.26 * T); ctx.fillRect(0.12 * T, -1.82 * T, 0.18 * T, 0.26 * T);
+        ctx.shadowBlur = 0;
         ctx.strokeStyle = 'rgba(217, 210, 195, 0.6)'; ctx.lineWidth = 2; ctx.beginPath(); ctx.moveTo(-0.1 * T, -1.92 * T); ctx.lineTo(0.02 * T, -1.7 * T); ctx.lineTo(-0.06 * T, -1.5 * T); ctx.stroke();
         // oil oozing from the top and down the sides
         ctx.fillStyle = '#07080c';
@@ -5180,8 +4800,8 @@
         core.addColorStop(0, 'rgba(255, 230, 120, 0.95)'); core.addColorStop(0.35, 'rgba(255, 120, 20, 0.8)'); core.addColorStop(1, 'rgba(255, 60, 0, 0)');
         ctx.fillStyle = core; ctx.beginPath(); ctx.arc(0, -1.2 * T, 0.75 * T, 0, Math.PI * 2); ctx.fill();
         ctx.fillStyle = 'rgba(255, 255, 255, 0.18)'; ctx.beginPath(); ctx.ellipse(-0.45 * T, -2.1 * T, 0.18 * T, 0.09 * T, -0.5, 0, Math.PI * 2); ctx.fill();   // glossy shine
-        const eyes = [[-0.32 * T, -2.15 * T, 0.18 * T, 0.12 * T], [0.14 * T, -2.15 * T, 0.18 * T, 0.12 * T]];   // eyes
-        for (const r of eyes) glowBox(...r, '#ff9a2e', 16); ctx.fillStyle = '#ffb020'; for (const r of eyes) ctx.fillRect(...r);
+        ctx.fillStyle = '#ffb020'; ctx.shadowColor = '#ff9a2e'; ctx.shadowBlur = 16;   // eyes
+        ctx.fillRect(-0.32 * T, -2.15 * T, 0.18 * T, 0.12 * T); ctx.fillRect(0.14 * T, -2.15 * T, 0.18 * T, 0.12 * T); ctx.shadowBlur = 0;
         ctx.fillStyle = '#b8322e'; ctx.strokeStyle = ink; ctx.lineWidth = 3;   // a broken bit of the pump stuck in her
         ctx.save(); ctx.translate(0.55 * T, -0.7 * T); ctx.rotate(0.5); ctx.fillRect(-12, -16, 24, 32); ctx.strokeRect(-12, -16, 24, 32); ctx.restore();
         ctx.globalCompositeOperation = 'lighter';   // flames on top
@@ -5311,7 +4931,6 @@
         if (drip.kind === 'drone') drawDroneWreck(cx, feet, lootNeon);
         else if (scav) { if (ready(ART.scavHurt)) drawScavCell(ART.scavHurt, SCAV_ART.hurt, 1, cx, feet, lootNeon); }
         else if (drip.kind === 'spore') { if (ready(ART.sporelingHurt)) drawScavCell(ART.sporelingHurt, SPORE_ART.hurt, 1, cx, feet, lootNeon, FOE_K); }
-        else if (drip.kind === 'crawler') { if (ready(ART.crawlerHurt)) drawScavCell(ART.crawlerHurt, CRAWLER_ART.hurt, 1, cx, feet, lootNeon, FOE_K); }
         else if (drip.kind === 'loader') { if (ready(ART.loaderHurt)) drawScavCell(ART.loaderHurt, LOADER_ART.hurt, 1, cx, feet, lootNeon, FOE_K); }
         else if (drip.kind === 'queen') drawQueenDead(cx, feet, lootNeon);
         else if (ready(ART.dripHurt)) drawDripCell(ART.dripHurt, DRIP_ART.hurt, 1, cx, feet, 1, lootNeon);
@@ -5332,7 +4951,6 @@
       const sinceAtk = t - drip.attackStart, sinceHurt = t - drip.hurtStart;
       if (scav) drawScavBody(cx, feet, t);
       else if (drip.kind === 'spore') { drawSporeBody(cx, feet, t); if (drip.hidden) return; }   // disguised: no bar, no rings
-      else if (drip.kind === 'crawler') { drawCrawlerBody(cx, feet, t); if (drip.hidden) return; }
       else if (drip.kind === 'loader') drawLoaderBody(cx, feet, t);
       else if (drip.kind === 'queen') drawQueenBody(cx, feet, t);
       else if (sinceAtk < 700 && ready(ART.dripAttack)) drawDripCell(ART.dripAttack, DRIP_ART.attack, Math.min(3, Math.floor(sinceAtk / 175)), cx, feet, 1, dripNeon());
@@ -5352,7 +4970,7 @@
         ctx.beginPath(); ctx.ellipse(cx, feet - 8, 46, 16, 0, 0, Math.PI * 2); ctx.stroke(); ctx.restore();
       }
       // health bar over his head
-      const bw = drip.kind === 'queen' ? 130 : drip.kind === 'loader' ? 110 : 64, bx = cx - bw / 2, by = feet - (scav ? HERO_H : drip.kind === 'spore' ? 1.15 : drip.kind === 'crawler' ? 1.05 : drip.kind === 'loader' ? 2.75 : drip.kind === 'queen' ? (drip.stage === 2 ? 3.25 : 2.95) : DRIP_BODY) * TILE - 18;
+      const bw = drip.kind === 'queen' ? 130 : drip.kind === 'loader' ? 110 : 64, bx = cx - bw / 2, by = feet - (scav ? HERO_H : drip.kind === 'spore' ? 1.15 : drip.kind === 'loader' ? 2.75 : drip.kind === 'queen' ? (drip.stage === 2 ? 3.25 : 2.95) : DRIP_BODY) * TILE - 18;
       ctx.fillStyle = 'rgba(0, 0, 0, 0.7)'; ctx.fillRect(bx - 2, by - 2, bw + 4, 12);
       ctx.fillStyle = '#e5484d'; ctx.fillRect(bx, by, bw * drip.hp / drip.maxHp, 8);
     }
@@ -5491,7 +5109,7 @@
       const w = 340, h = 80, x = (canvas.width - w) / 2, y = phoneView && canvas.height > canvas.width ? phudBottom() + 12 : 12;
       ctx.fillStyle = 'rgba(0, 0, 0, 0.75)'; rr(x, y, w, h, 12); ctx.fill();
       ctx.strokeStyle = 'rgba(255, 43, 214, 0.6)'; ctx.lineWidth = 2; rr(x + 1, y + 1, w - 2, h - 2, 11); ctx.stroke();
-      const T = ET(drip), pic = ART[({ scav: 'scavPortrait', drone: 'dronePortrait', spore: 'sporelingPortrait', crawler: 'crawlerPortrait', loader: 'loaderPortrait', queen: 'queenPortrait' })[drip.kind] || 'dripPortrait'];
+      const T = ET(drip), pic = ART[({ scav: 'scavPortrait', drone: 'dronePortrait', spore: 'sporelingPortrait', loader: 'loaderPortrait', queen: 'queenPortrait' })[drip.kind] || 'dripPortrait'];
       if (ready(pic)) { ctx.imageSmoothingQuality = 'high'; ctx.drawImage(pic, x + 8, y + 8, 64, 64); }
       else if (drip.kind === 'drone') { ctx.fillStyle = '#1B2233'; ctx.fillRect(x + 8, y + 8, 64, 64); drawDroneBody(x + 40, y + 44, 0, gameTime, !!drip.hitAt, -1); }
       else if (drip.kind === 'queen') {   // placeholder portrait: the pump's display face / the blob's eyes
@@ -5524,7 +5142,6 @@
         ctx.textAlign = 'left'; ctx.font = '16px ' + MONO;
         if (drip.kind === 'drone') { ctx.fillStyle = '#00e5ff'; ctx.fillText(drip.hitAt ? 'ramming!' : gameTime < drip.lowUntil ? 'low: hit it!' : 'dive ram', tx, y + 63); }
         else if (drip.kind === 'spore') { ctx.fillStyle = '#b58cff'; ctx.fillText(drip.hitAt ? 'puffing spores!' : 'poison spores', tx, y + 63); }
-        else if (drip.kind === 'crawler') { ctx.fillStyle = '#ff8a5c'; ctx.fillText(drip.act ? 'POUNCE!' : drip.hitAt ? 'biting!' : 'pack hunter · pounce', tx, y + 63); }
         else if (drip.kind === 'queen') { const a = drip.act; ctx.fillStyle = '#ff9a2e'; ctx.fillText(a ? ({ roar: 'IGNITION!', slap: 'hose slap!', spray: 'fuel spray!', ignite: 'pump & ignite!' })[a.kind] : drip.stage === 2 ? 'stage 2 · ignition' : 'stage 1 · the pump', tx, y + 63); }
         else if (drip.kind === 'loader') { ctx.fillStyle = '#9dff5c'; ctx.fillText(drip.act ? (drip.act.kind === 'whip' ? 'vine whip!' : 'ground slam!') : 'whip · slam', tx, y + 63); }
         else { ctx.fillStyle = '#7fff3a'; ctx.fillText(drip.spray ? 'spraying!' : 'toxic spray', tx, y + 63); }
@@ -5662,27 +5279,22 @@
     const STAT_COLOR = { health: '#e5484d', strength: '#ff8a3d', mana: '#4ea1ff', energy: '#9dff5c', charisma: '#b58cff' };
     function drawShopRow(r, x, y, w, h, sel) {
       const it = r.it, big = h - 32, sx = x + 16, sy = y + 16, nameX = sx + big + 20, nameW = 250;
-      drawSlot(sx, sy, big, r.sell ? { name: it.name, count: r.sell.n } : { name: it.name });
+      drawSlot(sx, sy, big, { name: it.name });
       ctx.textAlign = 'left'; ctx.textBaseline = 'middle';
       ctx.fillStyle = rarityColor(it.name); ctx.font = (sel ? '700 ' : '600 ') + '28px ' + MONO;
       const nameLines = wrapText(it.name, nameW);
       nameLines.forEach((l, i) => ctx.fillText(l, nameX, sy + 22 + i * 32));
       ctx.font = '18px ' + MONO; ctx.fillStyle = '#8a8a8a';
       const buyLvl = it.buyLevel || it.minLevel, locked = buyLvl && hero.level < buyLvl;
-      const sub = r.sell ? `×${r.sell.n} in your bag · ${it.rarity || 'common'} ${it.class}` : r.buy ? `${it.rarity || 'common'} ${it.class} · 1 per press` : locked ? `needs lvl ${buyLvl}` : it.patch ? `patch · installed lvl ${levels[it.name]}` : it.class === 'equipment' ? `${it.rarity || 'common'} · ${EQUIP_SLOT_KEYS[slotOf(it)] || 'equipment'}${setOf(it.name) ? ` · ${setOf(it.name).name} set` : ''}` : it.class === 'bag' ? (bag === it.name ? 'worn now' : `${it.rarity || 'common'} bag`) : 'used at once';
+      const sub = locked ? `needs lvl ${buyLvl}` : it.patch ? `patch · installed lvl ${levels[it.name]}` : it.class === 'equipment' ? `${it.rarity || 'common'} · ${EQUIP_SLOT_KEYS[slotOf(it)] || 'equipment'}${setOf(it.name) ? ` · ${setOf(it.name).name} set` : ''}` : it.class === 'bag' ? (bag === it.name ? 'worn now' : `${it.rarity || 'common'} bag`) : 'used at once';
       if (locked) ctx.fillStyle = '#e5484d';
       for (let fs = 18; fs > 12 && ctx.measureText(sub).width > nameW + 10; fs--) ctx.font = fs + 'px ' + MONO;   // long set names: shrink to fit
       ctx.fillText(sub, nameX, sy + big - 12);
       // price, right side
       const priceX = x + w - 20, cy = y + h / 2;
       ctx.textAlign = 'right'; ctx.font = '700 34px ' + MONO;
-      if (r.sell) {   // what the shop pays per piece
-        ctx.fillStyle = '#9dff5c'; ctx.fillText(`+${r.price}$`, priceX, cy - 10);
-        ctx.font = '18px ' + MONO; ctx.fillStyle = '#8a8a8a'; ctx.fillText('each', priceX, cy + 22);
-      } else {
-        ctx.fillStyle = r.owned ? '#8a8a8a' : stats.money >= r.price && !locked ? '#f5c542' : '#e5484d';
-        ctx.fillText(r.owned ? 'owned' : `${r.price}$`, priceX, cy);
-      }
+      ctx.fillStyle = r.owned ? '#8a8a8a' : stats.money >= r.price && !locked ? '#f5c542' : '#e5484d';
+      ctx.fillText(r.owned ? 'owned' : `${r.price}$`, priceX, cy);
       // bonuses (coloured by stat), then the description underneath
       const mx = nameX + nameW + 24, mw = priceX - 150 - mx;
       let bx = mx; ctx.textAlign = 'left'; ctx.font = '600 24px ' + MONO;
@@ -5758,7 +5370,7 @@
       ctx.fillStyle = color; ctx.font = `700 ${Math.round(size * 0.5)}px ` + MONO; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
       ctx.fillText(glyph, x + size / 2, y + size / 2 + 2);
     }
-    function rareEdge(x, y, size) { const i = size * 0.09; ctx.save(); ctx.globalAlpha = 0.85; glowBox(x + i, y + i, size - 2 * i, size - 2 * i, RARITY.rare, 6, 3); ctx.restore(); }
+    function rareEdge(x, y, size) { const i = size * 0.09; ctx.save(); ctx.strokeStyle = RARITY.rare; ctx.globalAlpha = 0.85; ctx.lineWidth = 3; ctx.shadowColor = RARITY.rare; ctx.shadowBlur = 6; ctx.strokeRect(x + i, y + i, size - 2 * i, size - 2 * i); ctx.restore(); }
     function drawDealRow(d, x, y, w, h, sel) {
       const big = h - 32, sx = x + 16, sy = y + 16, nameX = sx + big + 20, nameW = 280, priceX = x + w - 20, cy = y + h / 2;
       if (d.type === 'sale') drawSlot(sx, sy, big, { name: d.item, count: d.count });
@@ -5812,7 +5424,7 @@
     // one promotion row: earned (green), ready (yellow glow), or locked with what it still needs
     function drawPromoRow(i, pr, x, y, w, h, sel) {
       const sz = h - 16, done = i < promotion, ready = promoReady(i);
-      if (ready) glowBox(x + 1.5, y + 1.5, w - 3, h - 3, '#ffe600', 10 + 6 * Math.sin(performance.now() / 250), 3);
+      if (ready) { ctx.save(); ctx.shadowColor = '#ffe600'; ctx.shadowBlur = 10 + 6 * Math.sin(performance.now() / 250); ctx.strokeStyle = '#ffe600'; ctx.lineWidth = 3; ctx.strokeRect(x + 1.5, y + 1.5, w - 3, h - 3); ctx.restore(); }
       glyphSlot(x + 10, y + 8, sz, null, '★', done ? '#9dff5c' : ready ? '#ffe600' : '#6a6a6a');
       const tx = x + sz + 24;
       ctx.textAlign = 'left'; ctx.textBaseline = 'middle'; ctx.fillStyle = done ? '#9dff5c' : ready ? '#ffe600' : sel ? '#fff' : '#cfcfcf';
@@ -6018,7 +5630,7 @@
       textLines.forEach((l, i) => ctx.fillText(l, px + 40, py + 110 + i * 34));
       const top = py + 110 + textH;
       if (shop) {   // browser-like tabs: the active one is joined to the content below
-        const tw = Math.min(210, Math.floor((pw - 80 - (tabs.length - 1) * 8) / tabs.length)), th = 50, ty = py + 92, lineY = ty + th;   // tabs shrink to fit the window
+        const tw = 210, th = 50, ty = py + 92, lineY = ty + th;
         ctx.strokeStyle = 'rgba(255, 255, 255, 0.35)'; ctx.lineWidth = 2;
         ctx.beginPath(); ctx.moveTo(px + 24, lineY); ctx.lineTo(px + pw - 24, lineY); ctx.stroke();
         tabs.forEach((t, i) => {
@@ -6030,8 +5642,7 @@
           if (glow) { ctx.save(); ctx.shadowColor = '#ffe600'; ctx.shadowBlur = 12 + 8 * Math.sin(performance.now() / 250); ctx.strokeStyle = '#ffe600'; ctx.lineWidth = 3; ctx.stroke(); ctx.restore(); ctx.lineWidth = 2; }
           else { ctx.strokeStyle = on ? '#fff' : 'rgba(255, 255, 255, 0.3)'; ctx.stroke(); }
           if (on) { ctx.fillStyle = '#1b2233'; ctx.fillRect(tx + 1, lineY - 1, tw - 2, 4); }   // open bottom: the tab flows into the page
-          ctx.fillStyle = glow ? '#ffe600' : on ? '#fff' : '#8a8a8a'; ctx.textAlign = 'center';
-          for (let fs = 24; fs > 14; fs--) { ctx.font = (on ? '600 ' : '') + fs + 'px ' + MONO; if (ctx.measureText(t.name).width <= tw - 16) break; }
+          ctx.fillStyle = glow ? '#ffe600' : on ? '#fff' : '#8a8a8a'; ctx.font = (on ? '600 ' : '') + '24px ' + MONO; ctx.textAlign = 'center';
           ctx.fillText(t.name, tx + tw / 2, ty + th / 2 + 1);
           rowRects.push({ x: tx, y: ty, w: tw, h: th, tab: i });
         });
@@ -6103,7 +5714,7 @@
       }
       ctx.fillStyle = '#8a8a8a';
       ctx.font = '22px ' + MONO;
-      ctx.fillText(hero ? 'H or X/Esc close' : ui.kind === 'gameover' ? 'Space respawn' : inv ? 'A/D/W/S choose · Space equip/learn/unequip · I or X/Esc close' : ui.kind === 'loot' ? 'W/S choose · Space take · X/Esc close' : ui.kind === 'cheat' ? 'A/D tab · W/S choose · Space apply · P or X/Esc close' : ui.kind === 'scrap' ? 'W/S choose · Space scrap · X/Esc close' : ui.kind === 'work' ? 'A/D tab · W/S choose · Space accept · X/Esc close' : ui.kind === 'leaderboard' ? (phoneView ? 'A/D tab · ✕ close' : 'A/D tab · L or X/Esc close') : shop ? (ui.kind === 'shop' && SHOP_TABS[tabOf()].key === 'resources' ? 'A/D tab · W/S choose · Space buy / sell · X/Esc close' : 'A/D tab · W/S choose · Space buy · X/Esc close') : ui.kind === 'quests' ? (quests.length ? 'W/S choose · Space or right-click cancel · Q/X/Esc close' : 'Q or X/Esc close') : ui.kind === 'spelltech' ? 'W/S choose · Space craft · X/Esc close' : ui.kind === 'rest' ? (restReadyAt > Date.now() ? (ui.back ? 'Esc back' : 'X/Esc close') : 'Space confirm · X/Esc close') : info ? (ui.back ? 'Esc back' : 'X/Esc close') : (ui.back ? 'W/S choose · Space select · Esc back' : 'W/S choose · Space select · X/Esc close'), px + 40, py + ph - 40);
+      ctx.fillText(hero ? 'H or X/Esc close' : ui.kind === 'gameover' ? 'Space respawn' : inv ? 'A/D/W/S choose · Space equip/learn/unequip · I or X/Esc close' : ui.kind === 'loot' ? 'W/S choose · Space take · X/Esc close' : ui.kind === 'cheat' ? 'A/D tab · W/S choose · Space apply · P or X/Esc close' : ui.kind === 'scrap' ? 'W/S choose · Space buy / sell · X/Esc close' : ui.kind === 'work' ? 'A/D tab · W/S choose · Space accept · X/Esc close' : ui.kind === 'leaderboard' ? (phoneView ? 'A/D tab · ✕ close' : 'A/D tab · L or X/Esc close') : shop ? 'A/D tab · W/S choose · Space buy · X/Esc close' : ui.kind === 'quests' ? (quests.length ? 'W/S choose · Space or right-click cancel · Q/X/Esc close' : 'Q or X/Esc close') : ui.kind === 'spelltech' ? 'W/S choose · Space craft · X/Esc close' : ui.kind === 'rest' ? (restReadyAt > Date.now() ? (ui.back ? 'Esc back' : 'X/Esc close') : 'Space confirm · X/Esc close') : info ? (ui.back ? 'Esc back' : 'X/Esc close') : (ui.back ? 'W/S choose · Space select · Esc back' : 'W/S choose · Space select · X/Esc close'), px + 40, py + ph - 40);
       drawTutGlow();
     }
 
@@ -6138,7 +5749,8 @@
       const r = rowRects.find(b => !b.panel && (t.tab != null ? b.tab === t.tab : b.tab == null && b.i === t.row));
       if (!r) return;
       const a = 0.6 + 0.4 * Math.sin(performance.now() / 250);
-      ctx.save(); ctx.globalAlpha = a; glowBox(r.x - 4, r.y - 4, r.w + 8, r.h + 8, '#ffdc00', 18, 5, 12); ctx.restore();
+      ctx.save(); ctx.strokeStyle = `rgba(255, 220, 0, ${a})`; ctx.lineWidth = 5; ctx.shadowColor = '#ffdc00'; ctx.shadowBlur = 18;
+      rr(r.x - 4, r.y - 4, r.w + 8, r.h + 8, 12); ctx.stroke(); ctx.restore();
     }
     // ---- game over ------------------------------------------------------------------------
     // start screen: the key art (art/ui/startScreen.jpg, until then a dark backdrop), the title and the tutorial question
@@ -6284,7 +5896,7 @@
     // Zone cells keep the zone's 21:13 shape. Undiscovered zones are fog (a drawn placeholder until fog art exists).
     const MAP_BOUNDS = (() => { const c = Object.keys(ZONE_LIST).map(coordOf);
       return { aMin: Math.min(...c.map(v => v[0])), aMax: Math.max(...c.map(v => v[0])), bMin: Math.min(...c.map(v => v[1])), bMax: Math.max(...c.map(v => v[1])) }; })();
-    const ZONE_COLORS = { wasteland: '#7a3a1c', pit: '#4a2010', city: '#8a93a6', slums: '#58617a', greaser: '#7a6d3e', lake: '#2f8a45', factoryIn: '#6a5a4a', factory: '#57493c', forest: '#4f7a3a', deepForest: '#2f5a26' };
+    const ZONE_COLORS = { city: '#8a93a6', slums: '#58617a', greaser: '#7a6d3e', lake: '#2f8a45', factoryIn: '#6a5a4a', factory: '#57493c', forest: '#4f7a3a', deepForest: '#2f5a26' };
     const fogCache = new Map();
     function fogTile(w, h) {   // soft grey clouds, same pattern every time for a given size
       const key = `${w}x${h}`;
@@ -6303,12 +5915,12 @@
     }
     // draws zones with map rows aTop..aBottom (top = higher a) and columns bLeft..bRight into the box at x, y
     let fogPattern = null;
-    function drawMapGrid(x, y, cw, ch, aTop, aBottom, bLeft, bRight, big, g = ctx, dot = true) {   // g: where to draw; dot: the blinking hero dot
+    function drawMapGrid(x, y, cw, ch, aTop, aBottom, bLeft, bRight, big) {
       const cellX = b => x + (b - bLeft) * cw, cellY = a => y + (aTop - a) * ch;
       // whole-pixel cell edges, so neighbouring cells meet with no gap or line between them
       const rectOf = (a, b) => { const x0 = Math.round(cellX(b)), y0 = Math.round(cellY(a)); return [x0, y0, Math.round(cellX(b + 1)) - x0, Math.round(cellY(a - 1)) - y0]; };
       // fog: one continuous seamless texture, anchored to the world, so fogged zones blend into one cloud
-      if (!fogPattern && ready(ART.mapFog)) fogPattern = g.createPattern(ART.mapFog, 'repeat');
+      if (!fogPattern && ready(ART.mapFog)) fogPattern = ctx.createPattern(ART.mapFog, 'repeat');
       if (fogPattern) {
         const tile = cw * 2.2, ox = cellX(MAP_BOUNDS.bMin), oy = cellY(MAP_BOUNDS.aMax);
         fogPattern.setTransform(new DOMMatrix().translate(ox, oy).scale(tile / ART.mapFog.naturalWidth));
@@ -6317,15 +5929,15 @@
         const id = `${a}:${b}`;
         if (discovered.has(id)) continue;   // everything not yet discovered is fog, including map cells with no zone, so the layout stays hidden
         const [rx, ry, rw, rh] = rectOf(a, b);
-        if (fogPattern) { g.fillStyle = fogPattern; g.fillRect(rx, ry, rw, rh); }
-        else g.drawImage(fogTile(rw, rh), rx, ry);
+        if (fogPattern) { ctx.fillStyle = fogPattern; ctx.fillRect(rx, ry, rw, rh); }
+        else ctx.drawImage(fogTile(rw, rh), rx, ry);
       }
       for (let a = aTop; a >= aBottom; a--) for (let b = bLeft; b <= bRight; b++) {
         const id = `${a}:${b}`, type = ZONE_LIST[id], cx = cellX(b), cy = cellY(a);
         if (!type) continue;   // no zone here
         if (discovered.has(id)) {
           const [rx, ry, rw, rh] = rectOf(a, b);
-          g.fillStyle = ZONE_COLORS[type]; g.fillRect(rx, ry, rw, rh);
+          ctx.fillStyle = ZONE_COLORS[type]; ctx.fillRect(rx, ry, rw, rh);
         }
       }
       // big map: one name per group of touching discovered zones with the same name (no coordinates),
@@ -6351,21 +5963,21 @@
             const best = group.map(([ga, gb]) => [cellX(gb) + cw / 2, cellY(ga) + ch / 2]).sort((p, q) => Math.hypot(p[0] - mx, p[1] - my) - Math.hypot(q[0] - mx, q[1] - my))[0];
             [lx, ly] = best;
           }
-          g.fillStyle = '#f2f2f2'; g.font = `600 ${Math.round(ch * 0.19)}px ` + MONO; g.textAlign = 'center'; g.textBaseline = 'middle';
-          g.save(); g.shadowColor = 'rgba(0, 0, 0, 0.6)'; g.shadowBlur = 4;
+          ctx.fillStyle = '#f2f2f2'; ctx.font = `600 ${Math.round(ch * 0.19)}px ` + MONO; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+          ctx.save(); ctx.shadowColor = 'rgba(0, 0, 0, 0.6)'; ctx.shadowBlur = 4;
           const gw = (Math.max(...group.map(g => g[1])) - Math.min(...group.map(g => g[1])) + 1) * cw;   // group width
           const lines = wrapText(name, gw - 12);   // too wide for the group: one word per line
-          lines.forEach((l, i) => g.fillText(l, lx, ly + (i - (lines.length - 1) / 2) * ch * 0.22));
-          g.restore();
+          lines.forEach((l, i) => ctx.fillText(l, lx, ly + (i - (lines.length - 1) / 2) * ch * 0.22));
+          ctx.restore();
         }
       }
       // discovered zones: faint white neon edge (5%); the current zone gets a yellow one (10%)
       const neon = (a, b, color, alpha) => {
         const [rx, ry, rw, rh] = rectOf(a, b);
-        g.save(); g.globalAlpha *= alpha; g.strokeStyle = color; g.lineWidth = big ? 3 : 2;
-        g.shadowColor = color; g.shadowBlur = big ? 14 : 8;
-        g.strokeRect(rx + 2, ry + 2, rw - 4, rh - 4); g.strokeRect(rx + 2, ry + 2, rw - 4, rh - 4);
-        g.restore();
+        ctx.save(); ctx.globalAlpha *= alpha; ctx.strokeStyle = color; ctx.lineWidth = big ? 3 : 2;
+        ctx.shadowColor = color; ctx.shadowBlur = big ? 14 : 8;
+        ctx.strokeRect(rx + 2, ry + 2, rw - 4, rh - 4); ctx.strokeRect(rx + 2, ry + 2, rw - 4, rh - 4);
+        ctx.restore();
       };
       // white edge only around the outside of the discovered area: a side shared with another discovered zone gets none
       const path = new Path2D();
@@ -6377,8 +5989,8 @@
         if (open(0, -1)) { path.moveTo(rx + 2, ry); path.lineTo(rx + 2, ry + rh); }            // left
         if (open(0, 1)) { path.moveTo(rx + rw - 2, ry); path.lineTo(rx + rw - 2, ry + rh); }   // right
       }
-      g.save(); g.globalAlpha *= 0.05; g.strokeStyle = '#ffffff'; g.lineWidth = big ? 3 : 2;
-      g.shadowColor = '#ffffff'; g.shadowBlur = big ? 14 : 8; g.stroke(path); g.stroke(path); g.restore();
+      ctx.save(); ctx.globalAlpha *= 0.05; ctx.strokeStyle = '#ffffff'; ctx.lineWidth = big ? 3 : 2;
+      ctx.shadowColor = '#ffffff'; ctx.shadowBlur = big ? 14 : 8; ctx.stroke(path); ctx.stroke(path); ctx.restore();
       // passages: cyan dots on the shared edge, once either side has been discovered
       for (const [A, B, f] of PASSAGES) {
         if (!discovered.has(A) && !discovered.has(B)) continue;
@@ -6389,23 +6001,21 @@
         if (a1 === a2) { px = cellX(Math.max(b1, b2)); py = cellY(a1) + f * ch; }
         else { py = cellY(Math.max(a1, a2)) + ch; px = cellX(b1) + f * cw; }
         if (px < x - 1 || px > x + (bRight - bLeft + 1) * cw + 1 || py < y - 1 || py > y + (aTop - aBottom + 1) * ch + 1) continue;
-        g.fillStyle = '#00e5ff'; g.beginPath(); g.arc(px, py, big ? 6 : 3, 0, Math.PI * 2); g.fill();
+        ctx.fillStyle = '#00e5ff'; ctx.beginPath(); ctx.arc(px, py, big ? 6 : 3, 0, Math.PI * 2); ctx.fill();
       }
       // where the hero is: yellow frame around the zone and a dot at his spot
       const [ca, cb] = coordOf(areaName);
       if (ca <= aTop && ca >= aBottom && cb >= bLeft && cb <= bRight) {
         const cx = cellX(cb), cy = cellY(ca);
         neon(ca, cb, '#ffdc00', 0.1);
-        if (!dot) return;
         const blink = 0.6 + 0.4 * Math.sin(performance.now() / 200);
-        g.fillStyle = `rgba(255, 220, 0, ${blink})`;
-        g.beginPath(); g.arc(cx + (player.x + 0.5) / COLS * cw, cy + (player.y + 0.5) / ROWS * ch, big ? 6 : 3.5, 0, Math.PI * 2); g.fill();
+        ctx.fillStyle = `rgba(255, 220, 0, ${blink})`;
+        ctx.beginPath(); ctx.arc(cx + (player.x + 0.5) / COLS * cw, cy + (player.y + 0.5) / ROWS * ch, big ? 6 : 3.5, 0, Math.PI * 2); ctx.fill();
       }
     }
     // minimap: always open in the top-right corner, 4 × 4 zones around the hero, 50% opacity
     const MINI = { cols: 4, rows: 4, cw: 80, ch: 80 * 13 / 21 };
     let miniAlpha = 0.3;
-    let miniCache = null;   // the minimap's picture (see drawMinimap)
     function drawMinimap(rx, ry) {
       const [a, b] = coordOf(areaName);
       const bLeft = Math.max(MAP_BOUNDS.bMin, Math.min(b - 1, MAP_BOUNDS.bMax - MINI.cols + 1));
@@ -6418,21 +6028,7 @@
       ctx.save(); ctx.globalAlpha = miniAlpha;
       ctx.fillStyle = '#000'; rr(x - 6, y - 6, w + 12, h + 12, 14); ctx.fill();
       ctx.save(); rr(x, y, w, h, 10); ctx.clip();   // rounded minimap
-      // the map itself only changes with the zone or a new discovery: drawn once into a picture, then just copied each frame
-      const key = `${areaName}|${discovered.size}|${aTop}|${bLeft}|${x}|${PX}|${ready(ART.mapFog)}`;
-      if (!miniCache || miniCache.key !== key) {
-        const c = miniCache && miniCache.c || document.createElement('canvas');
-        c.width = Math.ceil(w * PX); c.height = Math.ceil(h * PX);
-        const g = c.getContext('2d'); g.setTransform(PX, 0, 0, PX, -x * PX, -y * PX); g.imageSmoothingQuality = 'high';
-        drawMapGrid(x, y, MINI.cw, MINI.ch, aTop, aTop - MINI.rows + 1, bLeft, bLeft + MINI.cols - 1, false, g, false);
-        miniCache = { key, c, x };
-      }
-      ctx.drawImage(miniCache.c, x, y, w, h);
-      {   // the blinking dot where the hero is
-        const [ca, cb] = coordOf(areaName), cx = x + (cb - bLeft) * MINI.cw, cy = y + (aTop - ca) * MINI.ch;
-        ctx.fillStyle = `rgba(255, 220, 0, ${0.6 + 0.4 * Math.sin(performance.now() / 200)})`;
-        ctx.beginPath(); ctx.arc(cx + (player.x + 0.5) / COLS * MINI.cw, cy + (player.y + 0.5) / ROWS * MINI.ch, 3.5, 0, Math.PI * 2); ctx.fill();
-      }
+      drawMapGrid(x, y, MINI.cw, MINI.ch, aTop, aTop - MINI.rows + 1, bLeft, bLeft + MINI.cols - 1, false);
       ctx.restore();
       ctx.strokeStyle = '#fff'; ctx.lineWidth = 2; rr(x - 5, y - 5, w + 10, h + 10, 13); ctx.stroke();
       ctx.fillStyle = '#fff'; ctx.font = (phoneView ? '600 26px ' : fillView ? '600 17px ' : '600 14px ') + MONO; ctx.textAlign = 'right'; ctx.textBaseline = 'top';
@@ -6493,7 +6089,9 @@
       }
       if (item && item.name !== 'money' && rarityOf(item.name) !== 'common') {   // rarity edge inside the slot
         const i = size * 0.09;
-        ctx.save(); ctx.globalAlpha = 0.85; glowBox(x + i, y + i, size - 2 * i, size - 2 * i, rarityColor(item.name), 6, Math.round(Math.max(2, size * 0.035) * 2) / 2); ctx.restore();
+        ctx.save(); ctx.strokeStyle = rarityColor(item.name); ctx.globalAlpha = 0.85; ctx.lineWidth = Math.max(2, size * 0.035);
+        ctx.shadowColor = rarityColor(item.name); ctx.shadowBlur = 6;
+        ctx.strokeRect(x + i, y + i, size - 2 * i, size - 2 * i); ctx.restore();
       }
       if (item && item.quest) {   // delivery parcel: a small cyan tag, top-left
         const r = size * 0.13, bx = x + size * 0.2, by = y + size * 0.2;
@@ -6897,7 +6495,7 @@
       const k = keyOf(e);
       if (itemMenu && !e.repeat && ['w', 's'].includes(k)) { e.preventDefault(); itemMenu.cursor = (itemMenu.cursor + (k === 's' ? 1 : -1) + itemMenu.opts.length) % itemMenu.opts.length; return; }
       if (itemMenu && e.code === 'Space') { e.preventDefault(); if (!e.repeat) { playSfx('interact'); pickItemMenu(itemMenu.cursor); } return; }
-      if (e.code === 'Space') { e.preventDefault(); spaceDown = true; if (!e.repeat) spacePressed(); return; }
+      if (e.code === 'Space') { e.preventDefault(); if (!e.repeat) spacePressed(); return; }
       if (k === 'p') { e.preventDefault(); if (!e.repeat && !locked()) { if (ui && ui.kind === 'cheat') closeWindow(); else openCheats(); } return; }   // CHEAT menu (testing) — remove before release
       if (k === 'i') { e.preventDefault(); if (!e.repeat && (!ui || (fillView && !locked()))) togglePanel('inventory'); return; }
       if (k === 'm') { e.preventDefault(); if (!e.repeat && !locked()) { if (ui && ui.kind === 'map') closeWindow(); else if (!ui) openWindow('map'); } return; }
@@ -6915,11 +6513,10 @@
       if (!e.repeat) press([k]);
     });
     addEventListener('keyup', e => {
-      if (e.code === 'Space') spaceDown = false;
       const k = keyOf(e);
       if (KEYS.includes(k)) release([k]);
     });
-    addEventListener('blur', () => { held.clear(); spaceDown = false; });
+    addEventListener('blur', () => held.clear());
 
     // tap/click a row in a window to pick it
     canvas.addEventListener('contextmenu', e => e.preventDefault());
@@ -6934,7 +6531,7 @@
       try {
         for (const d of drips) {
           if (cloaked(d)) continue;
-          drip = d; const q = dripPos(), n = foeSize(d), hgt = d.kind === 'loader' ? 2.7 : d.kind === 'queen' ? 3.1 : d.kind === 'spore' ? 1.2 : d.kind === 'crawler' ? 1.1 : d.kind === 'drone' ? 2.2 : 1.8;
+          drip = d; const q = dripPos(), n = foeSize(d), hgt = d.kind === 'loader' ? 2.7 : d.kind === 'queen' ? 3.1 : d.kind === 'spore' ? 1.2 : d.kind === 'drone' ? 2.2 : 1.8;
           const x0 = (q.x - 0.15) * TILE, x1 = (q.x + n + 0.15) * TILE, y1 = (q.y + 1) * TILE, y0 = y1 - hgt * TILE;
           if (wx < x0 || wx > x1 || wy < y0 || wy > y1) continue;
           if (d.dead) { if (d.loot && lootable() === d) { spacePressed(); return true; } continue; }
@@ -7182,7 +6779,6 @@
 
     fixEquipSlots(); syncSets();   // saves from before the fixed slots (weapon, head, chest, boots); set bonuses for older saves
     spawnAllDrips();   // start of the game: every enemy in the world is spawned
-    loadHarvest(saved.harvest);
     requestAnimationFrame(frame);
   }
 
