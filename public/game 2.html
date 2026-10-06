@@ -669,8 +669,8 @@
     { name: 'Sludge Crystal', class: 'resource', stack: 64, gain: {}, value: 6, rarity: 'common', art: 'sludgeCrystal', desc: 'A toxic crystal grown out of the lakeshore sludge. Still warm.' },
     { name: 'Glowcap Truffle', class: 'resource', stack: 16, gain: {}, value: 45, rarity: 'rare', art: 'glowcapTruffle', desc: 'A rare glowing truffle dug up from under the deep forest trees.' },
     { name: 'Loader Core', class: 'resource', stack: 16, gain: {}, value: 110, rarity: 'mythical', art: 'loaderCore', desc: 'The still-warm power core of an Overgrown Loader.' },
-    // bags: class 'bag', worn in one of the two bag slots (top of the inventory window); slots = what it adds to the shared
-    // inventory while worn. Sold in the ATB-Market (Other tab). Swapping / taking off only while everything still fits.
+    // bags: class 'bag', worn in the bag slot (the backpack tile in the bar); slots = inventory size while worn.
+    // Sold in the ATB-Market (Other tab). A bag can only be swapped when the worn bag holds nothing but the new bag.
     { name: 'BackBag', class: 'bag', slots: 2, price: 80, rarity: 'common', gain: {}, art: 'invIcon', tab: 'other',
       desc: 'A worn street backpack with two pockets. Better than carrying loot in your hands.' },
     { name: 'BackBag X', class: 'bag', slots: 4, price: 600, rarity: 'rare', gain: { charisma: 1 }, art: 'bagX', tab: 'other', buyLevel: 3,
@@ -1868,8 +1868,7 @@
     const heroLook = () => { for (const st of SETS) if (st.look && activeSets.has(st.name)) return st.look; return null; };
     recalcCaps();
     const PILE_MS = 600000, PILE_FADE_MS = 3000;
-    const pileOf = p => { const q = { ...p, bags: p.bags || (p.bag ? [p.bag] : []) }; delete q.bag; return q; };   // older piles had one `bag`
-    const piles = (saved.piles || []).map(p => ({ ...pileOf(p), until: p.left }));   // { zone, x, y, money, bags, gear, items, until } (until: game time)
+    const piles = (saved.piles || []).map(p => ({ ...p, until: p.left }));   // { zone, x, y, money, bag, gear, items, until } (until: game time)
     // tutorial ("Rogue's lessons"), given by the Rogue: tut = 0 not started (the '!' over her), 1..7 the active task,
     // TUT_READY = 8 the quiz (3 questions) and then the reward, TUT_DONE = 9 finished or skipped. Tasks follow each other by
     // themselves; need = how many times the event must happen (tutN counts it). Task 3 is done by holding 30$ (checked every frame).
@@ -1906,127 +1905,16 @@
     let hintText = '', hintUntil = 0;   // a short line at the top of the screen (real time)
     const showHint = (text, ms = 8000) => { hintText = text; hintUntil = performance.now() + ms; };
     capMult = talentHpMult; recalcCaps();
-    // two bag slots (shown at the top of the inventory window). The worn bags' slots add up into one shared inventory, and
-    // their stat bonuses stack; the Vault Pack's money keep doesn't (10% at most). A new run starts wearing a BackBag.
-    // Old saves: their one bag goes into the first slot, and a hero who had none gets a BackBag.
-    const DEFAULT_BAG = 'BackBag';
-    const bags = Array.isArray(saved.bags) ? [saved.bags[0] || null, saved.bags[1] || null] : [saved.bag || DEFAULT_BAG, null];   // worn bag names (null = empty slot)
-    const wornBags = () => bags.filter(Boolean);
-    const hasBag = () => bags.some(Boolean);
-    const bagSlots = name => (name && (itemDef(name) || {}).slots) || 0;
-    const invSlots = () => bags.reduce((t, n) => t + bagSlots(n), 0);
-    const bagsLabel = () => wornBags().join(' + ') || 'no bag';
-    const freeBagSlot = () => bags.indexOf(null);
-    const fullMsg = () => hasBag() ? 'Inventory full.' : 'You have no bag: buy a BackBag at the ATB-Market (Other tab).';
-    // put a bag into bag slot `slot` (null = empty it); the bag that was there loses its bonuses, the new one's apply
-    function wearBag(name, slot) {
-      const oldDef = bags[slot] && itemDef(bags[slot]), newDef = (name && itemDef(name)) || {};
+    let bag = saved.bag ?? null;   // worn bag's name (BackBag, BackBag X) or null: no bag = no inventory slots
+    const invSlots = () => bag ? ((itemDef(bag) || {}).slots || 0) : 0;
+    const fullMsg = () => bag ? 'Inventory full.' : 'You have no bag: buy a BackBag at the ATB-Market (Other tab).';
+    // put a bag in the bag slot (its bonuses apply while worn); takes off the old one's bonuses
+    function wearBag(name) {
+      const oldDef = bag && itemDef(bag), newDef = itemDef(name) || {};
       for (const [st, n] of Object.entries((oldDef && oldDef.gain) || {})) stats[st] -= n;
       for (const [st, n] of Object.entries(newDef.gain || {})) stats[st] += n;
       if ((oldDef && oldDef.gain && oldDef.gain.charisma) || (newDef.gain && newDef.gain.charisma)) deals = newDeals();
-      bags[slot] = name || null; renderStats();
-    }
-    // Space on a bag in the inventory: into the free bag slot, or in place of the smaller worn bag (which goes into the
-    // inventory) — only if everything carried still fits
-    function wearBagFromInventory(idx, pn) {
-      const item = inventory[idx], def = itemDef(item.name) || {};
-      let slot = freeBagSlot();
-      if (slot < 0) slot = bagSlots(bags[0]) <= bagSlots(bags[1]) ? 0 : 1;
-      const old = bags[slot], room = invSlots() - bagSlots(old) + (def.slots || 0), items = inventory.length - 1 + (old ? 1 : 0);
-      if (items > room) { pn.msg = `No room: swapping out your ${old} leaves ${room} slots for ${items} items.`; return; }
-      inventory.splice(idx, 1); wearBag(item.name, slot);
-      if (old) inventory.push({ name: old, class: 'bag' });
-      pn.cursor = Math.min(pn.cursor, Math.max(0, invSlots() - 1));
-      pn.msg = `Wearing the ${item.name} (+${def.slots} slots)${old ? `, ${old} into the inventory` : ''}: ${invSlots()} slots.`;
-    }
-    // Space (or "Take off") on a worn bag: back into the inventory, if everything still fits without it
-    function takeOffBag(slot, pn) {
-      const name = bags[slot];
-      if (!name) { pn.msg = 'Empty bag slot. Press Space on a bag in your inventory to wear it.'; return; }
-      const room = invSlots() - bagSlots(name);
-      if (inventory.length + 1 > room) { pn.msg = `No room: without the ${name} you'd have ${room} slots for ${inventory.length + 1} items.`; return; }
-      wearBag(null, slot); inventory.push({ name, class: 'bag' });
-      pn.msg = `Took off the ${name}: it's in your inventory. ${invSlots()} slots left.`;
-    }
-
-    // ---- CredBank Vault -------------------------------------------------------------------------------------------------
-    // 4 bag sockets, bought in order; the bags in them add up into one shared Vault storage. Storing an item (a stack counts
-    // as one) costs VAULT_FEES.store, taking one back VAULT_FEES.withdraw. Bags go into an empty socket for free and come out
-    // for free while the Vault's items still fit. Everything in the Vault survives death; a new game empties it.
-    const VAULT_SOCKET_COST = [1, 100, 1000, 10000], VAULT_FEES = { store: 1, withdraw: 2 };
-    const vault = { open: 0, bags: [null, null, null, null], items: [] };   // open = sockets unlocked (in order)
-    function loadVault(v) {
-      vault.open = Math.max(0, Math.min(4, (v && v.open) || 0));
-      vault.bags = [0, 1, 2, 3].map(i => (v && v.bags && v.bags[i]) || null);
-      vault.items = v && Array.isArray(v.items) ? v.items.map(it => ({ ...it })) : [];
-    }
-    loadVault(saved.vault);
-    const vaultSlots = () => vault.bags.reduce((t, n) => t + bagSlots(n), 0);
-    const vaultFreeSocket = () => vault.bags.findIndex((b, i) => i < vault.open && !b);
-    // n of a stackable item into a list of cap slots: tops up its stacks first, then new slots. Returns how many went in.
-    function stackInto(list, cap, it, n) {
-      const max = (itemDef(it.name) || {}).stack || 1; let moved = 0;
-      for (const x of list) {
-        if (x.name !== it.name || x.quest || (x.count || 1) >= max) continue;
-        const k = Math.min(n - moved, max - (x.count || 1)); x.count = (x.count || 1) + k; moved += k;
-        if (moved === n) return moved;
-      }
-      while (moved < n && list.length < cap) { const k = Math.min(n - moved, max); list.push({ ...it, count: k }); moved += k; }
-      return moved;
-    }
-    // move n of from[idx] into `to` (cap slots): stacks merge, anything else needs a free slot. Returns how many moved.
-    function moveItem(from, idx, to, cap, n) {
-      const it = from[idx], max = (itemDef(it.name) || {}).stack || 1;
-      if (max > 1 && !it.quest) {
-        const moved = stackInto(to, cap, it, Math.min(n, it.count || 1));
-        if (moved) { it.count = (it.count || 1) - moved; if (it.count <= 0) from.splice(idx, 1); }
-        return moved;
-      }
-      if (to.length >= cap) return 0;
-      to.push(from[idx]); from.splice(idx, 1); return 1;
-    }
-    const vaultOpen = () => !!ui && ui.kind === 'bank' && WINDOW_TABS.bank[tabOf()].key === 'vault';
-    // store inventory slot idx: a bag goes into a free socket (free); anything else (or with asSocket = false) costs 1$
-    function vaultStore(idx, asSocket = true) {
-      const it = inventory[idx]; if (!it) return 'This slot is empty.';
-      if (it.quest) return `That ${it.name} is for a delivery. Bring it to the Netizen Chef.`;
-      const def = itemDef(it.name) || {}, sock = vaultFreeSocket();
-      if (asSocket && def.class === 'bag' && sock >= 0) {
-        inventory.splice(idx, 1); vault.bags[sock] = it.name;
-        return `${it.name} put in socket ${sock + 1}: +${def.slots} Vault slots (${vaultSlots()} in all).`;
-      }
-      if (!vaultSlots()) return vault.open ? 'Put a bag in a socket first: its slots become your Vault storage.' : 'Unlock a socket first (1$), then put a bag in it.';
-      if (stats.money < VAULT_FEES.store) return `Storing costs ${VAULT_FEES.store}$.`;
-      const n = it.count || 1, moved = moveItem(inventory, idx, vault.items, vaultSlots(), n);
-      if (!moved) return 'Your Vault is full.';
-      stats.money -= VAULT_FEES.store; renderStats();
-      return `Stored ${moved > 1 ? moved + ' × ' : ''}${it.name} for ${VAULT_FEES.store}$.${moved < n ? ` ${n - moved} didn't fit.` : ''}`;
-    }
-    // take n (Infinity = all) of Vault slot idx back into the inventory for 2$
-    function vaultWithdraw(idx, n = Infinity) {
-      const it = vault.items[idx]; if (!it) return 'This Vault slot is empty.';
-      if (stats.money < VAULT_FEES.withdraw) return `Taking an item out costs ${VAULT_FEES.withdraw}$.`;
-      const want = Math.min(n, it.count || 1), moved = moveItem(vault.items, idx, inventory, invSlots(), want);
-      if (!moved) return fullMsg();
-      stats.money -= VAULT_FEES.withdraw; renderStats();
-      return `Took out ${moved > 1 ? moved + ' × ' : ''}${it.name} for ${VAULT_FEES.withdraw}$.${moved < want ? ` ${want - moved} didn't fit.` : ''}`;
-    }
-    // a socket: buy it (the next locked one), take its bag out, or explain
-    function vaultSocket(i) {
-      if (i >= vault.open) {
-        if (i > vault.open) return `Unlock socket ${vault.open + 1} first.`;
-        const c = VAULT_SOCKET_COST[i];
-        if (stats.money < c) return `Socket ${i + 1} costs ${c.toLocaleString('en')}$.`;
-        stats.money -= c; vault.open++; renderStats();
-        return `Socket ${i + 1} unlocked for ${c.toLocaleString('en')}$. Press Space on a bag in your inventory to put it in.`;
-      }
-      const b = vault.bags[i];
-      if (!b) return 'Empty socket. Press Space on a bag in your inventory to put it here.';
-      const room = vaultSlots() - bagSlots(b);
-      if (vault.items.length > room) return `No room: without the ${b} your Vault has ${room} slots for ${vault.items.length} items.`;
-      if (inventory.length >= invSlots()) return fullMsg();
-      vault.bags[i] = null; inventory.push({ name: b, class: 'bag' });
-      return `Took the ${b} out of socket ${i + 1}. It's in your inventory.`;
+      bag = name; renderStats();
     }
     let restReadyAt = saved.restReadyAt ?? 0;   // Date.now() when the HomeDome can be used again
     const skills = (saved.skills || []).map(newName);            // learned skill names, shown in the ability slots
@@ -2076,17 +1964,17 @@
     }
     // open window: null, or { kind: 'shop' | 'work' | 'menu', cursor, msg }
     let ui = null;
-    window.claude?.hot?.snapshot?.(() => ({ x: player.x, y: player.y, fx: facing.x, fy: facing.y, stats, deals, prices, dealsDone, heroName, inventory, equipped, skills, areaName, restReadyAt, levels, bags: [...bags], discovered: [...discovered] }));
+    window.claude?.hot?.snapshot?.(() => ({ x: player.x, y: player.y, fx: facing.x, fy: facing.y, stats, deals, prices, dealsDone, heroName, inventory, equipped, skills, areaName, restReadyAt, levels, bag, discovered: [...discovered] }));
 
     document.getElementById('portrait').style.backgroundImage = `url(${ART_SRC.heroPortrait})`;
-    // the bag tile in the bar: the first worn bag's picture, or the crossed-out empty bag when none is worn
+    // the bag tile in the bar: the worn bag's picture, or the crossed-out empty bag when none is worn
     function renderBagTile() {
-      const first = wornBags()[0], el = document.getElementById('inv-btn'), def = first && itemDef(first), noBagArt = ready(ART.noBag);
+      const el = document.getElementById('inv-btn'), def = bag && itemDef(bag), noBagArt = ready(ART.noBag);
       const pic = def ? ART_SRC[def.art] : noBagArt ? ART_SRC.noBag : ART_SRC.invIcon;
       const tb = document.getElementById('t-bag-img'); if (tb && tb.getAttribute('src') !== pic) tb.src = pic;   // phone menu: the worn bag, or the crossed-out bag
       el.style.backgroundImage = `url(${pic}), url(${ART_SRC.slot})`;
       el.classList.toggle('no-bag', !def && !noBagArt);   // drawn cross until the empty-bag icon exists
-      el.title = def ? `${bagsLabel()} · ${invSlots()} slots · Inventory (I)` : 'No bag · Inventory (I)';
+      el.title = def ? `${bag} · ${def.slots} slots · Inventory (I)` : 'No bag · Inventory (I)';
     }
     ART.noBag.addEventListener('load', () => renderBagTile());
     document.querySelectorAll('.ability').forEach(el => el.style.backgroundImage = `url(${ART_SRC.slot})`);
@@ -2128,21 +2016,17 @@
       if (ui.kind === 'shop' && SHOP_TABS[tabOf()].key === 'resources') return resourceRows();
       if (ui.kind === 'shop') return shopList(SHOP_TABS[tabOf()].key).map(it => {
         const gains = Object.entries(it.gain);
-        // equipment: shown as owned, can still be bought (asks first). Bags: ask only when both bag slots are taken by bags at
-        // least as big as this one (it wouldn't be an upgrade)
-        const owned = it.class === 'bag' ? freeBagSlot() < 0 && bags.every(b => bagSlots(b) >= (it.slots || 0))
-          : (it.kind || it.slot) && carried().some(x => x.name === it.name);
-        const showOwned = owned && it.class !== 'equipment' && it.class !== 'bag';
+        const owned = (it.kind || it.slot || it.class === 'bag') && (carried().some(x => x.name === it.name) || bag === it.name);   // equipment: shown as owned, can still be bought (asks first)
+        const showOwned = owned && it.class !== 'equipment';
         return {
           left: it.patch ? `${it.name}  lvl ${levels[it.name]}` : it.name,
           shopItem: { it, owned: showOwned, have: owned, price: shown(it.name, prices[it.name]) },   // drawn as a big tile (drawShopRow)
           right: `${bonusText(it)}   ${showOwned ? 'owned' : shown(it.name, prices[it.name]) + '$'}`,
           act(again) {
             const price = shown(it.name, prices[it.name]);
-            if (owned && it.class !== 'equipment' && it.class !== 'bag') return `You already have the ${it.name}.`;
-            if (owned && !again) {   // equipment you already have / a bag that's no upgrade: ask before buying
-              askConfirm(it.class === 'bag' ? { title: 'Not an upgrade', icon: '?', text: 'Your bags are as good or better. Buy anyway?', yes: 'Buy', no: 'Cancel' }
-                : { title: 'Already owned', icon: '?', text: 'You already have this item. Buy anyway?', yes: 'Buy', no: 'Cancel' }).then(ok => {
+            if (owned && it.class !== 'equipment') return `You already have the ${it.name}.`;
+            if (owned && !again) {   // equipment you already have: ask before buying another
+              askConfirm({ title: 'Already owned', icon: '?', text: 'You already have this item. Buy anyway?', yes: 'Buy', no: 'Cancel' }).then(ok => {
                 if (!ok || !ui || ui.kind !== 'shop') return;
                 ui.msg = this.act(true) || ''; renderStats();
               });
@@ -2150,13 +2034,13 @@
             }
             const buyLvl = it.buyLevel || it.minLevel;   // shop level lock (buyLevel: needed to buy only, not to equip)
             if (buyLvl && hero.level < buyLvl) return `Reach level ${buyLvl} to ${it.patch ? 'install' : 'buy'} ${it.name}.`;
-            const carriesIt = it.kind || it.slot || it.class === 'bag';   // goes into the bag (a bag is worn straight away while a bag slot is free)
-            const noRoom = carriesIt && !(it.class === 'bag' && freeBagSlot() >= 0) && inventory.length >= invSlots();
+            const carriesIt = it.kind || it.slot || it.class === 'bag';   // goes into the bag (a first bag is worn straight away)
+            const noRoom = carriesIt && !(it.class === 'bag' && !bag) && inventory.length >= invSlots();
             if (noRoom && !(it.class === 'equipment' && canWearDirect(it))) return fullMsg();   // equipment with a free slot is worn instead
             if (stats.money < price) return `Not enough money for ${it.name}.`;
             if (it.class === 'food' && stats.energy >= CAPS.energy) {   // full of energy: offer to keep it for later
               const fits = inventory.some(x => x.name === it.name && !x.quest && (x.count || 1) < (it.stack || 1)) || inventory.length < invSlots();
-              if (!fits) return hasBag() ? `Your energy is full, and your inventory has no room for ${it.name}.` : 'Your energy is full, and you have no bag to keep food in.';
+              if (!fits) return bag ? `Your energy is full, and your ${bag} has no room for ${it.name}.` : 'Your energy is full, and you have no bag to keep food in.';
               askConfirm({ title: 'Energy is full', icon: '⚡', text: `Your energy is full. Put <b>${it.name}</b> in your inventory for later?`, yes: 'Put in bag', no: 'Cancel' }).then(ok => {
                 if (!ok) return;
                 const p = shown(it.name, prices[it.name]); let msg;
@@ -2173,13 +2057,13 @@
               return gains.length > 1 ? 'You are already full.' : `Your ${gains[0][0]} is already full (${CAPS[gains[0][0]]}).`;
             stats.money -= price;
             if (it.class === 'bag') {
-              if (freeBagSlot() >= 0) { wearBag(it.name, freeBagSlot()); return `You put on the ${it.name}: +${it.slots} slots (${invSlots()} in all).`; }
+              if (!bag) { wearBag(it.name); return `You put on the ${it.name}: ${it.slots} slots.`; }
               inventory.push({ name: it.name, class: 'bag' });
-              return `Got the ${it.name}. Both bag slots are full: press Space on it in your inventory (I) to swap it for your smaller bag.`;
+              return `Got the ${it.name}. To wear it, empty your ${bag} and press Space on it (I).`;
             }
             if (it.kind === 'sword') weaponBought = true;   // the Rogue's "Weapon" quest
             if (it.class === 'equipment') {   // no bonus until equipped
-              if (noRoom) return `${hasBag() ? 'No room in your inventory' : 'No bag'}, so you put on the ${it.name}: ${wearDirect(it.name)}.`;
+              if (noRoom) return `${bag ? `No room in your ${bag}` : 'No bag'}, so you put on the ${it.name}: ${wearDirect(it.name)}.`;
               inventory.push({ name: it.name, kind: it.kind, class: it.class });
               return `Got the ${it.name}. Equip it in your inventory (I, Space).`;
             }
@@ -2291,12 +2175,7 @@
           showHint(`Delivered! "Still warm. You're a lifesaver, hon."`);
         } }];
       }
-      if (['metro', 'ripperdoc'].includes(ui.kind)) return [{ left: 'ok', right: '', act() { ui = null; } }];
-      if (ui.kind === 'bank') {   // Vault tab: rows 0-3 = the sockets, 4+ = the Vault's storage slots (drawn as a grid: drawVault)
-        if (WINDOW_TABS.bank[tabOf()].key !== 'vault') return [];
-        return [...[0, 1, 2, 3].map(i => ({ left: `socket ${i + 1}`, right: '', act() { return vaultSocket(i); } })),
-                ...Array.from({ length: vaultSlots() }, (_, j) => ({ left: `vault ${j + 1}`, right: '', act() { return vaultWithdraw(j); } }))];
-      }
+      if (['metro', 'bank', 'ripperdoc'].includes(ui.kind)) return [{ left: 'ok', right: '', act() { ui = null; } }];
       if (ui.kind === 'rogue') {
         if (tut === 0) return [
           { left: 'teach me', right: '', act() { tut = 1; tutN = 0; ui = null; } },
@@ -2383,14 +2262,13 @@
       quests.length = 0;
       areaName = '0:0'; spawnAllDrips();
       enterArea('0:0', START.x, START.y, 1, true);
-      inventory.length = 0; equipped.length = 0; activeSets.clear(); skills.length = 0; restReadyAt = 0; bags[0] = DEFAULT_BAG; bags[1] = null; loadVault(null); piles.length = 0; tut = 0; tutN = 0; tutQuiz = { i: 0, wrong: 0 }; Object.assign(levels, startLevels());
+      inventory.length = 0; equipped.length = 0; activeSets.clear(); skills.length = 0; restReadyAt = 0; bag = null; piles.length = 0; tut = 0; tutN = 0; tutQuiz = { i: 0, wrong: 0 }; Object.assign(levels, startLevels());
       rootedUntil = 0; slowUntil = 0; poisonUntil = 0; floaters.length = 0; Object.assign(CAP_BASE, BASE_CAPS); hero.level = 1; hero.exp = 0; recalcCaps();
       ui = null; closePanels(); applyLbBuffs();
     }
     // start screen: only when a brand-new run begins (a new game, or a first login with no save), never after dying
-    // after the start screen: go on straight away if every picture and decal layout is ready, else the loading screen shows
-    // what is still going on until they are
-    function afterLoading(next) { if (artProgress() >= 1 && !zonesUnplanned().length) next(); else ui = { kind: 'loading', cursor: 0, msg: '', next }; }
+    // after the start screen: go on straight away if every picture is in, else show "Loading" until they are
+    function afterLoading(next) { if (artProgress() >= 1) next(); else ui = { kind: 'loading', cursor: 0, msg: '', next }; }
     function showStartScreen() { closePanels(); ui = { kind: 'start', cursor: 0, msg: '' }; held.clear(); tapped.clear(); }
 
     // ---- leaderboard ----------------------------------------------------------------
@@ -2489,7 +2367,7 @@
     function snapshot() {
       return { x: player.x, y: player.y, fx: facing.x, fy: facing.y, stats: statsNoBuffs(), deals, prices: { ...prices }, dealsDone, foodBought, itemsV2: true, sets: [...activeSets], promotion, kills, dripKills, queenKills, weaponBought, rogueDone: [...rogueDone], cheated: runCheated, quests: quests.map(q => q.kind === 'delivery' ? { ...q, left: Math.max(0, q.until - gameTime) } : { ...q }),
                inventory: inventory.map(it => ({ ...it })), equipped: equipped.map(it => ({ ...it })), skills: [...skills],
-               weaponsV: 2, areaName, restReadyAt, levels: { ...levels }, manaCap: CAP_BASE.mana, energyCap: CAP_BASE.energy, level: hero.level, exp: hero.exp, strengthLevel: hero.level, bags: [...bags], vault: { open: vault.open, bags: [...vault.bags], items: vault.items.map(it => ({ ...it })) }, talents: JSON.parse(JSON.stringify(talents)), ceoCalls, tut, tutV: 3, tutN, tutQuiz: { ...tutQuiz }, discovered: [...discovered], enemies: saveEnemies(), harvest: saveHarvest(),
+               weaponsV: 2, areaName, restReadyAt, levels: { ...levels }, manaCap: CAP_BASE.mana, energyCap: CAP_BASE.energy, level: hero.level, exp: hero.exp, strengthLevel: hero.level, bag, talents: JSON.parse(JSON.stringify(talents)), ceoCalls, tut, tutV: 3, tutN, tutQuiz: { ...tutQuiz }, discovered: [...discovered], enemies: saveEnemies(), harvest: saveHarvest(),
                piles: piles.map(p => ({ ...p, gear: p.gear.map(it => ({ ...it })), items: p.items.map(it => ({ ...it })), left: Math.max(0, p.until - gameTime), until: undefined })) };
     }
     function applySave(s) {
@@ -2505,13 +2383,8 @@
       for (const k in prices) delete prices[k]; for (const k in levels) delete levels[k];
       Object.assign(prices, startPrices(), renameKeys(s.prices)); Object.assign(levels, startLevels(), renameKeys(s.levels)); rebasePatch('Social');
       inventory.length = 0; inventory.push(...renameItems(s.inventory));
-      loadVault(s.vault);   // CredBank Vault (older saves: none)
-      if (Array.isArray(s.bags)) { bags[0] = s.bags[0] || null; bags[1] = s.bags[1] || null; }
-      else {   // saves from before the two bag slots: their one bag (or none: a free BackBag) goes into the first slot
-        const old = s.bag !== undefined ? s.bag : !inventory.length ? null : inventory.length <= 2 ? 'BackBag' : 'BackBag X';   // saves from before bags: a bag that fits what they carry
-        if (s.bag === undefined && old === 'BackBag X') stats.charisma += 1;
-        bags[0] = old || DEFAULT_BAG; bags[1] = null;
-      }
+      bag = s.bag !== undefined ? s.bag : !inventory.length ? null : inventory.length <= 2 ? 'BackBag' : 'BackBag X';   // saves from before bags: a bag that fits what they carry
+      if (s.bag === undefined && bag === 'BackBag X') stats.charisma += 1;
       equipped.length = 0; equipped.push(...renameItems(s.equipped)); recalcCaps();
       if ((s.weaponsV || 1) < 2) {   // swords were rebalanced: a sword worn in an older save had its old STR added to the stats
         const OLD_STR = { 'Banana sword': 3, 'Mothersword': 3, 'baNano Sword': 6 };
@@ -2522,7 +2395,7 @@
       fixEquipSlots(); syncSets();
       skills.length = 0; skills.push(...(s.skills || []).map(newName));
       if (!deals) deals = newDeals();
-      piles.length = 0; for (const p of s.piles || []) piles.push({ ...pileOf(p), until: gameTime + (p.left || 0) });
+      piles.length = 0; for (const p of s.piles || []) piles.push({ ...p, until: gameTime + (p.left || 0) });
       tut = s.tut ?? 0;
       if (s.tutV !== 3) { if (tut >= (s.tutV === 2 ? 6 : 5)) tut = TUT_DONE; else if (tut > 0) tut = 1; }   // older, shorter tutorials: finished stays finished, running restarts
       tutN = s.tutV === 3 ? s.tutN || 0 : 0; tutQuiz = s.tutV === 3 && s.tutQuiz ? { ...s.tutQuiz } : { i: 0, wrong: 0 };
@@ -2585,18 +2458,16 @@
       return room;
     }
     function scrapRows() {
-      const done = msg => { ui.cursor = Math.max(0, Math.min(ui.cursor, scrapRows().length - 1)); return msg; };
-      // one row per inventory slot (idx = its slot), except Scrap itself: scrapping Scrap makes no sense
+      const done = msg => { ui.cursor = Math.max(0, Math.min(ui.cursor, inventory.length - 1)); return msg; };
       return inventory.map((it, idx) => {
-        if (it.name === 'Scrap') return null;
         const def = itemDef(it.name) || {}, n = it.count || 1;
-        const row = { idx, left: `scrap ${it.name}`, item: { name: it.name, count: n }, pic: it.name };
+        const row = { left: `scrap ${it.name}`, item: { name: it.name, count: n }, pic: it.name };
         if ((def.class === 'equipment' || def.class === 'bag') && !it.quest) {
           const scrap = scrapFor(def);
           row.right = `+${scrap} scrap`;
           row.act = () => {
             if (inventory[idx] !== it) return '';
-            if (scrap > scrapRoomAfter(idx)) return `No room for ${scrap} Scrap in your ${hasBag() ? 'inventory' : 'hands'}.`;
+            if (scrap > scrapRoomAfter(idx)) return `No room for ${scrap} Scrap in your ${bag || 'hands'}.`;
             inventory.splice(idx, 1);
             if (scrap) addItem('Scrap', scrap);
             return done(`Scrapped ${it.name}: +${scrap} Scrap.`);
@@ -2606,7 +2477,7 @@
           row.act = () => SHOP_SELL.classes.includes(def.class) ? `The dealer only takes gear. Sell ${it.name} at the ATB-Market in the city (Resources tab).` : `The dealer doesn't buy ${def.class === 'food' ? 'food' : 'that'}.`;
         }
         return row;
-      }).filter(Boolean);
+      });
     }
     // ATB-Market, Resources tab: a row to buy Tar, then one row per sellable stack in the bag (Space: a small sell 1 / sell all menu)
     const sellable = it => it && !it.quest && SHOP_SELL.classes.includes((itemDef(it.name) || {}).class) && sellUnit(it.name) > 0;
@@ -2764,7 +2635,7 @@
       for (const [name, n] of r.cost) takeItems(name, n);
       const left = addItem(r.make, r.count);
       if (left && r.count === 1 && canWearDirect(itemDef(r.make))) {   // no room in the bag: equipment goes straight into its free slot
-        stats.energy -= r.energy; return `Crafted ${r.make} and put it on (${hasBag() ? 'no room in your inventory' : 'no bag'}): ${wearDirect(r.make)}.`;
+        stats.energy -= r.energy; return `Crafted ${r.make} and put it on (${bag ? `no room in your ${bag}` : 'no bag'}): ${wearDirect(r.make)}.`;
       }
       if (left) { inventory.length = 0; inventory.push(...backup); return fullMsg(); }
       stats.energy -= r.energy; renderStats();
@@ -2775,6 +2646,7 @@
     // windows with a paragraph above their options
     const WINDOW_TEXT = {
       metro: 'The gates are down and the departure board is blank. "Opening soon," says a flickering sign.',
+      bank: 'The vault door is locked tight. A hologram says CredBank opens soon.',
       ripperdoc: 'The ripperdoc is still unpacking chrome. "Come back soon, choom."',
       chef: () => { const q = quests.find(q => q.kind === 'delivery' && q.dest === areaName);
         return q ? `"TradeCorp sent you? Finally! My customers have been waiting. Hand it over before it gets cold." (${clockText(q.until - gameTime)} left)`
@@ -2842,8 +2714,7 @@
 
     // windows opened from another window remember it: Esc (or "no") goes back there instead of closing everything
     // windows with browser-like tabs (A/D or a click); start: the tab shown when the window opens
-    const WINDOW_TABS = { leaderboard: LB_TABS, shop: SHOP_TABS, cheat: [{ key: 'hero', name: 'Hero' }, { key: 'items', name: 'Items' }, { key: 'world', name: 'World' }], work: Object.assign([{ key: 'office', name: 'My Office' }, { key: 'deals', name: 'Deals' }, { key: 'boss', name: 'My Boss' }], { start: 1 }),
-                          bank: [{ key: 'vault', name: 'Vault' }, { key: 'exchange', name: 'Exchange' }] };
+    const WINDOW_TABS = { leaderboard: LB_TABS, shop: SHOP_TABS, cheat: [{ key: 'hero', name: 'Hero' }, { key: 'items', name: 'Items' }, { key: 'world', name: 'World' }], work: Object.assign([{ key: 'office', name: 'My Office' }, { key: 'deals', name: 'Deals' }, { key: 'boss', name: 'My Boss' }], { start: 1 }) };
     const tabOf = () => ui.tab ?? (WINDOW_TABS[ui.kind].start || 0);
     function switchShopTab(i) {
       const n = WINDOW_TABS[ui.kind].length; ui.tab = (i + n) % n; ui.cursor = 0; ui.msg = ''; ui.scroll = 0; ui.bossTalk = false;
@@ -2993,7 +2864,7 @@
       if (kind === 'rogue') tutEvent('talk');   // last task: come back and talk to her
       ui = { kind, cursor, msg: '', back };
       focus = 'window';   // keys go to the window (a click on an open panel gives them to the panel)
-      if (((kind === 'shop' && fillView) || kind === 'scrap' || kind === 'bank') && !panels.inventory) panels.inventory = { cursor: 0, msg: '' };   // computers: the shop opens the inventory; the Scrap Dealer everywhere (sell from the bag)   // computers: the shop opens the inventory next to it
+      if (((kind === 'shop' && fillView) || kind === 'scrap') && !panels.inventory) panels.inventory = { cursor: 0, msg: '' };   // computers: the shop opens the inventory; the Scrap Dealer everywhere (sell from the bag)   // computers: the shop opens the inventory next to it
       held.clear(); tapped.clear();
     }
     const panelFocused = () => focus && focus !== 'window' && panels[focus] ? panels[focus] : null;   // a panel has the keys (even with a window open)
@@ -3033,8 +2904,6 @@
     // equip the selected inventory item: only class 'equipment'; bonuses apply from now on
     // Space in the inventory: equipment is equipped, a skill is learned, resources just sit there
     function useSelected(pn) {
-      if (pn.cursor < 0) { takeOffBag(-pn.cursor - 1, pn); return; }   // a worn bag (the two slots at the top)
-      if (vaultOpen()) { const m = vaultStore(pn.cursor); pn.msg = m; ui.msg = m; pn.cursor = Math.max(0, Math.min(pn.cursor, invSlots() - 1)); return; }   // CredBank: Space stores it
       const item = inventory[pn.cursor];
       if (!item) { pn.msg = 'This slot is empty.'; return; }
       const def = itemDef(item.name) || {};
@@ -3061,7 +2930,12 @@
         renderStats(); return;
       }
       if (def.class === 'upgrade') { pn.msg = `${item.name} is an upgrade material, used later.`; return; }
-      if (def.class === 'bag') { wearBagFromInventory(pn.cursor, pn); return; }
+      if (def.class === 'bag') {   // swap bags: only when the worn bag holds nothing but this new bag
+        if (inventory.length > 1) { pn.msg = `Empty your ${bag} first.`; return; }
+        const old = bag; inventory.splice(pn.cursor, 1); wearBag(item.name);
+        if (old) inventory.push({ name: old, class: 'bag' });
+        pn.cursor = 0; pn.msg = `Wearing ${item.name} (${def.slots} slots).${old ? ` ${old} inside.` : ''}`; return;
+      }
       equipSelected(item, def, pn);
     }
     // Space on an equipped slot in the hero panel: the item goes back to the backpack and its bonuses are removed
@@ -3142,25 +3016,12 @@
       const it = inventory[idx]; if (!it) { itemMenu = null; return; }
       const n = it.count || 1, def = itemDef(it.name) || {}, opts = [];
       const use = it.quest ? null : def.class === 'equipment' ? 'Equip' : def.class === 'food' ? 'Eat' : def.class === 'skill' ? 'Learn' : def.class === 'bag' ? 'Wear' : def.consume ? 'Use' : null;
-      if (vaultOpen() && !it.quest) {   // CredBank: store it (a bag can also go into a free socket)
-        if (def.class === 'bag' && vaultFreeSocket() >= 0) opts.push({ label: `Put in socket ${vaultFreeSocket() + 1}`, act: 'vaultSocket' });
-        opts.push({ label: `Store  ${VAULT_FEES.store}$`, act: 'vaultStore' });
-      }
       if (use) opts.push({ label: use, act: 'use' });
-      if (ui && ui.kind === 'scrap') { const row = scrapRows().find(r => r.idx === idx); if (row && row.right !== "won't buy") opts.push({ label: `Scrap  ${row.right}`, act: 'sell' }); }
+      if (ui && ui.kind === 'scrap') { const row = scrapRows()[idx]; if (row && row.right !== "won't buy") opts.push({ label: `Scrap  ${row.right}`, act: 'sell' }); }
       if (ui && ui.kind === 'shop' && SHOP_TABS[tabOf()].key === 'resources' && sellable(it)) opts.push(...sellOpts(idx));
       if (!it.quest) { if (n > 1) opts.push({ label: 'Throw away 1', n: 1 }, { label: `Throw away all (${n})`, n }); else opts.push({ label: 'Throw away', n: 1 }); }
       if (!opts.length) { if (panels.inventory) panels.inventory.msg = `That ${it.name} is for a delivery. Bring it to the Netizen Chef.`; itemMenu = null; return; }
       itemMenu = { idx, name: it.name, x, y, cursor: 0, opts };
-    }
-    function openBagMenu(slot, x, y) {   // a worn bag (right-click, long press, or a tap on phones): take it off
-      const name = bags[slot]; if (!name) { itemMenu = null; return; }
-      itemMenu = { wornBag: slot, name, x, y, cursor: 0, opts: [{ label: 'Take off', act: 'takeOff' }] };
-    }
-    function openVaultMenu(j, x, y) {   // a Vault item (right-click, long press): take 1 or all of it out
-      const it = vault.items[j]; if (!it) { itemMenu = null; return; }
-      const n = it.count || 1, fee = VAULT_FEES.withdraw;
-      itemMenu = { vaultIdx: j, name: it.name, x, y, cursor: 0, opts: n > 1 ? [{ label: `Take out 1  ${fee}$`, n: 1 }, { label: `Take out all (${n})  ${fee}$`, n }] : [{ label: `Take out  ${fee}$`, n: 1 }] };
     }
     function openQuestMenu(idx, x, y) {   // right-click (or Space) on a quest: cancel it
       const q = quests[idx]; if (!q) { itemMenu = null; return; }
@@ -3173,13 +3034,10 @@
         if (!o || !quests[m.idx] || quests[m.idx].name !== m.name) return;
         openWindow('cancelQuest', 1, { kind: 'quests', cursor: m.idx, back: null }); ui.questIdx = m.idx; ui.questName = m.name; return;   // cursor starts on "No"
       }
-      if (m && m.vaultIdx !== undefined) { if (o && vault.items[m.vaultIdx] && vault.items[m.vaultIdx].name === m.name && ui) { ui.msg = vaultWithdraw(m.vaultIdx, o.n); ui.cursor = 4 + Math.max(0, Math.min(m.vaultIdx, vaultSlots() - 1)); } return; }
-      if (m && m.wornBag !== undefined) { if (o && bags[m.wornBag] === m.name && panels.inventory) { focus = 'inventory'; panels.inventory.cursor = -1 - m.wornBag; takeOffBag(m.wornBag, panels.inventory); } return; }
       if (!o || !inventory[m.idx] || inventory[m.idx].name !== m.name) return;
-      if (o.act === 'vaultStore' || o.act === 'vaultSocket') { const msg = vaultStore(m.idx, o.act === 'vaultSocket'); if (ui) ui.msg = msg; if (panels.inventory) { panels.inventory.msg = msg; panels.inventory.cursor = Math.max(0, Math.min(panels.inventory.cursor, invSlots() - 1)); } return; }
       if (o.act === 'use') { if (panels.inventory) { focus = 'inventory'; panels.inventory.cursor = m.idx; useSelected(panels.inventory); } return; }
       if (o.act === 'shopSell') { const msg = shopSell(m.idx, m.name, o.n); if (ui) ui.msg = msg; if (panels.inventory) panels.inventory.msg = msg; return; }
-      if (o.act === 'sell') { const row = ui && ui.kind === 'scrap' && scrapRows().find(r => r.idx === m.idx); if (row) { const msg = row.act(); if (panels.inventory) panels.inventory.msg = msg || ''; ui.msg = msg || ''; renderStats(); } return; }
+      if (o.act === 'sell') { const row = ui && ui.kind === 'scrap' && scrapRows()[m.idx]; if (row) { const msg = row.act(); if (panels.inventory) panels.inventory.msg = msg || ''; ui.msg = msg || ''; renderStats(); } return; }
       const keep = ui && ui.kind !== 'throw' ? ui : null;   // throwing from inside a window (e.g. the Scrap Dealer): come back to it
       ui = { kind: 'throw', cursor: 1, msg: '', back: keep }; focus = 'window'; held.clear(); tapped.clear(); ui.throwIdx = m.idx; ui.throwName = m.name; ui.throwN = o.n;   // cursor starts on "No"
     }
@@ -4215,7 +4073,7 @@
     const roomFor = name => { const def = itemDef(name) || {}, max = def.stack || 1;
       return inventory.length < invSlots() || inventory.some(it => it.name === name && !it.quest && (it.count || 1) < max); };
     function startHarvest(n) {
-      if (!roomFor(n.K.item)) { float(hasBag() ? 'bag full' : 'no bag', '#e5484d', player.x + 0.5, player.y - 1.2); return; }
+      if (!roomFor(n.K.item)) { float(bag ? 'bag full' : 'no bag', '#e5484d', player.x + 0.5, player.y - 1.2); return; }
       harvesting = { node: n, start: gameTime, x: player.x, y: player.y, px: hpos.x, py: hpos.y };
     }
     function updateHarvest() {   // every frame: cancel or finish the hold
@@ -4224,7 +4082,7 @@
       if ((!spaceDown && !mouseAim.harvest) || Math.hypot(hpos.x - h.px, hpos.y - h.py) > HERO_MOVE.harvestDrift || anyOpen() || !nodeReady(n) || n.zone !== areaName || stats.health <= 0) { harvesting = null; return; }
       if (gameTime - h.start < HARVEST.holdMs) return;
       harvesting = null;
-      if (addItem(n.K.item, 1)) { float(hasBag() ? 'bag full' : 'no bag', '#e5484d', player.x + 0.5, player.y - 1.2); return; }
+      if (addItem(n.K.item, 1)) { float(bag ? 'bag full' : 'no bag', '#e5484d', player.x + 0.5, player.y - 1.2); return; }
       float(`+1 ${n.K.item}`, rarityOf(n.K.item) === 'common' ? '#9dff5c' : rarityColor(n.K.item), n.x + 0.5, n.y - 0.6); playSfx('interact'); renderStats();
       n.prev = { zone: n.zone, x: n.x, y: n.y }; n.readyAt = gameTime + n.K.cooldownMs;
       n.zone = n.zones[Math.floor(Math.random() * n.zones.length)]; n.x = n.y = null;   // regrows on another tile (maybe the paired zone)
@@ -4558,20 +4416,20 @@
     const DEATH = { dimMs: 4000, fallMs: 2000, showAt: 3000, showMs: 1000, fall: { cellW: 296, cellH: 285, ax: 139.3, foot: 7.5 } };
     let deathStart = 0;
     const deathT = () => performance.now() - deathStart;
-    // death: everything he carries (money but 1$ he gets back, both bags with their contents, worn gear) drops where he fell.
+    // death: everything he carries (money but 1$ he gets back, bag with its contents, worn gear) drops where he fell.
     // The pile stays PILE_MS of game time (fading out at the end); walking onto it takes back whatever fits.
     // He respawns in the city below HomeDome with 1 HP, 0 mana, 0 energy and 1$; level and exp stay.
     function gameOver() {
       closePanels(); deathStart = performance.now(); moving = false;
-      const keep = Math.floor(Math.max(0, stats.money) * Math.max(0, ...wornBags().map(n => (itemDef(n) || {}).keepMoney || 0)));   // Vault Pack: 10% stays with him (two don't add up)
+      const keep = Math.floor(Math.max(0, stats.money) * ((itemDef(bag) || {}).keepMoney || 0));   // Vault Pack: 10% stays with him
       keptMoney = keep;
-      const pile = { zone: areaName, x: player.x, y: player.y, money: Math.max(0, stats.money) - keep, bags: wornBags(), gear: equipped.map(it => ({ ...it })),
+      const pile = { zone: areaName, x: player.x, y: player.y, money: Math.max(0, stats.money) - keep, bag, gear: equipped.map(it => ({ ...it })),
                      items: inventory.map(it => ({ ...it })), until: gameTime + PILE_MS };
       for (const it of [...equipped]) { const def = itemDef(it.name); equipped.splice(equipped.indexOf(it), 1); if (def) takeOffGains(def); }
       syncSets();
-      for (let i = 0; i < bags.length; i++) if (bags[i]) wearBag(null, i);   // both bags (and their bonuses) go into the pile
+      if (bag) { const od = itemDef(bag) || {}; for (const [st, n] of Object.entries(od.gain || {})) stats[st] -= n; if ((od.gain || {}).charisma) deals = newDeals(); bag = null; }
       inventory.length = 0; stats.money = 0;
-      const dropped = pile.money || pile.bags.length || pile.gear.length || pile.items.length;
+      const dropped = pile.money || pile.bag || pile.gear.length || pile.items.length;
       if (dropped) piles.push(pile);
       const name = heroName || DEFAULT_NAME;
       ui = { kind: 'gameover', cursor: 0, title: `${name} died`,
@@ -4587,13 +4445,13 @@
       enterArea('0:0', START.x, START.y, 1, true);
       renderStats();
     }
-    // walking onto a pile: money, then the bags (worn while a bag slot is free), then gear (worn if its slot is free), then the rest into the bag
+    // walking onto a pile: money, then the bag (worn if he has none), then gear (worn if its slot is free), then the rest into the bag
     function pickUpPile() {
       const p = piles.find(q => q.zone === areaName && q.x === player.x && q.y === player.y);
       if (!p) return;
       const got = [];
       if (p.money) { stats.money += p.money; got.push(`+${p.money}$`); p.money = 0; }
-      p.bags = p.bags.filter(n => { const sl = freeBagSlot(); if (sl < 0) return true; wearBag(n, sl); got.push(n); return false; });
+      if (p.bag && !bag) { wearBag(p.bag); got.push(p.bag); p.bag = null; }
       const fits = () => inventory.length < invSlots();
       p.gear = p.gear.filter(it => {
         const def = itemDef(it.name);
@@ -4601,14 +4459,14 @@
         if (fits()) { inventory.push(it); got.push(it.name); return false; }
         return true;
       });
-      p.bags = p.bags.filter(n => { if (!fits()) return true; inventory.push({ name: n, class: 'bag' }); got.push(n); return false; });
+      if (p.bag && fits()) { inventory.push({ name: p.bag, class: 'bag' }); got.push(p.bag); p.bag = null; }
       p.items = p.items.filter(it => {
         const def = itemDef(it.name) || {};
         if ((def.stack || 1) > 1 && !it.quest) { const left = addItem(it.name, it.count || 1); if (left < (it.count || 1)) got.push(it.name); it.count = left; return left > 0; }
         if (fits()) { inventory.push(it); got.push(it.name); return false; }
         return true;
       });
-      const empty = !p.money && !p.bags.length && !p.gear.length && !p.items.length;
+      const empty = !p.money && !p.bag && !p.gear.length && !p.items.length;
       if (empty) piles.splice(piles.indexOf(p), 1);
       if (got.length) float(empty ? 'got everything back' : 'picked up some', '#ffdc00', player.x + 0.5, player.y - 1.2);
       if (!empty) float(fullMsg(), '#e5484d', player.x + 0.5, player.y - 0.7);
@@ -4828,20 +4686,7 @@
         const pn = panels[focus];
         const d = (keys.includes('d') ? 1 : 0) - (keys.includes('a') ? 1 : 0);
         const v = (keys.includes('s') ? 1 : 0) - (keys.includes('w') ? 1 : 0);
-        if (focus === 'inventory') {   // the shared grid (INV_COLS a row) with the two bag slots above it (cursor -1, -2)
-          const n = invSlots(), C = INV_COLS, c0 = pn.cursor;
-          if (pn.cursor < 0) {
-            if (d) pn.cursor = pn.cursor === -1 ? -2 : -1;
-            else if (v > 0 && n) pn.cursor = Math.min(n - 1, -1 - pn.cursor);   // S: down into the grid
-          } else {
-            if (d) pn.cursor = (pn.cursor + d + n) % n;
-            else if (v < 0) pn.cursor = pn.cursor - C >= 0 ? pn.cursor - C : (pn.cursor % C) < 1 ? -1 : -2;   // W on the top row: up to the bags
-            else if (v > 0 && Math.floor(pn.cursor / C) < Math.floor((n - 1) / C)) pn.cursor = Math.min(n - 1, pn.cursor + C);
-          }
-          if (pn.cursor !== c0) pn.msg = '';
-          return;
-        }
-        const step = v || d, n = EQUIP_SLOTS;
+        const step = focus === 'inventory' ? d : v || d, n = focus === 'inventory' ? Math.max(1, invSlots()) : EQUIP_SLOTS;
         if (step) { pn.cursor = (pn.cursor + step + n) % n; pn.msg = ''; }
         return;
       }
@@ -4852,7 +4697,6 @@
         if (ui.bossTalk) return;   // the boss is talking: Space (or a click) first
         if (ui.kind === 'techversity' && (keys.includes('a') || keys.includes('d'))) {
           if (ui.cursor < 9) { const b = (Math.floor(ui.cursor / 3) + (keys.includes('d') ? 1 : 2)) % 3; ui.cursor = b * 3 + ui.cursor % 3; ui.msg = ''; } return; }
-        if (vaultOpen()) { vaultKeys(keys); return; }
         if (WINDOW_TABS[ui.kind] && (keys.includes('a') || keys.includes('d'))) { switchShopTab(tabOf() + (keys.includes('d') ? 1 : -1)); return; }
         if (keys.includes('w')) moveCursor(-1);
         if (keys.includes('s')) moveCursor(1);
@@ -4910,11 +4754,7 @@
       phFaceEl.classList.toggle('tut-glow', tut >= 1 && tut <= TUT.length && TUT[tut - 1].ev === 'hero' && !panels.hero);
       if (!ui && focus === 'window') focus = panels.inventory ? 'inventory' : panels.hero ? 'hero' : null;   // the window closed: back to a panel
       syncTouchButtons();
-      // decal layouts are worked out a few ms per frame: 4 ms on the account / start screens (no stutter), 10 ms on the loading
-      // screen (it waits for them), 2 ms in play (only leftovers, e.g. after a density change in settings)
-      const accOpen = document.getElementById('account')?.hidden === false;
-      const decalsDone = warmDecals(ui && ui.kind === 'loading' ? 10 : (ui && ui.kind === 'start') || accOpen ? 4 : 2);
-      if (ui && ui.kind === 'loading' && !ui.wait && artProgress() >= 1 && decalsDone && !(ui.minUntil > performance.now())) ui.next();
+      if (ui && ui.kind === 'loading' && !ui.wait && artProgress() >= 1 && !(ui.minUntil > performance.now())) ui.next();
       const hideTouch = !!ui && (ui.kind === 'start' || ui.kind === 'loading' || ui.kind === 'techversity');   // start screen: no joystick or buttons over its choices
       if (touchEl.style.visibility !== (hideTouch ? 'hidden' : '')) touchEl.style.visibility = hideTouch ? 'hidden' : '';
       const dt = !anyOpen() && !naming() ? Math.min(100, now - lastFrame) : 0;
@@ -5114,16 +4954,9 @@
       lake: ['leaves', 'oil stain', 'puddle cyan', 'puddle pink'], forest: ['leaves', 'crack'], deepForest: ['leaves', 'crack'],
     };
     const decalPlans = {};   // zone id -> { big: [...], small: [...] } (worked out once per zone)
-    const planKey = id => id + '@' + decalDensity(ZONE_LIST[id]);
-    function decalPlan(id = areaName) {   // the zone's layout right now (worked out on the spot if it isn't ready yet)
-      const key = planKey(id);
-      if (decalPlans[key]) return decalPlans[key];
-      const steps = decalPlanSteps(id); let r; while (!(r = steps.next()).done);
-      return r.value;
-    }
-    // the layout, worked out in small steps (yield = a good place to pause), so it can run a few ms per frame without stutter
-    function* decalPlanSteps(id) {
+    function decalPlan(id = areaName) {
       const type = ZONE_LIST[id], D = decalDensity(type), [a, b] = coordOf(id), key = id + '@' + D;
+      if (decalPlans[key]) return decalPlans[key];
       let seed = 424243 + (a + 20) * 173 + (b + 20) * 29;
       const rnd = () => (seed = (seed * 16807) % 2147483647) / 2147483647;
       const shuffle = arr => { for (let i = arr.length - 1; i > 0; i--) { const j = Math.floor(rnd() * (i + 1)); [arr[i], arr[j]] = [arr[j], arr[i]]; } return arr; };
@@ -5131,24 +4964,19 @@
       const quads = [[0, 0, QX, QY], [QX, 0, COLS, QY], [0, QY, QX, ROWS], [QX, QY, COLS, ROWS]];   // [x0, y0, x1, y1) top-left, top-right, bottom-left, bottom-right
       const qCentre = q => [(quads[q][0] + quads[q][2]) / 2, (quads[q][1] + quads[q][3]) / 2];
       const order = q => [0, 1, 2, 3].sort((m, n) => { const [ax, ay] = qCentre(q), [mx, my] = qCentre(m), [nx, ny] = qCentre(n); return Math.hypot(mx - ax, my - ay) - Math.hypot(nx - ax, ny - ay); });   // its own first, then nearest
+      const saveWalls = WALLS, saveArea = areaName; WALLS = AREAS[id].walls; areaName = id;   // the tile checks read the current zone
       // tile checks worked out once: 1 = no decals at all, 2 = also no large ones (near a passage), 4 = passage tile
       const bad = new Uint8Array(COLS * ROWS);
-      const saveWalls = WALLS, saveArea = areaName; WALLS = AREAS[id].walls; areaName = id;   // the tile checks read the current zone
-      try {
-        for (let y = 0; y < ROWS; y++) for (let x = 0; x < COLS; x++) {
-          let v = roadAt(x, y) || wallAt(x, y) || coilAt(x, y) || lakeAt(x, y) || bigAt(x, y) ? 1 : 0;
-          if (exitAt(x, y)) v |= 4;
-          bad[y * COLS + x] = v;
-        }
-      } finally { WALLS = saveWalls; areaName = saveArea; }   // put back before any pause: the game keeps running in between
+      for (let y = 0; y < ROWS; y++) for (let x = 0; x < COLS; x++) {
+        let v = roadAt(x, y) || wallAt(x, y) || coilAt(x, y) || lakeAt(x, y) || bigAt(x, y) ? 1 : 0;
+        if (exitAt(x, y)) v |= 4;
+        bad[y * COLS + x] = v;
+      }
       for (const e of AREAS[id].exits) for (const [tx, ty] of e.tiles) for (let y = ty - 2; y <= ty + 2; y++) for (let x = tx - 2; x <= tx + 2; x++) if (inGrid(x, y)) bad[y * COLS + x] |= 2;
-      yield;
       const blocked = (x, y) => !inGrid(x, y) || (bad[y * COLS + x] & 1);
       const nearExit = (x, y) => (bad[y * COLS + x] & 2) > 0;
       const onExit = (x, y) => (bad[y * COLS + x] & 4) > 0;
-      // per tile: 1 = under a large decal, 2 = within 1 tile of one (no other large one there); small = which small decal (-1 none)
-      const bigG = new Uint8Array(COLS * ROWS), smallG = new Int8Array(COLS * ROWS).fill(-1), plan = { big: [], small: [] };
-      const smallOf = (x, y) => inGrid(x, y) ? smallG[y * COLS + x] : -1;
+      const bigTiles = new Set(), bigGap = new Set(), smallAt = new Map(), plan = { big: [], small: [] };
       // spread: of the free spots, take one as far as possible from the decals of the same kind already placed anywhere in the
       // zone (a little random choice among the farthest 3%), so the same piece / small decal never ends up near itself
       const seen = {};   // kind -> [[x, y], ...] centres placed so far
@@ -5162,39 +4990,33 @@
           for (const sp of spots) { r -= edgeW(sp); if (r <= 0) return sp; }
           return spots[spots.length - 1];
         }
-        let best = -Infinity; const scores = new Float64Array(spots.length);
-        spots.forEach((sp, i) => { const [cx, cy] = centre(sp); let m = Infinity;
-          for (const [pts, w, off] of groups) for (const [px, py] of pts) { const v = Math.max(0, Math.hypot(cx - px, cy - py) - off) * w; if (v < m) m = v; }
-          scores[i] = m * edgeW(sp); if (scores[i] > best) best = scores[i]; });
-        const top = spots.filter((sp, i) => scores[i] >= best * 0.97);
-        return top[Math.floor(rnd() * top.length)];
+        const scored = spots.map(sp => { const [cx, cy] = centre(sp); let m = Infinity;
+          for (const [pts, w, off] of groups) for (const [px, py] of pts) m = Math.min(m, Math.max(0, Math.hypot(cx - px, cy - py) - off) * w);
+          return [m * edgeW(sp), sp]; });
+        const best = Math.max(...scored.map(v => v[0])), top = scored.filter(v => v[0] >= best * 0.97);
+        return top[Math.floor(rnd() * top.length)][1];
       };
       const remember = (kind, cx, cy) => (seen[kind] = seen[kind] || []).push([cx, cy]);
       // large: D rounds, each round a shuffled set of the 4 pieces, one per quadrant
-      if (BIG_DECALS[type]) for (let r = 0; r < DECAL_STEP.big * D; r++) {
-        const pieces = shuffle([1, 2, 3, 4]);
-        for (let q = 0; q < 4; q++) {
-          const piece = pieces[q];
-          for (const qq of order(q)) {
-            const [x0q, y0q, x1q, y1q] = quads[qq], spots = [];
-            for (let quarter = 0; quarter < 4; quarter++) {
-              const w = quarter % 2 ? 3 : 2, h = quarter % 2 ? 2 : 3;
-              for (let y0 = y0q; y0 + h <= y1q; y0++) for (let x0 = x0q; x0 + w <= x1q; x0++) {
-                let ok = true;
-                for (let y = y0; y < y0 + h && ok; y++) for (let x = x0; x < x0 + w && ok; x++) if (blocked(x, y) || nearExit(x, y) || bigG[y * COLS + x]) ok = false;
-                if (ok) spots.push([x0, y0, w, h, quarter]);
-              }
+      if (BIG_DECALS[type]) for (let r = 0; r < DECAL_STEP.big * D; r++) shuffle([1, 2, 3, 4]).forEach((piece, q) => {
+        for (const qq of order(q)) {
+          const [x0q, y0q, x1q, y1q] = quads[qq], spots = [];
+          for (let quarter = 0; quarter < 4; quarter++) {
+            const w = quarter % 2 ? 3 : 2, h = quarter % 2 ? 2 : 3;
+            for (let y0 = y0q; y0 + h <= y1q; y0++) for (let x0 = x0q; x0 + w <= x1q; x0++) {
+              let ok = true;
+              for (let y = y0; y < y0 + h && ok; y++) for (let x = x0; x < x0 + w && ok; x++) if (blocked(x, y) || nearExit(x, y) || bigGap.has(x + ',' + y)) ok = false;
+              if (ok) spots.push([x0, y0, w, h, quarter]);
             }
-            if (!spots.length) continue;
-            const [x0, y0, w, h, quarter] = farthest(spots, 'big' + piece, ([x, y, ww, hh]) => [x + ww / 2, y + hh / 2], [['bigAll', 1.6]]);
-            remember('big' + piece, x0 + w / 2, y0 + h / 2); remember('bigAll', x0 + w / 2, y0 + h / 2);
-            for (let y = y0 - 1; y <= y0 + h; y++) for (let x = x0 - 1; x <= x0 + w; x++) if (inGrid(x, y)) bigG[y * COLS + x] |= x >= x0 && x < x0 + w && y >= y0 && y < y0 + h ? 3 : 2;
-            plan.big.push({ x0, y0, w, h, quarter, piece, fx: rnd() < 0.5 ? -1 : 1 });
-            break;
           }
-          yield;
+          if (!spots.length) continue;
+          const [x0, y0, w, h, quarter] = farthest(spots, 'big' + piece, ([x, y, ww, hh]) => [x + ww / 2, y + hh / 2], [['bigAll', 1.6]]);
+          remember('big' + piece, x0 + w / 2, y0 + h / 2); remember('bigAll', x0 + w / 2, y0 + h / 2);
+          for (let y = y0 - 1; y <= y0 + h; y++) for (let x = x0 - 1; x <= x0 + w; x++) { bigGap.add(x + ',' + y); if (x >= x0 && x < x0 + w && y >= y0 && y < y0 + h) bigTiles.add(x + ',' + y); }
+          plan.big.push({ x0, y0, w, h, quarter, piece, fx: rnd() < 0.5 ? -1 : 1 });
+          break;
         }
-      }
+      });
       // small decals spread evenly: each tile keeps its distance (× DECAL_SPREAD.any) to the nearest decal of any kind and
       // (× DECAL_SPREAD.edge) to the zone border; a decal goes where min(that, distance to the nearest of its own kind) is largest
       const anyD = new Float32Array(COLS * ROWS);
@@ -5203,59 +5025,45 @@
         for (const b of plan.big) { const dx = Math.max(b.x0 - cx, 0, cx - (b.x0 + b.w)), dy = Math.max(b.y0 - cy, 0, cy - (b.y0 + b.h)); m = Math.min(m, Math.hypot(dx, dy) * DECAL_SPREAD.any + 0.3); }
         anyD[y * COLS + x] = m;
       }
-      yield;
       const markSmall = (px, py) => { for (let y = 0; y < ROWS; y++) for (let x = 0; x < COLS; x++) { const i = y * COLS + x, v = Math.hypot(x + 0.5 - px, y + 0.5 - py) * DECAL_SPREAD.any; if (v < anyD[i]) anyD[i] = v; } };
       const spreadSmall = (spots, di) => {
         const same = seen['small' + di] || [];
-        let best = -Infinity; const scores = new Float64Array(spots.length);
-        spots.forEach(([x, y], i) => { let m = anyD[y * COLS + x];
-          for (const [px, py] of same) { const v = Math.hypot(x + 0.5 - px, y + 0.5 - py); if (v < m) m = v; }
-          scores[i] = m; if (m > best) best = m; });
-        const top = spots.filter((sp, i) => scores[i] >= best * 0.97);
-        return top[Math.floor(rnd() * top.length)];
+        const scored = spots.map(sp => { const [x, y] = sp; let m = anyD[y * COLS + x];
+          for (const [px, py] of same) m = Math.min(m, Math.hypot(x + 0.5 - px, y + 0.5 - py));
+          return [m, sp]; });
+        const best = Math.max(...scored.map(v => v[0])), top = scored.filter(v => v[0] >= best * 0.97);
+        return top[Math.floor(rnd() * top.length)][1];
       };
-      // small: 40·D in turn from the allowed list (each pass shuffled), dealt to the quadrants one by one
+      // small: 16·D in turn from the allowed list (each pass shuffled), dealt to the quadrants one by one
       const allowed = (SMALL_DECALS_BY_TYPE[type] || []).map(n => DECALS.findIndex(d => d.name === n)).filter(i => i >= 0), list = [];
       while (allowed.length && list.length < 4 * DECAL_STEP.small * D) list.push(...shuffle(allowed.slice()));
       list.length = Math.min(list.length, 4 * DECAL_STEP.small * D);
-      for (let k = 0; k < list.length; k++) {
-        const di = list[k], q = k % 4;
+      list.forEach((di, k) => {
+        const q = k % 4;
         for (const qq of order(q)) {
           const [x0q, y0q, x1q, y1q] = quads[qq], spots = [];
           for (let y = y0q; y < y1q; y++) for (let x = x0q; x < x1q; x++) {
-            if (blocked(x, y) || onExit(x, y) || (bigG[y * COLS + x] & 1) || smallG[y * COLS + x] >= 0 || (id === '0:0' && x === START.x && y === START.y)) continue;
-            let same = false; for (let dy = -1; dy <= 1 && !same; dy++) for (let dx = -1; dx <= 1; dx++) if (smallOf(x + dx, y + dy) === di) { same = true; break; }
+            if (blocked(x, y) || onExit(x, y) || bigTiles.has(x + ',' + y) || smallAt.has(x + ',' + y) || (id === '0:0' && x === START.x && y === START.y)) continue;
+            let same = false; for (let dy = -1; dy <= 1 && !same; dy++) for (let dx = -1; dx <= 1; dx++) if (smallAt.get((x + dx) + ',' + (y + dy)) === di) { same = true; break; }
             if (!same) spots.push([x, y]);
           }
           if (!spots.length) continue;
           const [x, y] = spreadSmall(spots, di), d = DECALS[di];
           remember('small' + di, x + 0.5, y + 0.5); markSmall(x + 0.5, y + 0.5);
-          smallG[y * COLS + x] = di;
+          smallAt.set(x + ',' + y, di);
           const rot = d.turn === 'free' || d.turn === 'quarter' ? Math.floor(rnd() * 4) : d.turn === 'half' ? (rnd() < 0.5 ? 0 : 2) : 0;
           plan.small.push({ x, y, i: di, rot, fx: (d.turn === 'free' || d.turn === 'mirror') && rnd() < 0.5 ? -1 : 1, jx: (rnd() - 0.5) * 0.4, jy: (rnd() - 0.5) * 0.4 });
           break;
         }
-        if (k % 4 === 3) yield;
-      }
+      });
+      WALLS = saveWalls; areaName = saveArea;
       return (decalPlans[key] = plan);
     }
-    // every zone's layout is worked out ahead of time, a few ms per frame (warmDecals, called from frame()): on the account and
-    // start screens, then on the loading screen, which waits for it. In play only leftovers run (a density changed in settings).
-    let decalJob = null;   // { key, steps } the zone being worked out right now
-    const zonesUnplanned = () => Object.keys(ZONE_LIST).filter(id => !decalPlans[planKey(id)]);
-    function warmDecals(ms) {
-      const end = performance.now() + ms;
-      while (performance.now() < end) {
-        if (decalJob && decalPlans[decalJob.key]) decalJob = null;   // done meanwhile (e.g. its zone was entered)
-        if (!decalJob) {
-          const left = zonesUnplanned(); if (!left.length) return true;
-          const id = left.includes(areaName) ? areaName : left[0];
-          decalJob = { id, key: planKey(id), steps: decalPlanSteps(id) };
-        }
-        try { if (decalJob.steps.next().done) decalJob = null; } catch (e) { console.warn(e); decalPlans[decalJob.key] = { big: [], small: [] }; decalJob = null; }
-      }
-      return !zonesUnplanned().length;
-    }
+    // work out every zone's layout in the background (one zone every 40 ms), so walking into a zone never waits for it
+    (function warmDecalPlans(ids = Object.keys(ZONE_LIST)) {
+      if (!ids.length) return;
+      setTimeout(() => { try { decalPlan(ids[0]); } catch (e) { console.warn(e); } warmDecalPlans(ids.slice(1)); }, 40);
+    })();
     const bigDecalSheet = () => BIG_DECALS[ZONE_LIST[areaName]];
     const bigDecalsReady = () => { const sh = bigDecalSheet(); return !sh || [1, 2, 3, 4].every(i => ready(ART[sh + i])); };
     function placeBigDecals(gx) {   // the plan's large pieces (drawn only once all 4 pictures are loaded)
@@ -5526,7 +5334,7 @@
         const g = ctx.createRadialGradient(cx, cy + 10, 0, cx, cy + 10, TILE * 0.6);
         g.addColorStop(0, 'rgba(255, 220, 0, 0.35)'); g.addColorStop(1, 'rgba(255, 220, 0, 0)');
         ctx.fillStyle = g; ctx.fillRect(cx - TILE, cy - TILE, TILE * 2, TILE * 2);
-        const first = p.bags[0] || (p.gear[0] || p.items[0] || {}).name, im = first && ART[(itemDef(first) || {}).art];
+        const first = p.bag || (p.gear[0] || p.items[0] || {}).name, im = first && ART[(itemDef(first) || {}).art];
         if (im && ready(im)) { const s = TILE * 0.7; ctx.imageSmoothingQuality = 'high'; ctx.drawImage(im, cx - s / 2, cy - s / 2, s, s); }
         else { ctx.fillStyle = '#ffdc00'; ctx.font = `700 ${Math.round(TILE * 0.45)}px ${MONO}`; ctx.textAlign = 'center'; ctx.textBaseline = 'middle'; ctx.fillText('$', cx, cy); }
         ctx.restore();
@@ -6274,7 +6082,7 @@
       nameLines.forEach((l, i) => ctx.fillText(l, nameX, sy + 22 + i * 32));
       ctx.font = '18px ' + MONO; ctx.fillStyle = '#8a8a8a';
       const buyLvl = it.buyLevel || it.minLevel, locked = buyLvl && hero.level < buyLvl;
-      const sub = r.sell ? `×${r.sell.n} in your bag · ${it.rarity || 'common'} ${it.class}` : r.buy ? `${it.rarity || 'common'} ${it.class} · 1 per press` : locked ? `needs lvl ${buyLvl}` : it.patch ? `patch · installed lvl ${levels[it.name]}` : it.class === 'equipment' ? `${it.rarity || 'common'} · ${EQUIP_SLOT_KEYS[slotOf(it)] || 'equipment'}${setOf(it.name) ? ` · ${setOf(it.name).name} set` : ''}` : it.class === 'bag' ? (bags.includes(it.name) ? (bags.every(b => b === it.name) ? 'worn ×2' : 'worn now') : `${it.rarity || 'common'} bag`) : 'used at once';
+      const sub = r.sell ? `×${r.sell.n} in your bag · ${it.rarity || 'common'} ${it.class}` : r.buy ? `${it.rarity || 'common'} ${it.class} · 1 per press` : locked ? `needs lvl ${buyLvl}` : it.patch ? `patch · installed lvl ${levels[it.name]}` : it.class === 'equipment' ? `${it.rarity || 'common'} · ${EQUIP_SLOT_KEYS[slotOf(it)] || 'equipment'}${setOf(it.name) ? ` · ${setOf(it.name).name} set` : ''}` : it.class === 'bag' ? (bag === it.name ? 'worn now' : `${it.rarity || 'common'} bag`) : 'used at once';
       if (locked) ctx.fillStyle = '#e5484d';
       for (let fs = 18; fs > 12 && ctx.measureText(sub).width > nameW + 10; fs--) ctx.font = fs + 'px ' + MONO;   // long set names: shrink to fit
       ctx.fillText(sub, nameX, sy + big - 12);
@@ -6579,7 +6387,7 @@
       const info = ui.kind === 'controls';          // read-only list, nothing to select
       const rowH = info ? 38 : list.some(r => r.rq) ? 150 : ui.kind === 'shop' || ui.kind === 'work' || ui.kind === 'rest' ? 150 : ui.kind === 'quests' ? 96 : ui.kind === 'leaderboard' ? 60 : ui.kind === 'loot' || ui.kind === 'scrap' ? 88 : ui.kind === 'cheat' ? 50 : ui.kind === 'spelltech' ? 262 : 64;   // shop and loot rows are taller for the item pictures
       const hero = ui.kind === 'hero', inv = ui.kind === 'inventory';
-      const wide = hero || inv || ['leaderboard', 'quests', 'shop', 'scrap', 'bank', 'save', 'load', 'logout', 'guest', 'sound', 'decals', 'spelltech', 'rogue'].includes(ui.kind);
+      const wide = hero || inv || ['leaderboard', 'quests', 'shop', 'scrap', 'save', 'load', 'logout', 'guest', 'sound', 'decals', 'spelltech', 'rogue'].includes(ui.kind);
       const pw = (ui.kind === 'spelltech' || ui.kind === 'shop' || ui.kind === 'work' || ui.kind === 'rest' || ui.kind === 'rogue' ? 15 : wide ? 11 : 9) * TILE;
       ctx.font = '26px ' + MONO;
       const wtext = typeof WINDOW_TEXT[ui.kind] === 'function' ? WINDOW_TEXT[ui.kind]() : WINDOW_TEXT[ui.kind];
@@ -6588,7 +6396,7 @@
       const tabs = WINDOW_TABS[ui.kind], shop = !!tabs, tabsH = tabs ? 70 : 0;   // tabbed windows: row of tabs under the title, fixed height
       const listN = ui.kind === 'shop' ? Math.max(...SHOP_TABS.map(t => [...SHOP_ITEMS, ...BAG_ITEMS()].filter(it => it.tab === t.key).length)) : ui.kind === 'work' ? 3 : ui.kind === 'leaderboard' ? LB_TOP + 2 : ui.kind === 'cheat' ? 11 : list.length;
       const textH = (textLines.length ? textLines.length * 34 + 24 : 0) + tabsH, gaps = list.filter(r => r.gapBefore).length * 24;
-      const ph = hero || inv ? 7 * TILE : ui.kind === 'bank' ? Math.min(canvas.height - 20, 11 * TILE)
+      const ph = hero || inv ? 7 * TILE
         : Math.min(canvas.height - 20, Math.max((ui.kind === 'rest' ? 4.5 : 6) * TILE, 110 + textH + listN * rowH + gaps + Math.max(1, msgLines.length) * 32 + 100));
       let px = (canvas.width - pw) / 2;
       if ((fillView || phoneView) && panels.inventory) px = Math.max(16, Math.min(px, canvas.width - INV_PANEL.w - 32 - pw));   // computers: make room for the inventory on the right
@@ -6610,7 +6418,7 @@
         const im = ART.roguePortrait, h = 200, w = h * im.naturalWidth / im.naturalHeight;
         ctx.imageSmoothingQuality = 'high'; ctx.drawImage(im, px + pw - w - 80, py - h + 6, w, h);
       }
-      if (ui.kind === 'shop' || ui.kind === 'work' || ui.kind === 'scrap' || ui.kind === 'rest' || ui.kind === 'bank') {   // wallet in the corner
+      if (ui.kind === 'shop' || ui.kind === 'work' || ui.kind === 'scrap' || ui.kind === 'rest') {   // wallet in the corner
         ctx.textAlign = 'right';
         ctx.font = '26px ' + MONO;
         ctx.fillStyle = '#8a8a8a';
@@ -6642,18 +6450,15 @@
         });
         ctx.textAlign = 'left';
         if (!list.length) { ctx.fillStyle = '#8a8a8a'; ctx.font = '24px ' + MONO;
-          const t = ui.kind === 'bank' ? 'Under construction. Come back later.' : ui.kind !== 'leaderboard' ? 'Nothing for sale here yet.' : LB.state === 'loading' ? 'Loading…' : LB.state === 'error' ? `Can't load the leaderboard: ${LB.error}` : 'Nobody here yet. Be the first!';
+          const t = ui.kind !== 'leaderboard' ? 'Nothing for sale here yet.' : LB.state === 'loading' ? 'Loading…' : LB.state === 'error' ? `Can't load the leaderboard: ${LB.error}` : 'Nobody here yet. Be the first!';
           wrapText(t, pw - 80).forEach((l, i) => ctx.fillText(l, px + 40, top + 40 + i * 32)); }   // long server errors wrap inside the window
         if (list.length && list[0].side) drawSideTab(list, px + 24, top, pw - 48, listN * rowH - 8);
       }
       let gapY = 0;
-      if (ui.kind === 'scrap' && !list.length) { ctx.fillStyle = '#8a8a8a'; ctx.font = '24px ' + MONO; ctx.textAlign = 'left';   // nothing to scrap (Scrap itself isn't listed)
-        wrapText('Nothing to scrap. Bring armor, weapons or bags.', pw - 80).forEach((l, i) => ctx.fillText(l, px + 40, top + 40 + i * 32)); }
       // long lists (shop tabs, MutaTech): only the rows that fit are drawn; the list scrolls with the cursor, which keeps one
       // row of look-ahead, so clicking or tapping the last visible row brings the next one into view (mouse wheel works too)
       const listBottom = py + ph - 104 - Math.max(0, msgLines.length - 1) * 32, fitN = Math.max(1, Math.floor((listBottom - top + 8) / rowH));
-      if (ui.kind === 'bank' && list.length) drawVault(px, py, pw, ph, top);
-      const scrolls = ui.kind !== 'bank' && !info && !list.some(r => r.gapBefore) && !(list.length && list[0].side) && list.length > fitN;
+      const scrolls = !info && !list.some(r => r.gapBefore) && !(list.length && list[0].side) && list.length > fitN;
       if (scrolls) {
         const ahead = fitN >= 3 ? 1 : 0;
         ui.scroll = Math.max(0, Math.min(ui.scroll || 0, list.length - fitN));
@@ -6663,7 +6468,7 @@
         ctx.fillStyle = 'rgba(255, 255, 255, 0.12)'; ctx.fillRect(bx, top, 5, bh); ctx.fillStyle = 'rgba(255, 255, 255, 0.55)'; ctx.fillRect(bx, ty, 5, th);
       } else if (ui.kind !== 'work') ui.scroll = 0;
       const first = scrolls ? ui.scroll : 0;
-      (ui.kind === 'bank' || (list.length && list[0].side) ? [] : list).forEach((r, i) => {
+      (list.length && list[0].side ? [] : list).forEach((r, i) => {
         if (r.gapBefore) gapY += 24;
         if (scrolls && (i < first || i >= first + fitN)) return;
         const y = top + (i - first) * rowH + gapY, sel = !info && i === ui.cursor;
@@ -6714,87 +6519,10 @@
       }
       ctx.fillStyle = '#8a8a8a';
       ctx.font = '22px ' + MONO;
-      ctx.fillText(hero ? 'H or X/Esc close' : ui.kind === 'gameover' ? 'Space respawn' : inv ? 'A/D/W/S choose · Space equip/learn/unequip · I or X/Esc close' : ui.kind === 'loot' ? 'W/S choose · Space take · X/Esc close' : ui.kind === 'cheat' ? 'A/D tab · W/S choose · Space apply · P or X/Esc close' : ui.kind === 'scrap' ? 'W/S choose · Space scrap · X/Esc close' : ui.kind === 'bank' ? (list.length ? (phoneView ? 'tap choose · tap again use · hold for menu' : 'WASD choose · Space use · right-click menu · X/Esc') : (phoneView ? '✕ close' : 'A/D tab · X/Esc close')) : ui.kind === 'work' ? 'A/D tab · W/S choose · Space accept · X/Esc close' : ui.kind === 'leaderboard' ? (phoneView ? 'A/D tab · ✕ close' : 'A/D tab · L or X/Esc close') : shop ? (ui.kind === 'shop' && SHOP_TABS[tabOf()].key === 'resources' ? 'A/D tab · W/S choose · Space buy / sell · X/Esc close' : 'A/D tab · W/S choose · Space buy · X/Esc close') : ui.kind === 'quests' ? (quests.length ? 'W/S choose · Space or right-click cancel · Q/X/Esc close' : 'Q or X/Esc close') : ui.kind === 'spelltech' ? 'W/S choose · Space craft · X/Esc close' : ui.kind === 'rest' ? (restReadyAt > Date.now() ? (ui.back ? 'Esc back' : 'X/Esc close') : 'Space confirm · X/Esc close') : info ? (ui.back ? 'Esc back' : 'X/Esc close') : (ui.back ? 'W/S choose · Space select · Esc back' : 'W/S choose · Space select · X/Esc close'), px + 40, py + ph - 40);
+      ctx.fillText(hero ? 'H or X/Esc close' : ui.kind === 'gameover' ? 'Space respawn' : inv ? 'A/D/W/S choose · Space equip/learn/unequip · I or X/Esc close' : ui.kind === 'loot' ? 'W/S choose · Space take · X/Esc close' : ui.kind === 'cheat' ? 'A/D tab · W/S choose · Space apply · P or X/Esc close' : ui.kind === 'scrap' ? 'W/S choose · Space scrap · X/Esc close' : ui.kind === 'work' ? 'A/D tab · W/S choose · Space accept · X/Esc close' : ui.kind === 'leaderboard' ? (phoneView ? 'A/D tab · ✕ close' : 'A/D tab · L or X/Esc close') : shop ? (ui.kind === 'shop' && SHOP_TABS[tabOf()].key === 'resources' ? 'A/D tab · W/S choose · Space buy / sell · X/Esc close' : 'A/D tab · W/S choose · Space buy · X/Esc close') : ui.kind === 'quests' ? (quests.length ? 'W/S choose · Space or right-click cancel · Q/X/Esc close' : 'Q or X/Esc close') : ui.kind === 'spelltech' ? 'W/S choose · Space craft · X/Esc close' : ui.kind === 'rest' ? (restReadyAt > Date.now() ? (ui.back ? 'Esc back' : 'X/Esc close') : 'Space confirm · X/Esc close') : info ? (ui.back ? 'Esc back' : 'X/Esc close') : (ui.back ? 'W/S choose · Space select · Esc back' : 'W/S choose · Space select · X/Esc close'), px + 40, py + ph - 40);
       drawTutGlow();
     }
 
-    // CredBank › Vault: the 4 bag sockets on top, then the Vault storage grid (slot size shrinks so 4 big bags still fit)
-    function drawVault(px, py, pw, ph, top) {
-      const n = vaultSlots(), x0 = px + 40, w = pw - 80, on = focus === 'window';
-      if (ui.cursor >= 4 + n) ui.cursor = n ? 4 + n - 1 : 3;
-      ctx.textBaseline = 'middle'; ctx.textAlign = 'left'; ctx.font = '600 22px ' + MONO; ctx.fillStyle = '#fff';
-      let y = top + 8;
-      ctx.fillText('Bag sockets', x0, y + 12);
-      ctx.textAlign = 'right'; ctx.font = '18px ' + MONO; ctx.fillStyle = '#8a8a8a';
-      ctx.fillText(`store ${VAULT_FEES.store}$ · take out ${VAULT_FEES.withdraw}$ · kept when you die`, x0 + w, y + 12);
-      y += 34;
-      const ss = 76, sg = 14;
-      for (let i = 0; i < 4; i++) {
-        const sx = x0 + i * (ss + sg), b = vault.bags[i], locked = i >= vault.open;
-        drawSlot(sx, y, ss, b ? { name: b } : null);
-        if (locked) {   // locked: dimmed, with its price
-          ctx.fillStyle = 'rgba(0, 0, 0, 0.6)'; ctx.fillRect(sx + 2, y + 2, ss - 4, ss - 4);
-          ctx.textAlign = 'center'; ctx.font = '700 15px ' + MONO; ctx.fillStyle = i === vault.open ? '#f5c542' : '#6a6a6a';
-          ctx.fillText('LOCKED', sx + ss / 2, y + ss / 2 - 11); ctx.fillText(`${VAULT_SOCKET_COST[i].toLocaleString('en')}$`, sx + ss / 2, y + ss / 2 + 11);
-        } else if (!b && ready(ART.noBag)) { ctx.save(); ctx.globalAlpha = 0.22; const m = ss * 0.18; ctx.drawImage(ART.noBag, sx + m, y + m, ss - 2 * m, ss - 2 * m); ctx.restore(); }
-        rowRects.push({ x: sx, y, w: ss, h: ss, i });
-        if (ui.cursor === i) selFrame(sx, y, ss, on);
-      }
-      const tx = x0 + 4 * (ss + sg) + 10;
-      ctx.textAlign = 'left'; ctx.font = '600 22px ' + MONO; ctx.fillStyle = '#fff';
-      ctx.fillText(`Vault: ${vault.items.length}/${n} slots`, tx, y + 22);
-      ctx.font = '17px ' + MONO; let lx = tx; const worn = vault.bags.filter(Boolean);
-      if (!worn.length) { ctx.fillStyle = '#6a6a6a'; ctx.fillText(vault.open ? 'no bags in the sockets yet' : 'unlock a socket to start', lx, y + 52); }
-      [...new Set(worn)].forEach((b, i) => {   // "BackBag 2 ×2 + Vault Pack 12": the same bag counted once
-        const k = worn.filter(x => x === b).length, t = `${i ? ' + ' : ''}${b} ${bagSlots(b)}${k > 1 ? ` ×${k}` : ''}`;
-        ctx.fillStyle = rarityColor(b); if (lx + ctx.measureText(t).width < x0 + w) { ctx.fillText(t, lx, y + 52); lx += ctx.measureText(t).width; } });
-      y += ss + 22;
-      ctx.strokeStyle = 'rgba(255, 255, 255, 0.12)'; ctx.lineWidth = 2; ctx.beginPath(); ctx.moveTo(x0, y); ctx.lineTo(x0 + w, y); ctx.stroke();
-      // the storage grid
-      const gTop = y + 18, infoY = py + ph - 140, availH = infoY - 24 - gTop;
-      let s = 72, cols = 1, rowsN = 1;
-      for (; s >= 36; s -= 4) { cols = Math.max(1, Math.floor((w + 12) / (s + 12))); rowsN = Math.ceil(n / cols); if (rowsN * (s + 12) - 12 <= availH) break; }
-      ui.vcols = cols;
-      if (!n) { ctx.fillStyle = '#8a8a8a'; ctx.font = '22px ' + MONO; ctx.textAlign = 'left';
-        wrapText(vault.open ? 'Put a bag in a socket (Space on it in your inventory): its slots become your Vault storage.' : `Unlock socket 1 for ${VAULT_SOCKET_COST[0]}$ to start your Vault.`, w).forEach((l, i) => ctx.fillText(l, x0, gTop + 20 + i * 30)); }
-      for (let j = 0; j < n; j++) {
-        const sx = x0 + (j % cols) * (s + 12), sy = gTop + Math.floor(j / cols) * (s + 12);
-        drawSlot(sx, sy, s, vault.items[j] || null);
-        rowRects.push({ x: sx, y: sy, w: s, h: s, i: 4 + j, vault: j });
-        if (ui.cursor === 4 + j) selFrame(sx, sy, s, on);
-      }
-      // what the highlighted cell is
-      const c = ui.cursor; let t = '', col = '#cfcfcf';
-      if (c < 0) t = 'A/D switch tab · S back to the sockets';
-      else if (c < 4) {
-        const b = vault.bags[c];
-        if (c >= vault.open) { t = c === vault.open ? `Socket ${c + 1} · locked · Space: unlock for ${VAULT_SOCKET_COST[c].toLocaleString('en')}$` : `Socket ${c + 1} · locked · unlock socket ${vault.open + 1} first`; col = c === vault.open ? '#f5c542' : '#8a8a8a'; }
-        else if (b) { t = `${b} · +${bagSlots(b)} Vault slots · Space: take it out (free)`; col = rarityColor(b); }
-        else t = `Socket ${c + 1} · empty · Space on a bag in your inventory puts it here`;
-      } else {
-        const it = vault.items[c - 4];
-        if (it) { const def = itemDef(it.name) || {}, k = it.count || 1; col = rarityColor(it.name);
-          t = `${it.name}${k > 1 ? ` ×${k}` : ''} · Space: take out${k > 1 ? ' all' : ''} (${VAULT_FEES.withdraw}$)${k > 1 ? ' · right-click: take out 1' : ''}`; }
-        else { t = 'empty Vault slot · Space on an inventory item stores it'; col = '#8a8a8a'; }
-      }
-      ctx.textAlign = 'left'; ctx.font = '20px ' + MONO; ctx.fillStyle = col;
-      for (let fs = 20; fs > 13 && ctx.measureText(t).width > w; fs--) ctx.font = fs + 'px ' + MONO;
-      ctx.fillText(t, x0, infoY);
-    }
-    // W/A/S/D in the Vault tab: cursor -1 = the tabs, 0-3 = sockets, 4+ = the storage grid (ui.vcols a row)
-    function vaultKeys(keys) {
-      const d = (keys.includes('d') ? 1 : 0) - (keys.includes('a') ? 1 : 0), v = (keys.includes('s') ? 1 : 0) - (keys.includes('w') ? 1 : 0);
-      const C = ui.vcols || 9, n = vaultSlots(), c0 = ui.cursor; let c = c0;
-      if (c < 0) { if (d) { switchShopTab(tabOf() + d); return; } if (v > 0) c = 0; }
-      else if (c < 4) { if (d) c = (c + d + 4) % 4; else if (v < 0) c = -1; else if (v > 0 && n) c = 4 + Math.min(c, n - 1); }
-      else {
-        const j = c - 4;
-        if (d) c = 4 + (j + d + n) % n;
-        else if (v < 0) c = j - C >= 0 ? c - C : Math.min(3, j % C);
-        else if (v > 0 && Math.floor(j / C) < Math.floor((n - 1) / C)) c = 4 + Math.min(n - 1, j + C);
-      }
-      if (c !== c0) { ui.cursor = c; ui.msg = ''; }
-    }
     // tutorial: a pulsing golden outline around the tab or row the current task needs (TradeCorp deal, noodles, Smile, sleep)
     function tutGlowTarget() {
       if (!ui || tut < 1 || tut > TUT.length) return null;
@@ -6927,25 +6655,9 @@
       const ty = Math.min(imgY + imgH * 0.8, canvas.height - 200 * k);   // on the street, below the characters' feet
       ctx.strokeText('NEON HUSTLE', cx, ty); ctx.shadowColor = '#ff2bd6'; ctx.shadowBlur = 24 * k; ctx.fillStyle = '#fff'; ctx.fillText('NEON HUSTLE', cx, ty); ctx.shadowBlur = 0;
       ctx.font = `600 ${Math.round(17 * k)}px ${MONO}`; ctx.fillStyle = '#e8e8e8';
-      if (ui.kind === 'loading') {   // choice made, still getting ready: what is going on right now (one line per job) + a progress bar
-        const arts = Object.values(ART), artIn = arts.filter(im => im.complete).length, left = zonesUnplanned(), zones = Object.keys(ZONE_LIST).length;
-        const zid = decalJob?.id || left[0], dots = '.'.repeat(1 + Math.floor(performance.now() / 350) % 3);
-        const steps = [
-          { frac: arts.length ? artIn / arts.length : 1, now: `Loading pictures ${artIn}/${arts.length}`, ok: 'Pictures loaded' },
-          { frac: 1 - left.length / zones, now: `Scattering decals: ${zid && AREAS[zid]?.name ? AREAS[zid].name[0].toUpperCase() + AREAS[zid].name.slice(1) : 'the streets'} · ${zones - left.length}/${zones}`, ok: 'Decals scattered over all zones' },
-        ];
-        if (ui.save) steps.push({ frac: ui.save === 'done' ? 1 : 0, now: ui.save, ok: 'Save loaded from Supabase' });
-        const pr = steps.reduce((t, st) => t + Math.min(1, st.frac), 0) / steps.length;
-        const bw = Math.min(canvas.width - 64 * k, 360 * k), bh = Math.max(3, 4 * k);
-        ctx.font = `600 ${Math.round(14 * k)}px ${MONO}`; ctx.textAlign = 'left';
-        const lw = Math.max(...steps.map(st => ctx.measureText('✓ ' + (st.frac >= 1 ? st.ok : st.now + '...')).width)), lx = cx - Math.min(lw, canvas.width - 32 * k) / 2;
-        steps.forEach((st, i) => {
-          const y = ty + (44 + i * 24) * k, done = st.frac >= 1;
-          ctx.fillStyle = done ? '#3ddc84' : '#fff'; ctx.fillText(done ? '✓' : '›', lx, y);
-          ctx.fillStyle = done ? '#9a9a9a' : '#e8e8e8'; ctx.fillText(done ? st.ok : st.now + dots, lx + ctx.measureText('✓ ').width, y);
-        });
-        ctx.textAlign = 'center';
-        const by = ty + (44 + steps.length * 24 + 6) * k;
+      if (ui.kind === 'loading') {   // choice made, pictures still arriving: "Loading" and a thin progress bar
+        const pr = ui.wait ? artProgress() * 0.9 : artProgress(), bw = Math.min(canvas.width - 64 * k, 320 * k), bh = Math.max(3, 4 * k), by = ty + 70 * k;
+        ctx.fillText('Loading', cx, ty + 46 * k);
         ctx.fillStyle = 'rgba(255, 255, 255, 0.15)'; ctx.fillRect(cx - bw / 2, by, bw, bh);
         ctx.fillStyle = '#b58cff'; ctx.fillRect(cx - bw / 2, by, bw * pr, bh);
         return;
@@ -7346,69 +7058,44 @@
     }
     function secs(ms) { return String(+(ms / 1000).toFixed(2)); }   // -140 -> "-0.14", -100 -> "-0.1"
 
-    // inventory: bottom right, just above the info bar. At the top the two bag slots (cursor -1 and -2), below them one shared
-    // grid with every slot the worn bags give (INV_COLS per row). Equipped items are in the hero panel.
-    const INV_COLS = 6, INV_SLOT = 72, INV_GAP = 12;
+    // inventory: bottom right, just above the info bar. Backpack slots only (equipped items are in the hero panel).
     function drawInventoryPanel() {
-      const pn = panels.inventory, on = focus === 'inventory', w = INV_PANEL.w, slots = invSlots(), step = INV_SLOT + INV_GAP;
-      if (pn.cursor >= slots) pn.cursor = slots ? slots - 1 : -1;
-      const rows = Math.max(1, Math.ceil(slots / INV_COLS)), x0 = x => x + (w - (INV_COLS * step - INV_GAP)) / 2;
-      const h = 62 + 100 + rows * step + 14 + 52 + 46;
-      const x = canvas.width - w - 16, y = Math.max(8, viewBottom() - h - 16), gx = x0(x);
+      const pn = panels.inventory, on = focus === 'inventory', w = INV_PANEL.w, h = INV_PANEL.h;
+      const x = canvas.width - w - 16, y = viewBottom() - h - 16;
       panelFrame(x, y, w, h, 'Inventory', on);
       winFrames.push({ id: 'inventory', x, y, w, h });
       drawCloseX(x + w - 54, y + 10, 'inventory');
-      ctx.textAlign = 'right'; ctx.textBaseline = 'middle'; ctx.font = '600 18px ' + MONO; ctx.fillStyle = '#cfcfcf';
-      ctx.fillText(`${inventory.length}/${slots} slots`, x + w - 80, y + 34);   // how full (left of the ✕)
-      // the two bag slots
-      const by = y + 62;
-      bags.forEach((name, i) => {
-        const sx = gx + i * step;
-        drawSlot(sx, by, INV_SLOT, name ? { name } : null);
-        if (!name && ready(ART.noBag)) { ctx.save(); ctx.globalAlpha = 0.22; const m = INV_SLOT * 0.18; ctx.drawImage(ART.noBag, sx + m, by + m, INV_SLOT - 2 * m, INV_SLOT - 2 * m); ctx.restore(); }
-        rowRects.push({ x: sx, y: by, w: INV_SLOT, h: INV_SLOT, i: -1 - i, panel: 'inventory' });
-        if (pn.cursor === -1 - i) selFrame(sx, by, INV_SLOT, on);
-      });
-      ctx.textAlign = 'left'; ctx.textBaseline = 'middle';
-      const tx = gx + 2 * step + 6;
-      ctx.font = '600 18px ' + MONO; ctx.fillStyle = '#fff'; ctx.fillText('Bags', tx, by + 20);
-      ctx.font = '15px ' + MONO; let lx = tx;
-      for (const [i, name] of bags.entries()) {   // "BackBag 2 + BackBag X 4", each in its rarity colour
-        const t = name ? `${name} ${bagSlots(name)}` : 'empty';
-        if (i) { ctx.fillStyle = '#8a8a8a'; ctx.fillText(' + ', lx, by + 48); lx += ctx.measureText(' + ').width; }
-        ctx.fillStyle = name ? rarityColor(name) : '#6a6a6a'; ctx.fillText(t, lx, by + 48); lx += ctx.measureText(t).width;
-      }
-      ctx.strokeStyle = 'rgba(255, 255, 255, 0.12)'; ctx.lineWidth = 2; ctx.beginPath(); ctx.moveTo(x + 24, by + INV_SLOT + 14); ctx.lineTo(x + w - 24, by + INV_SLOT + 14); ctx.stroke();
-      // the shared grid
-      const sy = by + 100;
+      const slots = invSlots(), size = 96, gap = 16, total = Math.max(1, slots) * size + (Math.max(1, slots) - 1) * gap, x0 = x + (w - total) / 2, sy = y + 62;
       if (!slots) {   // no bag worn: nothing to carry things in
-        ctx.fillStyle = '#8a8a8a'; ctx.font = '18px ' + MONO;
-        wrapText('No bag. Buy a BackBag at the ATB-Market (Other tab) to carry items.', w - 48).forEach((l, i) => ctx.fillText(l, x + 24, sy + 14 + i * 26));
+        ctx.fillStyle = '#8a8a8a'; ctx.font = '20px ' + MONO; ctx.textAlign = 'left'; ctx.textBaseline = 'middle';
+        wrapText('No bag. Buy a BackBag at the ATB-Market (Other tab) to carry items.', w - 48).forEach((l, i) => ctx.fillText(l, x + 24, sy + 30 + i * 28));
+        ctx.font = '16px ' + MONO; ctx.fillText('I or X/Esc close', x + 24, y + h - 18); return;
       }
       for (let i = 0; i < slots; i++) {
-        const sx = gx + (i % INV_COLS) * step, ry = sy + Math.floor(i / INV_COLS) * step;
-        drawSlot(sx, ry, INV_SLOT, inventory[i] || null);
-        rowRects.push({ x: sx, y: ry, w: INV_SLOT, h: INV_SLOT, i, panel: 'inventory' });
-        if (i === pn.cursor) selFrame(sx, ry, INV_SLOT, on);
+        const sx = x0 + i * (size + gap);
+        drawSlot(sx, sy, size, inventory[i] || null);
+        rowRects.push({ x: sx, y: sy, w: size, h: size, i, panel: 'inventory' });
+        if (i === pn.cursor) selFrame(sx, sy, size, on);
       }
       ctx.textAlign = 'left'; ctx.textBaseline = 'middle'; ctx.font = '18px ' + MONO;
-      const ly = sy + rows * step + 14, wornSel = pn.cursor < 0 ? bags[-1 - pn.cursor] : undefined, sel = pn.cursor < 0 ? (wornSel ? { name: wornSel } : null) : inventory[pn.cursor];
-      if (pn.msg) { ctx.fillStyle = '#f5c542'; wrapText(pn.msg, w - 48).slice(0, 3).forEach((l, i) => ctx.fillText(l, x + 24, ly + i * 26)); }
+      const ly = sy + size + 26, sel = inventory[pn.cursor];
+      if (pn.msg) { ctx.fillStyle = '#f5c542'; ctx.fillText(pn.msg, x + 24, ly); }
       else if (sel) {   // what the selected item is, and its total price
         const def = itemDef(sel.name) || {}, n = sel.count || 1;
         ctx.fillStyle = rarityColor(sel.name);   // name in its rarity colour
-        ctx.fillText(wornSel ? `${sel.name} · worn ${rarityOf(sel.name)} bag` : sel.quest ? `${sel.name} · delivery parcel (Netizen Chef)` : `${sel.name} · ${rarityOf(sel.name)} ${def.class || sel.class || 'item'}${def.stack > 1 ? ` · ${n}/${def.stack}` : ''}`, x + 24, ly);
+        ctx.fillText(sel.quest ? `${sel.name} · delivery parcel (Netizen Chef)` : `${sel.name} · ${rarityOf(sel.name)} ${def.class || sel.class || 'item'}${def.stack > 1 ? ` · ${n}/${def.stack}` : ''}`, x + 24, ly);
         ctx.fillStyle = '#cfcfcf';
-        if (def.class === 'equipment' || def.class === 'bag' || def.class === 'food') { const hint = wornSel ? '· Space take off' : def.class === 'bag' ? '· Space wear' : def.class === 'food' ? '· Space eat' : '· Space equip', ex = drawParts(bonusParts(def), x + 24, ly + 26, 10);   // hint only if it fits in the panel
+        if (def.class === 'equipment' || def.class === 'bag' || def.class === 'food') { const hint = def.class === 'bag' ? '· Space wear' : def.class === 'food' ? '· Space eat' : '· Space equip', ex = drawParts(bonusParts(def), x + 24, ly + 26, 10);   // hint only if it fits in the panel
           if (ex + ctx.measureText(hint).width < x + w - 16) { ctx.fillStyle = '#cfcfcf'; ctx.fillText(hint, ex, ly + 26); } }
         else ctx.fillText(def.class === 'skill' ? 'Space to learn' : def.class === 'resource' ? 'crafting resource' : def.consume ? 'Space to consume: +1 MANA cap' : def.class === 'upgrade' ? 'upgrade material (use comes later)' : '', x + 24, ly + 26);
         const unit = def.class === 'food' ? shown(sel.name, prices[sel.name]) : def.class === 'equipment' || def.class === 'bag' ? def.price : def.value;   // equipment: shop price; resources: value per piece
         ctx.fillStyle = '#f5c542';
         ctx.fillText(unit === undefined ? 'total price: —' : `total price: ${unit * n}$${n > 1 ? `  (${n} × ${unit}$)` : ''}`, x + 24, ly + 52);
-      } else { ctx.fillStyle = '#8a8a8a'; const t = pn.cursor < 0 ? 'empty bag slot · Space on a bag in the inventory wears it' : 'empty slot';
-        wrapText(t, w - 48).slice(0, 2).forEach((l, i) => ctx.fillText(l, x + 24, ly + i * 26)); }
+      } else { ctx.fillStyle = '#8a8a8a'; ctx.fillText('empty slot', x + 24, ly); }
       ctx.fillStyle = '#8a8a8a'; ctx.font = '16px ' + MONO;
-      ctx.fillText('WASD · Space use · right-click menu · I/X/Esc close', x + 24, y + h - 18);
+      ctx.fillText('A/D · Space use · right-click throw · I/X/Esc close', x + 24, y + h - 18);
+      ctx.textAlign = 'right'; ctx.fillStyle = rarityColor(bag); ctx.font = '600 18px ' + MONO; for (let fs = 18; fs > 11 && ctx.measureText(bag).width > w - 24 - 190 - 80; fs--) ctx.font = `600 ${fs}px ${MONO}`;
+      ctx.fillText(bag, x + w - 80, y + 34);   // the worn bag (left of the ✕, shrunk if it's long)
     }
 
     // hero: middle left. Full-body picture, stats, and the equipped slots (W/S choose, Space unequips).
@@ -7635,7 +7322,7 @@
       newGame(); renderStats();
       // a signed-in player: the loading screen (start picture, "Loading", thin bar) covers the world until his save and the
       // pictures are in. It stays at least 0.6 s so it doesn't just flash.
-      if (user) ui = { kind: 'loading', cursor: 0, msg: '', wait: true, save: 'Fetching your saves from Supabase', minUntil: performance.now() + 600, next() { ui = null; } };
+      if (user) ui = { kind: 'loading', cursor: 0, msg: '', wait: true, minUntil: performance.now() + 600, next() { ui = null; } };
       lastAutosave = Date.now();   // don't autosave the fresh run over an existing save
       const { slots } = await listSlots();   // continue from the newest slot (autosave or manual)
       const latest = Object.values(slots || {}).sort((a, b) => new Date(b.at) - new Date(a.at))[0];
@@ -7644,11 +7331,10 @@
       if (!user) { showStartScreen(); return; }   // guest: always a fresh run
       if (!account || account.id !== user.id) return;
       if (guestRun && guestRun.state && !latest && Date.now() - guestRun.at < 7 * 24 * 3600 * 1000) {   // a brand-new account takes over the guest run
-        if (ui && ui.kind === 'loading') ui.save = 'Saving your guest run to Supabase';
         applySave(guestRun.state); await writeSlot(1);
         float('guest run saved', '#3ddc84', player.x + 0.5, player.y - 0.8);
-        if (ui && ui.kind === 'loading') { ui.wait = false; ui.save = 'done'; }
-      } else if (latest) { applySave(latest.state); float('welcome back', '#3ddc84', player.x + 0.5, player.y - 0.8); if (ui && ui.kind === 'loading') { ui.wait = false; ui.save = 'done'; } }
+        if (ui && ui.kind === 'loading') ui.wait = false;
+      } else if (latest) { applySave(latest.state); float('welcome back', '#3ddc84', player.x + 0.5, player.y - 0.8); if (ui && ui.kind === 'loading') ui.wait = false; }
       else showStartScreen();   // a new account's first run
       lastAutosave = Date.now();
       refreshLeaderboard();
@@ -7732,7 +7418,7 @@
     canvas.addEventListener('contextmenu', e => e.preventDefault());
     canvas.addEventListener('wheel', e => {   // mouse wheel: move through a long window list (it scrolls with the cursor); full map: zoom
       if (ui && ui.kind === 'map' && !naming()) { e.preventDefault(); const { cx, cy } = canvasPt(e); mapZoomAt(cx, cy, MAPV.span * Math.exp(e.deltaY * 0.0015)); return; }
-      if (!ui || naming() || ['techversity', 'map', 'start', 'loading', 'gameover', 'bank'].includes(ui.kind) || (WINDOW_TABS[ui.kind] && ui.kind === 'work')) return;
+      if (!ui || naming() || ['techversity', 'map', 'start', 'loading', 'gameover'].includes(ui.kind) || (WINDOW_TABS[ui.kind] && ui.kind === 'work')) return;
       e.preventDefault(); moveCursor(e.deltaY > 0 ? 1 : -1);
     }, { passive: false });   // right-click is the game's item menu, not the browser's
     // touch: a tap on the highlighted building / NPC opens it, on an enemy in reach attacks, on another enemy targets it,
@@ -7778,13 +7464,8 @@
         if (row && quests[qi]) openQuestMenu(qi, cx, cy);
         return;
       }
-      if (vaultOpen()) {   // a Vault item: take-out menu
-        const cell = rowRects.find(b => !b.panel && b.vault !== undefined && cx >= b.x && cx <= b.x + b.w && cy >= b.y && cy <= b.y + b.h);
-        if (cell && vault.items[cell.vault]) { focus = 'window'; ui.cursor = 4 + cell.vault; ui.msg = ''; openVaultMenu(cell.vault, cx, cy); return; }
-      }
       const slot = panels.inventory && rowRects.find(b => b.panel === 'inventory' && cx >= b.x && cx <= b.x + b.w && cy >= b.y && cy <= b.y + b.h);
-      if (slot && slot.i < 0 && bags[-1 - slot.i]) { focus = 'inventory'; panels.inventory.cursor = slot.i; panels.inventory.msg = ''; openBagMenu(-1 - slot.i, cx, cy); }
-      else if (slot && inventory[slot.i]) { focus = 'inventory'; panels.inventory.cursor = slot.i; panels.inventory.msg = ''; openItemMenu(slot.i, cx, cy); }
+      if (slot && inventory[slot.i]) { focus = 'inventory'; panels.inventory.cursor = slot.i; panels.inventory.msg = ''; openItemMenu(slot.i, cx, cy); }
       else if (ui && ui.kind !== 'quests') return;
     }
     let longPress = null;   // { id, x, y, timer }: finger held still for 0.5 s on the map
@@ -7932,11 +7613,8 @@
       if (e.pointerType && e.pointerType !== 'mouse') armLongPress(e, cx, cy);   // touch: holding a finger = right-click
       const hit = rowRects.find(b => !b.close && mine(b) && cx >= b.x && cx <= b.x + b.w && cy >= b.y && cy <= b.y + b.h);
       if (hit && hit.panel) {   // click a panel slot: focus + select. Phones: a tap on a bag item opens its menu (use / sell / throw away)
-        if (hit.panel === 'inventory' && hit.i >= 0 && vaultOpen() && focus === 'inventory' && panels.inventory.cursor === hit.i && inventory[hit.i] && (!e.pointerType || e.pointerType === 'mouse')) {
-          const m = vaultStore(hit.i); panels.inventory.msg = m; ui.msg = m; return; }   // CredBank: a click on the selected item stores it
         focus = hit.panel; panels[hit.panel].cursor = hit.i; panels[hit.panel].msg = '';
-        if (hit.panel === 'inventory' && e.pointerType && e.pointerType !== 'mouse' && (hit.i < 0 ? bags[-1 - hit.i] : inventory[hit.i])) {
-          clearTimeout(longPress?.timer); longPress = null; if (hit.i < 0) openBagMenu(-1 - hit.i, hit.x, hit.y - 20); else openItemMenu(hit.i, hit.x, hit.y - 20); }
+        if (hit.panel === 'inventory' && inventory[hit.i] && e.pointerType && e.pointerType !== 'mouse') { clearTimeout(longPress?.timer); longPress = null; openItemMenu(hit.i, hit.x, hit.y - 20); }
       }
       else if (hit && hit.tab !== undefined) switchShopTab(hit.tab);
       else if (hit && ui && (WINDOW_TABS[ui.kind] || ui.kind === 'techversity') && hit.i !== ui.cursor) { ui.cursor = hit.i; ui.msg = ''; }   // shop: first click selects, a click on the selected item buys
