@@ -956,6 +956,10 @@
     });
     // the Rogue: quest giver (the tutorial), next to the ATB-Market; turns toward the hero when he is within 2 tiles
     AREAS['0:0'].walls.push({ x: 18, y: 13, w: 1, h: 1, color: '#2a1f3d', label: 'Rogue', opens: 'rogue', art: 'npcRogue', artH: 1.75, npc: true, facesRight: true });
+    // Pixi: the city's announcer, on the pavement under TradeCorp, just right of its graffiti (tile 30, 12). Idle picture, the cheer
+    // picture (pom-pom up) while her window is open. Both share one canvas; the raised pom-pom makes it 1.8 tiles tall so her
+    // body stays the hero's 1.75 tiles.
+    AREAS['0:0'].walls.push({ x: 31, y: 13, w: 1, h: 1, color: '#ff2bd6', label: 'Pixi', opens: 'pixi', art: 'npcPixi', artH: 1.8, npc: true, facesRight: true });
     // roads (always 2 tiles wide): [x0, y0, x1, y1] rectangles of road tiles, drawn with the road pieces (see drawRoads)
     const ROADS = [[3, 5, 44, 6], [3, 7, 4, 14], [39, 7, 40, 24], [5, 13, 38, 14], [7, 15, 8, 26], [27, 21, 28, 24], [9, 23, 26, 24], [29, 23, 38, 24], [41, 23, 46, 24]];
     const road = AREAS['0:0'].road = [...Array(ROWS)].map(() => Array(COLS).fill(false));
@@ -1686,7 +1690,7 @@
     block4Capsule: 'art/buildings/block4Capsule.png', block5Corp: 'art/buildings/block5Corp.png', block6Market: 'art/buildings/block6Market.png',
     ruinCapsule: 'art/buildings/ruinCapsule.png', ruinCorp: 'art/buildings/ruinCorp.png', ruinMarketTower: 'art/buildings/ruinMarketTower.png',
     talentPainCorrection: 'art/ui/talents/talentPainCorrection.webp', talentVampTech: 'art/ui/talents/talentVampTech.webp', talentReZero: 'art/ui/talents/talentReZero.webp', talentSideHustle: 'art/ui/talents/talentSideHustle.webp', talentCommission: 'art/ui/talents/talentCommission.webp', talentCeoMindset: 'art/ui/talents/talentCeoMindset.webp', talentQuickHands: 'art/ui/talents/talentQuickHands.webp', talentArcaneViolence: 'art/ui/talents/talentArcaneViolence.webp', talentSystemOverclock: 'art/ui/talents/talentSystemOverclock.webp',   // talent icons
-    npcRogue: 'art/npc/rogue.webp', npcChef: 'art/npc/netizenChef.webp', roguePortrait: 'art/npc/roguePortrait.webp', startScreen: 'art/ui/startScreen.webp', techVersity: 'art/buildings/techVersity.webp',   // quest giver in the city, standing, facing the viewer
+    npcRogue: 'art/npc/rogue.webp', npcPixi: 'art/npc/pixi.webp', npcPixiCheer: 'art/npc/pixiCheer.webp', pixiPortrait: 'art/npc/pixiPortrait.webp', npcChef: 'art/npc/netizenChef.webp', roguePortrait: 'art/npc/roguePortrait.webp', startScreen: 'art/ui/startScreen.webp', techVersity: 'art/buildings/techVersity.webp',   // quest giver in the city, standing, facing the viewer
     spellTech: 'art/buildings/spellTech.png',   // MutaTech crafting station (3 x 2), turned slightly like the shop
     ruinApartment: 'art/buildings/ruinApartment.png', ruinMarket: 'art/buildings/ruinMarket.png', ruinNoodleBar: 'art/buildings/ruinNoodleBar.png',
     holoBillboard: 'art/buildings/holoBillboard.webp', shackStack: 'art/buildings/shackStack.webp', foodCart: 'art/buildings/foodCart.webp', burntBus: 'art/buildings/burntBus.webp',
@@ -1897,6 +1901,10 @@
       { q: 'How do you see your stats?', a: ['Press H or click on my hero', 'Open the map (M)', 'Visit TradeCorp'], right: 0 },
     ];
     let tutN = saved.tutN ?? 0;                                   // progress inside the current task
+    // Pixi's announcement: the latest thing that opened in the city. A new id brings back her pink '!' until she's talked to.
+    const PIXI_NEWS = { id: 'credbank-vault',
+      text: `OMG OMG OMG!! The CredBank is finally OPEN!! It has a super-safe Vault: unlock a bag socket, pop a bag in, and boom, extra storage! Storing stuff is just 1$, taking it back is 2$, and get this... EVERYTHING in the Vault stays even if you, like, totally die!! Go go go, it's right here in the city!` };
+    let pixiSeen = saved.pixiSeen ?? null;   // the news id the hero last heard from her
     let tutQuiz = saved.tutQuiz ? { ...saved.tutQuiz } : { i: 0, wrong: 0 };   // quiz: next question, wrong answers so far
     const tutReward = () => ({ money: TUT_REWARD.money - TUT_PENALTY.money * tutQuiz.wrong, exp: TUT_REWARD.exp - TUT_PENALTY.exp * tutQuiz.wrong });
     const tutProgress = () => { const st = TUT[tut - 1]; if (!st) return '';
@@ -2292,6 +2300,7 @@
         } }];
       }
       if (['metro', 'ripperdoc'].includes(ui.kind)) return [{ left: 'ok', right: '', act() { ui = null; } }];
+      if (ui.kind === 'pixi') return [{ left: 'Yay, thanks Pixi!', right: '', act() { ui = null; } }];
       if (ui.kind === 'bank') {   // Vault tab: rows 0-3 = the sockets, 4+ = the Vault's storage slots (drawn as a grid: drawVault)
         if (WINDOW_TABS.bank[tabOf()].key !== 'vault') return [];
         return [...[0, 1, 2, 3].map(i => ({ left: `socket ${i + 1}`, right: '', act() { return vaultSocket(i); } })),
@@ -2383,7 +2392,7 @@
       quests.length = 0;
       areaName = '0:0'; spawnAllDrips();
       enterArea('0:0', START.x, START.y, 1, true);
-      inventory.length = 0; equipped.length = 0; activeSets.clear(); skills.length = 0; restReadyAt = 0; bags[0] = DEFAULT_BAG; bags[1] = null; loadVault(null); piles.length = 0; tut = 0; tutN = 0; tutQuiz = { i: 0, wrong: 0 }; Object.assign(levels, startLevels());
+      inventory.length = 0; equipped.length = 0; activeSets.clear(); skills.length = 0; restReadyAt = 0; bags[0] = DEFAULT_BAG; bags[1] = null; loadVault(null); pixiSeen = null; piles.length = 0; tut = 0; tutN = 0; tutQuiz = { i: 0, wrong: 0 }; Object.assign(levels, startLevels());
       rootedUntil = 0; slowUntil = 0; poisonUntil = 0; floaters.length = 0; Object.assign(CAP_BASE, BASE_CAPS); hero.level = 1; hero.exp = 0; recalcCaps();
       ui = null; closePanels(); applyLbBuffs();
     }
@@ -2489,7 +2498,7 @@
     function snapshot() {
       return { x: player.x, y: player.y, fx: facing.x, fy: facing.y, stats: statsNoBuffs(), deals, prices: { ...prices }, dealsDone, foodBought, itemsV2: true, sets: [...activeSets], promotion, kills, dripKills, queenKills, weaponBought, rogueDone: [...rogueDone], cheated: runCheated, quests: quests.map(q => q.kind === 'delivery' ? { ...q, left: Math.max(0, q.until - gameTime) } : { ...q }),
                inventory: inventory.map(it => ({ ...it })), equipped: equipped.map(it => ({ ...it })), skills: [...skills],
-               weaponsV: 2, areaName, restReadyAt, levels: { ...levels }, manaCap: CAP_BASE.mana, energyCap: CAP_BASE.energy, level: hero.level, exp: hero.exp, strengthLevel: hero.level, bags: [...bags], vault: { open: vault.open, bags: [...vault.bags], items: vault.items.map(it => ({ ...it })) }, talents: JSON.parse(JSON.stringify(talents)), ceoCalls, tut, tutV: 3, tutN, tutQuiz: { ...tutQuiz }, discovered: [...discovered], enemies: saveEnemies(), harvest: saveHarvest(),
+               weaponsV: 2, areaName, restReadyAt, levels: { ...levels }, manaCap: CAP_BASE.mana, energyCap: CAP_BASE.energy, level: hero.level, exp: hero.exp, strengthLevel: hero.level, bags: [...bags], vault: { open: vault.open, bags: [...vault.bags], items: vault.items.map(it => ({ ...it })) }, talents: JSON.parse(JSON.stringify(talents)), ceoCalls, tut, tutV: 3, pixiSeen, tutN, tutQuiz: { ...tutQuiz }, discovered: [...discovered], enemies: saveEnemies(), harvest: saveHarvest(),
                piles: piles.map(p => ({ ...p, gear: p.gear.map(it => ({ ...it })), items: p.items.map(it => ({ ...it })), left: Math.max(0, p.until - gameTime), until: undefined })) };
     }
     function applySave(s) {
@@ -2523,7 +2532,7 @@
       skills.length = 0; skills.push(...(s.skills || []).map(newName));
       if (!deals) deals = newDeals();
       piles.length = 0; for (const p of s.piles || []) piles.push({ ...pileOf(p), until: gameTime + (p.left || 0) });
-      tut = s.tut ?? 0;
+      tut = s.tut ?? 0; pixiSeen = s.pixiSeen ?? null;
       if (s.tutV !== 3) { if (tut >= (s.tutV === 2 ? 6 : 5)) tut = TUT_DONE; else if (tut > 0) tut = 1; }   // older, shorter tutorials: finished stays finished, running restarts
       tutN = s.tutV === 3 ? s.tutN || 0 : 0; tutQuiz = s.tutV === 3 && s.tutQuiz ? { ...s.tutQuiz } : { i: 0, wrong: 0 };
       restReadyAt = s.restReadyAt || 0; rootedUntil = 0; slowUntil = 0; poisonUntil = 0; floaters.length = 0; closePanels();
@@ -2770,10 +2779,11 @@
       stats.energy -= r.energy; renderStats();
       return `Crafted ${r.count} ${r.make}.`;
     }
-    const TITLES = { techversity: 'TechVersity · Talents', chef: 'Netizen Chef', intro: 'Controls', rogue: 'Rogue', metro: 'Metro Station', bank: 'CredBank', ripperdoc: 'Ripperdoc Clinic', spelltech: 'MutaTech', shop: 'ATB-Market', work: 'TradeCorp', menu: 'Menu', controls: 'Controls', hero: 'Hero', inventory: 'Inventory', gameover: 'Game over', loot: 'Loot · Drip', rest: 'HomeDome', cheat: 'Cheats (testing)', scrap: 'Scrap Dealer',
+    const TITLES = { pixi: 'Pixi', techversity: 'TechVersity · Talents', chef: 'Netizen Chef', intro: 'Controls', rogue: 'Rogue', metro: 'Metro Station', bank: 'CredBank', ripperdoc: 'Ripperdoc Clinic', spelltech: 'MutaTech', shop: 'ATB-Market', work: 'TradeCorp', menu: 'Menu', controls: 'Controls', hero: 'Hero', inventory: 'Inventory', gameover: 'Game over', loot: 'Loot · Drip', rest: 'HomeDome', cheat: 'Cheats (testing)', scrap: 'Scrap Dealer',
                      map: 'Map', settings: 'Settings', sound: 'Sound', video: 'Video', decals: 'Decal density', restart: 'Restart', throw: 'Throw away', cancelQuest: 'Cancel quest', quests: 'Quests', leaderboard: 'Leaderboard', save: 'Save', load: 'Load game', logout: 'Log out', guest: 'Playing as guest' };
     // windows with a paragraph above their options
     const WINDOW_TEXT = {
+      pixi: () => PIXI_NEWS.text,
       metro: 'The gates are down and the departure board is blank. "Opening soon," says a flickering sign.',
       ripperdoc: 'The ripperdoc is still unpacking chrome. "Come back soon, choom."',
       chef: () => { const q = quests.find(q => q.kind === 'delivery' && q.dest === areaName);
@@ -2991,6 +3001,7 @@
     function endIntro() { ui = null; showHint('Someone near the ATB-Market wants a word.'); }
     function openWindow(kind, cursor = 0, back = null) {
       if (kind === 'rogue') tutEvent('talk');   // last task: come back and talk to her
+      if (kind === 'pixi') pixiSeen = PIXI_NEWS.id;   // her '!' goes away once you've heard the news
       ui = { kind, cursor, msg: '', back };
       focus = 'window';   // keys go to the window (a click on an open panel gives them to the panel)
       if (((kind === 'shop' && fillView) || kind === 'scrap' || kind === 'bank') && !panels.inventory) panels.inventory = { cursor: 0, msg: '' };   // computers: the shop opens the inventory; the Scrap Dealer everywhere (sell from the bag)   // computers: the shop opens the inventory next to it
@@ -5359,27 +5370,35 @@
       for (const e of drips) if (e.kind === 'drone' && !e.dead) { drip = e; drawDroneShadow(e); }   // drones' shadows on the ground, under buildings
 
       for (const d of AREAS[areaName].decos || []) drawWall(d);   // walkable ground decoration (mushroom patches)
-      // depth sort: things higher on screen first, so whatever is lower is drawn in front
-      // buildings: split around the hero by their bottom row; among buildings, "front" ones are drawn last
-      const order = (a, b) => (a.y + (a.front ? 10 : 0)) - (b.y + (b.front ? 10 : 0));
-      WALLS.filter(w => w.y - 1 <= ry).sort(order).forEach(drawWall);
-      drawBig(false, ry);   // big grove / factory columns the hero stands in front of
-      if (gameTime < rootedUntil) drawTart(rx, ry);
-      // hero and enemies: lower on screen is drawn in front; a beaten enemy lies flat under everyone
-      const actors = [{ y: ry, draw: () => drawHeroSprite(rx, ry) }];
-      for (const e of drips) { if (e.kind === 'drone' && !e.dead) continue; drip = e; const d = dripPos(); actors.push({ y: e.dead ? -1e9 : d.y, draw: () => { drip = e; withKnock(e, () => drawDrip(d)); } }); }
-      actors.sort((a, b) => a.y - b.y).forEach(a => a.draw());
-      // buildings in front of the hero: see-through (40%) while they cover him or a walking enemy, fading over about 0.2 s
-      const bodies = [{ x0: (rx + 0.2) * TILE, x1: (rx + 0.8) * TILE, y0: (ry + 1 - 1.5) * TILE, y1: (ry + 1) * TILE }];
-      for (const e of drips) if (!e.dead && e.kind !== 'drone') { drip = e; const d = dripPos(); bodies.push({ x0: (d.x + 0.2) * TILE, x1: (d.x + 0.8) * TILE, y0: (d.y + 1 - 1.5) * TILE, y1: (d.y + 1) * TILE }); }
-      const hits = (x0, x1, y0, y1) => !anyOpen() && bodies.some(h => x0 < h.x1 && h.x0 < x1 && y0 < h.y1 && h.y0 < y1);
+      // depth sort: buildings, NPCs, the hero and walking enemies in ONE list, by where they touch the ground (the bottom
+      // edge, in tiles: a building's bottom row + 1, an actor's y + 1). Lower on screen = drawn later = in front, whatever
+      // the hero's position. Ties: buildings first (someone standing on a building's front row is in front of it), and a
+      // "front" building (TradeCorp, whose picture is wider than its plot) after its same-row neighbours.
+      // A beaten enemy lies flat under everyone. The big corner pieces still split around the hero's row (drawBig).
+      const heroBody = { x0: (rx + 0.2) * TILE, x1: (rx + 0.8) * TILE, y0: (ry + 1 - 1.5) * TILE, y1: (ry + 1) * TILE };
+      const items = WALLS.map(w => ({ k: w.y + (w.front ? 0.001 : 0), wall: w }));
+      items.push({ k: ry + 1 + 0.0015, draw: () => drawBig(false, ry) });   // big grove / factory columns behind the hero
+      if (gameTime < rootedUntil) items.push({ k: ry + 1 + 0.0018, draw: () => drawTart(rx, ry) });
+      items.push({ k: ry + 1 + 0.002, body: heroBody, draw: () => drawHeroSprite(rx, ry) });
+      for (const e of drips) {
+        if (e.kind === 'drone' && !e.dead) continue;
+        drip = e; const d = dripPos();
+        items.push({ k: e.dead ? -1e9 : d.y + 1 + 0.002, body: e.dead ? null : { x0: (d.x + 0.2) * TILE, x1: (d.x + 0.8) * TILE, y0: (d.y + 1 - 1.5) * TILE, y1: (d.y + 1) * TILE },
+                     draw: () => { drip = e; withKnock(e, () => drawDrip(d)); } });
+      }
+      items.sort((a, b) => a.k - b.k);
+      // a building turns see-through (40%) while it covers the hero or a walking enemy standing behind it, fading over ~0.2 s
+      const bodies = [heroBody, ...items.filter(it => it.body && it.body !== heroBody).map(it => it.body)];
+      const hits = (x0, x1, y0, y1, list = bodies) => !anyOpen() && list.some(h => x0 < h.x1 && h.x0 < x1 && y0 < h.y1 && h.y0 < y1);
       const fadeTo = (o, covers) => (o.fade = Math.max(0.4, Math.min(1, (o.fade ?? 1) + (covers ? -0.06 : 0.06))));
-      WALLS.filter(w => w.y - 1 > ry).sort(order).forEach(w => {
-        const f = foot(w), a = artSize(w);
+      const behind = [];   // bodies already drawn (so behind whatever comes next)
+      for (const it of items) {
+        if (!it.wall) { it.draw(); if (it.body) behind.push(it.body); continue; }
+        const w = it.wall, f = foot(w), a = artSize(w);
         const x0 = a ? footCX(w) * TILE - a.dw / 2 : f.x0 * TILE, x1 = a ? x0 + a.dw : (f.x1 + 1) * TILE;
         const y1 = (f.y1 + 1) * TILE, y0 = a ? y1 - a.dh : f.y0 * TILE;
-        if (fadeTo(w, hits(x0, x1, y0, y1)) < 1) { ctx.save(); ctx.globalAlpha = w.fade; drawWall(w); ctx.restore(); } else drawWall(w);
-      });
+        if (fadeTo(w, behind.length > 0 && hits(x0, x1, y0, y1, behind)) < 1) { ctx.save(); ctx.globalAlpha = w.fade; drawWall(w); ctx.restore(); } else drawWall(w);
+      }
       {   // big corner pieces (factory, grove): the front columns fade together
         const b = AREAS[areaName].big, im = b && ART[b.art];
         let covers = false;
@@ -5390,14 +5409,15 @@
       drawMeleeFlash();
       drawProjectiles();
       // the Rogue: turns toward the hero when he is within 2 tiles; a '!' over her head until the tutorial starts
-      for (const w of WALLS) if (w.opens === 'rogue' || w.opens === 'chef') {
+      for (const w of WALLS) if (w.opens === 'rogue' || w.opens === 'chef' || w.opens === 'pixi') {
         const f = foot(w);
         if (cheb(player.x, player.y, f.x0, f.y0) <= 2 && player.x !== f.x0) w.flip = (player.x < f.x0) === !!w.facesRight;
-        const mark = w.opens === 'chef' || tut === 0 || tut === TUT_READY ? '!' : w.opens === 'rogue' && rogueReady().length ? '?' : w.opens === 'rogue' && rogueOffers().length ? '!' : '';   // her quests: ! new, ? ready to hand in
+        if (w.opens === 'pixi') w.art = ui && ui.kind === 'pixi' ? 'npcPixiCheer' : 'npcPixi';   // pom-pom up while she talks
+        const mark = w.opens === 'pixi' ? (pixiSeen !== PIXI_NEWS.id ? '!' : '') : w.opens === 'chef' || tut === 0 || tut === TUT_READY ? '!' : w.opens === 'rogue' && rogueReady().length ? '?' : w.opens === 'rogue' && rogueOffers().length ? '!' : '';   // her quests: ! new, ? ready to hand in
         if (mark) {
           const bob = Math.sin(performance.now() / 300) * 5, x = (f.x0 + 0.5) * TILE, y = wallTop(w) - 50 + bob;   // above the purple arrow
           ctx.font = '800 44px ' + MONO; ctx.textAlign = 'center'; ctx.textBaseline = 'bottom';
-          ctx.lineWidth = 6; ctx.strokeStyle = '#000'; ctx.strokeText(mark, x, y); ctx.fillStyle = '#ffdc00'; ctx.fillText(mark, x, y);
+          ctx.lineWidth = 6; ctx.strokeStyle = '#000'; ctx.strokeText(mark, x, y); ctx.fillStyle = w.opens === 'pixi' ? '#ff2bd6' : '#ffdc00'; ctx.fillText(mark, x, y);
         }
       }
       // tutorial: a bobbing arrow over the building of the current task
@@ -6570,6 +6590,21 @@
       if (r.minLevel) { ctx.font = '600 18px ' + MONO; ctx.fillStyle = hero.level >= r.minLevel ? '#8a8a8a' : '#e5484d';
         ctx.fillText(`needs lvl ${r.minLevel}`, sx + big + 20, sy + big - 36); }
     }
+    // Pixi's window: placed next to her on screen (right, left, below, above: the first that doesn't cover her or run off
+    // screen; the portrait on its top edge counts too), so you see her cheer while she talks. null = no room (centre).
+    function pixiWindowSpot(pw, ph) {
+      const w = WALLS.find(w => w.opens === 'pixi'); if (!w) return null;
+      const f = foot(w), z = cam.z, cx = (f.x0 + 0.5) * TILE * z + cam.ox, top = (f.y0 + 1 - (w.artH || 1.75)) * TILE * z + cam.oy, bottom = (f.y0 + 1) * TILE * z + cam.oy;
+      const hw = 0.75 * TILE * z, gap = 28, portraitH = 210, m = 16, cy = (top + bottom) / 2;
+      const fits = (x, y) => x >= m && y - portraitH >= m && x + pw <= canvas.width - m && y + ph <= viewBottom() - m;
+      const clampY = y => Math.max(m + portraitH, Math.min(y, viewBottom() - m - ph));
+      const tries = [
+        { x: cx + hw + gap, y: clampY(cy - ph / 2) },              // right of her
+        { x: cx - hw - gap - pw, y: clampY(cy - ph / 2) },         // left of her
+        { x: (canvas.width - pw) / 2, y: bottom + gap + portraitH },   // below her
+        { x: (canvas.width - pw) / 2, y: top - gap - ph }];        // above her
+      return tries.find(t => fits(t.x, t.y)) || null;
+    }
     function drawWindow() {
       if (ui.kind === 'map') { drawBigMap(); return; }
       if (ui.kind === 'gameover') { drawGameOver(); return; }
@@ -6592,9 +6627,10 @@
         : Math.min(canvas.height - 20, Math.max((ui.kind === 'rest' ? 4.5 : 6) * TILE, 110 + textH + listN * rowH + gaps + Math.max(1, msgLines.length) * 32 + 100));
       let px = (canvas.width - pw) / 2;
       if ((fillView || phoneView) && panels.inventory) px = Math.max(16, Math.min(px, canvas.width - INV_PANEL.w - 32 - pw));   // computers: make room for the inventory on the right
-      const py = (canvas.height - ph) / 2;
+      let py = (canvas.height - ph) / 2;
+      if (ui.kind === 'pixi') { const spot = pixiWindowSpot(pw, ph); if (spot) { px = spot.x; py = spot.y; } }   // beside her, so her cheer stays in view
       winFrames.push({ id: 'window', x: px, y: py, w: pw, h: ph });
-      if (!ui.noDim) { ctx.fillStyle = 'rgba(0, 0, 0, 0.6)'; ctx.fillRect(0, 0, canvas.width, canvas.height); }
+      if (!ui.noDim && ui.kind !== 'pixi') { ctx.fillStyle = 'rgba(0, 0, 0, 0.6)'; ctx.fillRect(0, 0, canvas.width, canvas.height); }   // Pixi: no dimming, she's cheering
       ctx.fillStyle = '#000';
       rr(px, py, pw, ph, UI_R); ctx.fill();
       ctx.strokeStyle = '#fff'; ctx.lineWidth = 2;
@@ -6606,8 +6642,9 @@
       ctx.textAlign = 'left';
       ctx.font = '600 40px ' + MONO;
       ctx.fillText(hero ? (heroName || DEFAULT_NAME) : ui.kind === 'loot' && lootTarget ? `Loot · ${ET(lootTarget).name}` : ui.kind === 'quests' ? `Quests ${quests.length}/${MAX_QUESTS}` : TITLES[ui.kind], px + 40, py + 56);
-      if (ui.kind === 'rogue' && ready(ART.roguePortrait)) {   // her portrait stands on the window's top edge, left of the close button
-        const im = ART.roguePortrait, h = 200, w = h * im.naturalWidth / im.naturalHeight;
+      const portrait = ui.kind === 'rogue' ? ART.roguePortrait : ui.kind === 'pixi' ? ART.pixiPortrait : null;
+      if (portrait && ready(portrait)) {   // her portrait stands on the window's top edge, left of the close button
+        const im = portrait, h = 200, w = h * im.naturalWidth / im.naturalHeight;
         ctx.imageSmoothingQuality = 'high'; ctx.drawImage(im, px + pw - w - 80, py - h + 6, w, h);
       }
       if (ui.kind === 'shop' || ui.kind === 'work' || ui.kind === 'scrap' || ui.kind === 'rest' || ui.kind === 'bank') {   // wallet in the corner
