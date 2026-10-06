@@ -1492,8 +1492,8 @@
   // Beaten: his puddle can be looted for 30 s (face it, Space), then fades out over 2 s and is gone with any loot left.
   // He comes back 60–90 s after dying. All timers run on game time, which stops while a window is open.
   // Damage: a share of the hero's max HP at his level (see npcDamage): melee ×0.10–0.12 per hit, Magic Tar ×0.08 per tick.
-  const DRIP = { name: 'Drip', exp: 2, hp: 10, atkMult: [0.10, 0.12], tarMult: 0.08, mana: 3, manaRegenMs: 4000, aggro: 4, stepMs: 1000, attackMs: 1000,
-                 windupMs: 400, spell: 'Magic tar', respawnMs: [60000, 90000], lootMs: 30000, fadeMs: 2000,
+  const DRIP = { name: 'Drip', exp: 2, hp: 10, atkMult: [0.10, 0.12], tarMult: 0.08, mana: 3, manaRegenMs: 4000, aggro: 4, stepMs: 1000 / 2, attackMs: 1000,
+                 windupMs: 400, castMs: 300, spell: 'Magic tar', respawnMs: [60000, 90000], lootMs: 30000, fadeMs: 2000,
                  loot: { money: [4, 8], tar: [0, 1], magicTarChance: 0.03 },   // rolled when he dies, taken with Space
                  spawns: [[{ x: 11, y: 7 }], [{ x: 8, y: 5 }, { x: 14, y: 9 }]] };   // spawn tiles (from 1) for 1 and for 2 Drips
   // hero melee area: a half-disc whose flat side is the front edge of the hero's tile, facing where he looks.
@@ -1525,7 +1525,7 @@
   // `keep` tiles from the hero (backs off when he comes closer). Every `sprayEveryMs` he aims (aimMs) and sprays a cone of
   // toxic mist at where the hero stood: up to `sprayRange` tiles, `sprayHalfAngle` radians each side; the hero takes
   // damage on each tick while he stays in it (step out of the cone to dodge). Doesn't melee. Same loot/fade/respawn timing as Drip.
-  const SCAV = { name: 'Toxic Scav', exp: 4, hp: 26, aggro: 5, keep: 3, stepMs: 1000, sprayRange: 3.5, sprayHalfAngle: 0.5,
+  const SCAV = { name: 'Toxic Scav', exp: 4, hp: 26, aggro: 5, keep: 3, strafe: 0.6, circleSpeed: 1, stepMs: 1000 / 1.5, sprayRange: 3.5, sprayHalfAngle: 0.5,
                  sprayEveryMs: 2500, aimMs: 280, sprayMs: 1400, sprayTicks: [220, 690, 1180], sprayMult: 0.16,   // aim 0.28 s, spray 1.4 s with damage checks at 0.22 / 0.69 / 1.18 s into it, next aim 2.5 s after this one started; damage per hit: 16% of a same-level hero's max HP (npcDamage)
                  respawnMs: [90000, 120000], lootMs: 30000, fadeMs: 2000,
                  loot: { money: [10, 18], tar: [0, 1], mutagenChance: 0.15 } };
@@ -1535,15 +1535,15 @@
   // level), 40% chance to slow the hero by 20% for 3 s. After the ram it stays low for 0.6 s: only then can melee reach it
   // (spells always can). Cooldown 1.8 s. Gives up when the hero is 10+ tiles away and flies home.
   // When a hit leaves it at 10% of max HP or less (once per life) it cloaks (2% visible, can't be targeted), flies 3 tiles away and repairs 30% of max HP over 3 s.
-  const DRONE = { name: 'Mav-1K', exp: [3, 4], hp: 14, aggro: 3, leash: 10, stepMs: 500, ramMult: 0.15, windupMs: 250, lowMs: 700, cooldownMs: 1800,
-                  slowChance: 0.4, slow: 0.2, slowMs: 3000, cloakPct: 0.1, cloakMs: 3000, cloakAlpha: 0.02, fleeDist: 3, repairPct: 0.3,
+  const DRONE = { name: 'Mav-1K', exp: [3, 4], hp: 14, aggro: 3, leash: 10, stepMs: 1000 / 3, ramMult: 0.15, windupMs: 250, lowMs: 700, cooldownMs: 1800,
+                  slowChance: 0.4, slow: 0.2, slowMs: 3000, dashLen: 1.5, dashMs: 200, cloakPct: 0.1, cloakMs: 3000, cloakAlpha: 0.02, fleeDist: 3, repairPct: 0.3,
                   respawnMs: [40000, 100000], lootMs: 30000, fadeMs: 2000, loot: { money: [4, 10], aiChipChance: 0.15 } };
   // Sporeling (deep forest): a small mushroom mutant hiding as a glowing mushroom, in groups of 2-3 around every mushroom patch.
   // Hidden it can't be targeted or hit. It pops up (0.4 s) when the hero comes within `reveal` tiles (its group-mates within
   // 3 tiles pop up 0.1-0.3 s later), then chases. Next to the hero it puffs spores (wind-up 0.3 s, every 1.5 s): a small hit + Poison.
   // Poison: 2% of the hero's max HP per second for 5 s and no health regen meanwhile; a new dose restarts the 5 s.
   // Dying, it bursts into a spore cloud (3 s) that poisons whoever stands in it. 8+ tiles from the hero it walks home and hides.
-  const SPORE = { name: 'Sporeling', exp: 2, reveal: 2, leash: 8, stepMs: 700, popMs: 400, windupMs: 300, attackMs: 1500, puffMult: 0.05,
+  const SPORE = { name: 'Sporeling', exp: 2, reveal: 2, pack: 3, cloudR: 0.8, leash: 8, stepMs: 1000 / 2.5, popMs: 400, windupMs: 300, attackMs: 1500, puffMult: 0.05,
                   poisonMs: 5000, poisonPct: 0.02, cloudMs: 3000, respawnMs: [60000, 90000], lootMs: 30000, fadeMs: 2000,
                   loot: { money: [2, 6], sporeSacChance: 0.5 } };
   // Overgrown Loader (forest mini-boss, one per 3 forest / deep forest zones): blocks 2 x 2 tiles (x..x+1, y-1..y, where x, y is
@@ -1554,8 +1554,8 @@
   // centre) pulses 0.55 s, then whoever's tile centre is inside takes the hit; stands still 1 s. Gives up when the hero is 12+
   // tiles from its home; while walking home it heals 100% of max HP per minute. Comes back 5 minutes after it dies.
   // Loot money: 40-80$ plus the zone's |x| + |y|.
-  const LOADER = { name: 'Overgrown Loader', size: 2, exp: 20, aggro: 4, leash: 12, stepMs: 1000, whipRange: 5, firstWhipMs: 800, whipEveryMs: 3000, whipWindupMs: 400,
-                   whipMs: 800, whipMult: 0.1, rootMs: 1600, slamWindupMs: 550, slamMs: 1000, slamEveryMs: 2200, slamMult: 0.3, slamR: 2.5, homeHealPerMin: 1,
+  const LOADER = { name: 'Overgrown Loader', size: 2, exp: 20, aggro: 4, leash: 12, stepMs: 1000 / 1.5, whipRange: 5, firstWhipMs: 800, whipEveryMs: 3000, whipWindupMs: 400,
+                   whipMs: 800, whipR: 0.5, whipMult: 0.1, rootMs: 1600, slamWindupMs: 550, slamMs: 1000, slamEveryMs: 2200, slamMult: 0.3, slamR: 2.5, homeHealPerMin: 1,
                    respawnMs: [300000, 300000], lootMs: 60000, fadeMs: 3000, loot: { money: [40, 80], zoneMoney: true, tar: [1, 3], coreChance: 0.08, aiChipChance: 0.25 } };
   // Pump Queen (the first boss, greaser 2:2): the living fuel that leaked out of the gas station's tank; every Drip is a drop of her.
   // Blocks 2 x 2 tiles like the Loader, sits on the gas station forecourt and wakes when the hero comes within `aggro` tiles of
@@ -1569,13 +1569,13 @@
   //   land: ×0.3 to the hero if he stands in one; Drips in one start burning.
   // Gives up when the hero is `leash`+ tiles from her home: walks home healing 100% of max HP per 30 s, back to stage 1 when full.
   // Her Drips give no exp or loot. Comes back 10 minutes after she dies.
-  const QUEEN = { name: 'Pump Queen', size: 2, aggro: 5, leash: 14, dmgLevel: 4, dmgScale: 0.8, stepMs: [1500, 1000], headY: 2.9,
+  const QUEEN = { name: 'Pump Queen', size: 2, aggro: 5, leash: 14, dmgLevel: 4, dmgScale: 0.8, stepMs: [1000, 1000 / 1.5], headY: 2.9,
                   slapWindupMs: 450, slapEveryMs: 1500, slapMult: [0.15, 0.18],
                   sprayEveryMs: 6000, sprayWarnMs: 600, sprayMs: 700, sprayRange: 4.5, sprayHalfAngle: 0.45, sprayMult: 0.05, sprayTicks: 3, slow: 0.4, slowMs: 3000,
                   summonEveryMs: [17000, 12000], summonN: [2, 1], summonMax: [4, 3], firstSummonMs: 7000, summonLevel: 2,
                   roarMs: 1500, absorbR: 8, absorbHeal: 0.05, stage2Armor: 0.9,
-                  igniteEveryMs: 15000, firstIgniteMs: 6000, igniteThrowMs: 600, igniteFuseMs: 1500, igniteMult: 0.3, flameMs: 1200, puddles: [4, 5],
-                  burnStepMs: 650, trailMs: 2000, fireMult: 0.06, homeHealPerMin: 2,
+                  igniteEveryMs: 15000, firstIgniteMs: 6000, igniteThrowMs: 600, igniteFuseMs: 1500, igniteMult: 0.3, flameMs: 1200, puddles: [4, 5], puddleR: 0.6,
+                  burnStepMs: 1000 / 2.5, trailMs: 2000, trailStep: 0.6, trailR: 0.4, fireMult: 0.06, homeHealPerMin: 2,
                   respawnMs: [600000, 600000], lootMs: 60000, fadeMs: 3000, exp: 60,
                   loot: { money: [80, 120], tar: [5, 10], queenRare: true, queenTarShare: 0.75 } };   // + one spell: Magic tar 75% / Magic Nozzle 25%
   // Scrap Crawler (industrial wasteland + pit): a small spider-like salvage bot, in packs of 3, hidden in scrap piles (can't be
@@ -1584,7 +1584,7 @@
   // in front of it for 0.5 s, then it leaps along it (0.25 s), stopping at walls, other enemies and right before the hero.
   // Whoever is on the line when it leaps takes ×0.12 and is slowed 20% for 2 s. Cooldown 3 s. Next to the hero it bites
   // (0.3 s wind-up, every 1.2 s, ×0.06). 10+ tiles from home it walks back and hides again. Loot: 3-7$, 5% AI chip.
-  const CRAWLER = { name: 'Scrap Crawler', reveal: 4, leash: 10, stepMs: 450, popMs: 500, windupMs: 500, leapMs: 250, pounceRange: [2, 3], pounceLen: 3,
+  const CRAWLER = { name: 'Scrap Crawler', reveal: 4, pack: 4, pounceW: 0.9, leash: 10, stepMs: 1000 / 3, popMs: 500, windupMs: 500, leapMs: 250, pounceRange: [2, 3], pounceLen: 3,
                     pounceMult: 0.12, pounceCdMs: 3000, slow: 0.2, slowMs: 2000, biteWindupMs: 300, biteEveryMs: 1200, biteMult: 0.06,
                     respawnMs: [60000, 90000], lootMs: 30000, fadeMs: 2000, loot: { money: [3, 7], aiChipChance: 0.05 } };
   const ENEMY = { drip: DRIP, scav: SCAV, drone: DRONE, spore: SPORE, loader: LOADER, queen: QUEEN, crawler: CRAWLER };
@@ -2493,6 +2493,7 @@
         row('talent timers', 'ReZero ready', () => { rezeroReadyAt = 0; rezeroUntil = 0; return 'ReZero Protocol can save you again.'; }),
         row('take damage', `-25% max HP`, () => { hurtHero(Math.ceil(CAPS.health * 0.25), '#e5484d'); return `Hit for 25% of max HP. Health ${stats.health}/${CAPS.health}.`; }),
         row('poison', 'poison me (5 s)', () => { poisonHero(); return 'Poisoned: 2% max HP per second, no regen.'; }),
+        row('hitboxes', showHitbox ? 'shown: hide' : 'hidden: show', () => { showHitbox = !showHitbox; return showHitbox ? 'Hitboxes shown: pink = hero oval (getting hit), cyan = feet (walking, ground attacks), yellow = enemy bodies, dashed orange = enemy ground circles.' : 'Hitboxes hidden.'; }),
         row('big bags', 'Courier Shell + Vault Pack', () => ['Courier Shell', 'Vault Pack'].map(n => { if (inventory.length >= invSlots()) return `No room for ${n}.`; inventory.push({ name: n, class: 'bag' }); return `Added ${n}.`; }).join(' ')),
         row('forest loot', '3 Spore Sacs, 1 Loader Core', () => [give('Spore Sac', 3), give('Loader Core', 1)].join(' ')),
         (() => {   // teleport next to the nearest Overgrown Loader's home (cycles through them)
@@ -2565,7 +2566,7 @@
       return all.filter(r => (CHEAT_TAB[r.left] || 'world') === tab);
     }
     const CHEAT_TAB = { money: 'hero', refill: 'hero', 'mana cap': 'hero', exp: 'hero', 'level up': 'hero', charisma: 'hero', strength: 'hero', 'take damage': 'hero', die: 'hero', 'rest cooldown': 'hero',
-      'deal types': 'items', 'promotion ready': 'items', 'Magic tar': 'items', 'Magic Nozzle': 'items', Tar: 'items', 'new items': 'items', 'Banana sword': 'items', 'baNano Sword': 'items', delivery: 'items', deliveries: 'items', poison: 'hero', 'forest loot': 'items', 'big bags': 'items' };
+      'deal types': 'items', 'promotion ready': 'items', 'Magic tar': 'items', 'Magic Nozzle': 'items', Tar: 'items', 'new items': 'items', 'Banana sword': 'items', 'baNano Sword': 'items', delivery: 'items', deliveries: 'items', poison: 'hero', hitboxes: 'hero', 'forest loot': 'items', 'big bags': 'items' };
     // MutaTech crafting: needs every item and the energy; the made item must fit in the inventory (after the costs are taken)
     const countOf = name => inventory.filter(it => it.name === name).reduce((t, it) => t + (it.count || 1), 0);
     function takeItems(name, n) {   // remove n of an item, from the last stacks first
@@ -2623,7 +2624,7 @@
       ['joystick', 'walk · in windows: choose'],
       ['A', 'attack · open · pick up · confirm'],
       ['1 2 3', 'cast your spells'],
-      ['tap the hero', 'hero stats and equipment'],
+      ['tap the hero', 'hero stats and equipment (not in combat)'],
       ['top buttons', 'bag, quests, top, map, menu'],
       ['hold an item / quest', 'throw away / cancel'],
       ['✕', 'close a window'],
@@ -2631,9 +2632,9 @@
     const CONTROLS = [
       ['W A S D / arrows', 'move (any keyboard layout)'],
       ['two keys, e.g. W+D', 'move diagonally'],
-      ['Space', 'open / select'],
-      ['Space (facing an enemy)', 'attack'],
-      ['Space (facing a beaten enemy)', 'loot'],
+      ['mouse', 'aim: the hero faces the cursor; attacks and spells go that way. The cursor changes over enemies (reticle), buildings (pointing hand) and loot (grab hand)'],
+      ['left click (hold)', 'attack toward the cursor (hold to keep swinging); on a building / loot / harvest pile next to you: open / loot / harvest (hold)'],
+      ['Space', 'open / select / loot / harvest what is next to you, otherwise attack'],
       ['Esc', 'back to the previous window / close'],
       ['Esc (nothing open)', 'menu'],
       ['H', 'hero (left)'],
@@ -2650,10 +2651,10 @@
       ['click (shop)', 'select an item, click again to buy'],
       ['W / S', 'choose in a window'],
       ['1 2 3', 'pick a row (window) / cast spell'],
-      ['Tab', 'next target (closest first)'],
+      ['Tab', 'next target (closest first); spells go to it instead of the cursor'],
       ['Q (or the quest icon)', 'active quests'],
       ['L (or the trophy)', 'leaderboard: Top Exp, Top Dealers, Top Slayers'],
-      ['click the hero', 'hero stats'],
+      ['click the hero', 'hero stats (not in combat: then it swings; H always works)'],
       ['A / D (TradeCorp)', 'switch tab: My Office, Deals, Boss'],
       ['Esc (target selected)', 'deselect target'],
       ['phone: joystick', 'move (in a window: choose)'],
@@ -2951,7 +2952,7 @@
       // enemy in reach: swing. Otherwise loot / open the faced building if there is one, else swing at the air.
       if (!meleeTargets().length && !moving) {
         if (lootable()) { playSfx('interact'); lootTarget = lootable(); openWindow('loot'); return; }
-        const w = wallAt(player.x + facing.x, player.y + facing.y);
+        const w = facedBuilding();
         if (w && w.opens) { playSfx('interact'); openWindow(w.opens); return; }
         const hv = harvestable(); if (hv) { startHarvest(hv); return; }   // a glowing pile here or in front: hold to harvest
       }
@@ -3183,10 +3184,10 @@
     // time per tile: Burning Drips are faster, the Pump Queen walks faster in stage 2
     const stepOf = d => d.leapAt != null && d.leapAt === d.stepStart ? CRAWLER.leapMs : d.burning ? QUEEN.burnStepMs : d.kind === 'queen' ? QUEEN.stepMs[(d.stage || 1) - 1] : ET(d).stepMs;
     // can't take a step right now: stuck in Magic Tar, or waiting out a slow (Magic Nozzle) after the last step
-    const foeHeld = d => gameTime < (d.stunUntil || 0) || gameTime < (d.slowHold || 0);
+    const foeHeld = d => gameTime < (d.stunUntil || 0);   // rooted by Magic tar (slows lower its speed instead)
     const foeHeadY = d => d.kind === 'loader' ? 2.4 : d.kind === 'queen' ? QUEEN.headY : 0.9;   // floating text height over its feet row, tiles
-    const occupies = (d, x, y) => x >= d.x && x < d.x + foeSize(d) && y <= d.y && y > d.y - foeSize(d);
-    const footDist = (d, x, y) => { const n = foeSize(d); return Math.max(Math.max(d.x - x, 0, x - (d.x + n - 1)), Math.max(d.y - n + 1 - y, 0, y - d.y)); };   // tiles from the footprint (diagonals count as 1)
+    const occupies = (d, x, y) => { const X = Math.round(d.x), Y = Math.round(d.y); return x >= X && x < X + foeSize(d) && y <= Y && y > Y - foeSize(d); };   // the tiles under it (positions are continuous)
+    const footDist = (d, x, y) => { const n = foeSize(d), X = Math.round(d.x), Y = Math.round(d.y); return Math.max(Math.max(X - x, 0, x - (X + n - 1)), Math.max(Y - n + 1 - y, 0, y - Y)); };   // tiles from the footprint (diagonals count as 1)
     const foeCentre = (q, d) => foeSize(d) === 2 ? { x: q.x + 1, y: q.y } : { x: q.x + 0.5, y: q.y + 0.5 };   // body centre from its (drawn) anchor tile
     const foeR = d => foeSize(d) === 2 ? 0.95 : MELEE.bodyR;   // body radius, tiles
     const dripAt = (x, y) => drips.find(d => !d.dead && occupies(d, x, y)) || null;
@@ -3273,6 +3274,172 @@
                hidden: kind === 'spore' || kind === 'crawler', popStart: -1e9, act: null, nextWhip: 0, stage: 1 };
     }
 
+    // ---- free enemy movement (1 tile = 1 m) ----
+    // d.x, d.y are continuous now (same anchor as before: a small enemy's box is x..x+1, y..y+1; a big one's x..x+2, y-1..y+1).
+    // Everyone walks at its old step speed as m/s, the same in every direction (slows still apply, Magic tar still roots).
+    // Ground enemies plan a route on the grid around walls and buildings (A*, re-planned every FOE_REPATH_MS) and steer
+    // straight at the furthest point of it they can see, sliding along walls. Ground circles (FOE_BOX.gr) are solid: enemies
+    // keep apart and stop at the hero's feet; the Loader and the Pump Queen shove the hero aside instead. Drones fly straight
+    // over everything (only other drones are in their way). Distances (aggro, leash, reveal…) are metres between the enemy's
+    // ground circle and the hero's feet circle.
+    const FOE_REPATH_MS = 600;
+    let lastFoeT = 0;
+    const foeGr = d => (FOE_BOX[d.kind || 'drip'] || FOE_BOX.drip).gr;
+    const foeGC = (d, x = d.x, y = d.y) => foeSize(d) === 2 ? { x: x + 1, y } : { x: x + 0.5, y: y + 0.5 };   // ground circle centre
+    const heroFeet = () => ({ x: hpos.x + 0.5, y: hpos.y + 0.5 });
+    const heroGoal = d => foeSize(d) === 2 ? { x: hpos.x - 0.5, y: hpos.y + 0.5 } : { x: hpos.x, y: hpos.y };   // its anchor with its feet on his
+    const feetGap = d => { const c = foeGC(d), f = heroFeet(); return Math.max(0, Math.hypot(c.x - f.x, c.y - f.y) - foeGr(d) - HERO_MOVE.r); };
+    const feetNear = (cx, cy, r) => { const f = heroFeet(); return Math.hypot(f.x - cx, f.y - cy) < r + HERO_MOVE.r; };   // his feet touch that ground circle
+    const homeDist = (d, x, y) => { const h = foeGC(d, d.home.x, d.home.y); return Math.hypot(x - h.x, y - h.y); };
+    const isFlyer = d => d.kind === 'drone';
+    const foeSolidTile = (x, y) => !free(x, y) || !!exitAt(x, y);
+    const foeStepMs = d => d.burning ? QUEEN.burnStepMs : d.kind === 'queen' ? QUEEN.stepMs[(d.stage || 1) - 1] : ET(d).stepMs;
+    const foeSpeed = d => 1000 / foeStepMs(d) * (gameTime < (d.slowUntil || 0) ? 1 - (d.slowAmt || 0.4) : 1);   // m/s
+    function circleHitsTiles(cx, cy, r, solid = foeSolidTile) {
+      for (let ty = Math.floor(cy - r); ty <= Math.floor(cy + r); ty++) for (let tx = Math.floor(cx - r); tx <= Math.floor(cx + r); tx++) {
+        if (!solid(tx, ty)) continue;
+        const nx = Math.max(tx, Math.min(cx, tx + 1)), ny = Math.max(ty, Math.min(cy, ty + 1));
+        if ((cx - nx) ** 2 + (cy - ny) ** 2 < r * r - 1e-9) return true;
+      }
+      return false;
+    }
+    function foeOverlapsNow(d) {   // enemies (and 'hero') its ground circle already overlaps: it may move away from them
+      const s = new Set(), c = foeGC(d), r = foeGr(d), fly = isFlyer(d);
+      for (const o of drips) { if (o === d || o.dead || isFlyer(o) !== fly) continue; const oc = foeGC(o), rr = r + foeGr(o); if ((c.x - oc.x) ** 2 + (c.y - oc.y) ** 2 < rr * rr) s.add(o); }
+      const f = heroFeet(), rr = r + HERO_MOVE.r; if ((c.x - f.x) ** 2 + (c.y - f.y) ** 2 < rr * rr) s.add('hero');
+      return s;
+    }
+    function foeHitsAt(d, x, y, ignore) {   // would its ground circle at anchor (x, y) hit something?
+      const c = foeGC(d, x, y), r = foeGr(d), fly = isFlyer(d);
+      if (fly) { if (c.x < 0.6 || c.y < 0.6 || c.x > COLS - 0.6 || c.y > ROWS - 0.6) return true; }
+      else if (circleHitsTiles(c.x, c.y, r - 0.02)) return true;
+      for (const o of drips) {
+        if (o === d || o.dead || isFlyer(o) !== fly || ignore.has(o)) continue;
+        const oc = foeGC(o), rr = r + foeGr(o);
+        if ((c.x - oc.x) ** 2 + (c.y - oc.y) ** 2 < rr * rr) return true;
+      }
+      if (!fly && foeSize(d) === 1 && stats.health > 0 && !ignore.has('hero')) { const f = heroFeet(), rr = r + HERO_MOVE.r; if ((c.x - f.x) ** 2 + (c.y - f.y) ** 2 < rr * rr) return true; }
+      return false;
+    }
+    function shoveHero(d) {   // a big enemy walked into the hero: push him out of its ground circle (false: a wall holds him)
+      if (stats.health <= 0) return true;
+      const c = foeGC(d), f = heroFeet(), r = foeGr(d) + HERO_MOVE.r, dx = f.x - c.x, dy = f.y - c.y, dist = Math.hypot(dx, dy);
+      if (dist >= r) return true;
+      const ux = dist > 1e-3 ? dx / dist : 0, uy = dist > 1e-3 ? dy / dist : 1, push = r - dist + 0.01;
+      const nx = hpos.x + ux * push, ny = hpos.y + uy * push;
+      if (circleHitsTiles(nx + 0.5, ny + 0.5, HERO_MOVE.r)) return false;   // walls, buildings and exits stop him
+      hpos.x = nx; hpos.y = ny; return true;
+    }
+    function foeMoveBy(d, mx, my, anim = true) {   // move, sliding along whatever is in the way; returns metres moved
+      const len = Math.hypot(mx, my); if (len < 1e-6) return 0;
+      const ign = foeOverlapsNow(d), n = Math.max(1, Math.ceil(len / 0.1)), big = foeSize(d) === 2 && !isFlyer(d);
+      let moved = 0;
+      for (let i = 0; i < n; i++) for (const [sx, sy] of [[mx / n, 0], [0, my / n]]) {
+        if (!sx && !sy) continue;
+        let k = 1; while (k > 0.1 && foeHitsAt(d, d.x + sx * k, d.y + sy * k, ign)) k /= 2;
+        if (k <= 0.1) continue;
+        const ox = d.x, oy = d.y; d.x += sx * k; d.y += sy * k;
+        if (big && !shoveHero(d)) { d.x = ox; d.y = oy; continue; }   // the hero is pinned against a wall: it stops
+        moved += Math.abs(sx * k) + Math.abs(sy * k);
+      }
+      if (moved > 0 && anim) { d.walkDist = (d.walkDist || 0) + moved; d.movedAt = gameTime; if (Math.abs(mx) > Math.abs(my) * 0.3) d.lookX = mx > 0 ? 1 : -1; }
+      return moved;
+    }
+    function foeWalkable(d, x, y) {
+      if (foeSize(d) === 1) return !foeSolidTile(x, y);
+      return !foeSolidTile(x, y) && !foeSolidTile(x + 1, y) && !foeSolidTile(x, y - 1) && !foeSolidTile(x + 1, y - 1);
+    }
+    function foePath(d, gx, gy) {   // A* on the grid: anchors from its tile toward (gx, gy) (or the closest reachable spot)
+      const W = COLS, N = COLS * ROWS, sx = Math.round(d.x), sy = Math.round(d.y), tx = Math.round(gx), ty = Math.round(gy), s0 = sy * W + sx;
+      const g = new Float32Array(N).fill(Infinity), from = new Int32Array(N).fill(-1), closed = new Uint8Array(N), heap = [];
+      const h = (x, y) => { const ax = Math.abs(x - tx), ay = Math.abs(y - ty); return Math.max(ax, ay) + 0.414 * Math.min(ax, ay); };
+      const push = (f, i) => { heap.push([f, i]); let k = heap.length - 1; while (k) { const p = (k - 1) >> 1; if (heap[p][0] <= heap[k][0]) break; [heap[p], heap[k]] = [heap[k], heap[p]]; k = p; } };
+      const pop = () => { const top = heap[0], last = heap.pop(); if (heap.length) { heap[0] = last; let k = 0; for (;;) { const l = 2 * k + 1, r = l + 1; let m = k; if (l < heap.length && heap[l][0] < heap[m][0]) m = l; if (r < heap.length && heap[r][0] < heap[m][0]) m = r; if (m === k) break; [heap[m], heap[k]] = [heap[k], heap[m]]; k = m; } } return top; };
+      if (sx < 0 || sy < 0 || sx >= W || sy >= ROWS) return [];
+      g[s0] = 0; push(h(sx, sy), s0); let best = s0, bestH = h(sx, sy), iter = 0;
+      while (heap.length && iter++ < 4000) {
+        const [, i] = pop(); if (closed[i]) continue; closed[i] = 1;
+        const x = i % W, y = (i / W) | 0, hh = h(x, y);
+        if (hh < bestH) { bestH = hh; best = i; }
+        if (x === tx && y === ty) { best = i; break; }
+        for (let dy = -1; dy <= 1; dy++) for (let dx = -1; dx <= 1; dx++) {
+          if (!dx && !dy) continue;
+          const nx = x + dx, ny = y + dy; if (nx < 0 || ny < 0 || nx >= W || ny >= ROWS || !foeWalkable(d, nx, ny)) continue;
+          if (dx && dy && (!foeWalkable(d, x + dx, y) || !foeWalkable(d, x, y + dy))) continue;   // no squeezing past corners
+          const j = ny * W + nx, ng = g[i] + (dx && dy ? 1.414 : 1);
+          if (ng < g[j]) { g[j] = ng; from[j] = i; push(ng + h(nx, ny), j); }
+        }
+      }
+      const out = []; for (let i = best; i !== -1 && i !== s0; i = from[i]) out.push([i % W, (i / W) | 0]);
+      return out.reverse();
+    }
+    function foeClear(d, tx, ty) {   // can its ground circle slide straight to anchor (tx, ty) without touching walls?
+      if (isFlyer(d)) return true;
+      const r = foeGr(d) - 0.03, a = foeGC(d), b = foeGC(d, tx, ty), L = Math.hypot(b.x - a.x, b.y - a.y), n = Math.ceil(L / 0.2);
+      for (let i = 1; i <= n; i++) { const k = i / n; if (circleHitsTiles(a.x + (b.x - a.x) * k, a.y + (b.y - a.y) * k, r)) return false; }
+      return true;
+    }
+    function foeSeek(d, gx, gy, dt, speed = foeSpeed(d)) {   // walk toward anchor (gx, gy) for dt seconds; returns metres moved
+      let tx = gx, ty = gy;
+      const sc = d.steer, fresh = sc && gameTime - sc.at < 150 && Math.hypot(sc.gx - gx, sc.gy - gy) < 0.5;   // the way is re-checked ~7 times a second
+      if (fresh && sc.direct) { tx = gx; ty = gy; }
+      else if (fresh && Math.hypot(sc.tx - d.x, sc.ty - d.y) > 0.2) { tx = sc.tx; ty = sc.ty; }
+      else if (foeClear(d, gx, gy)) d.steer = { at: gameTime, gx, gy, direct: true };
+      else {   // something in the way: follow the planned route, cutting to the furthest point it can see
+        const key = Math.round(gx) + ',' + Math.round(gy);
+        if (!d.path || d.path.key !== key || gameTime - d.path.at > FOE_REPATH_MS) d.path = { key, at: gameTime, nodes: foePath(d, gx, gy) };
+        const nodes = d.path.nodes;
+        while (nodes.length && Math.hypot(nodes[0][0] - d.x, nodes[0][1] - d.y) < 0.2) nodes.shift();
+        if (nodes.length) {
+          let pick = nodes[0];
+          for (let i = Math.min(nodes.length, 6) - 1; i > 0; i--) if (foeClear(d, nodes[i][0], nodes[i][1])) { pick = nodes[i]; break; }
+          tx = pick[0]; ty = pick[1];
+        }
+        d.steer = { at: gameTime, gx, gy, direct: false, tx, ty };
+      }
+      const dx = tx - d.x, dy = ty - d.y, L = Math.hypot(dx, dy); if (L < 0.01) return 0;
+      const step = Math.min(L, speed * dt);
+      return foeMoveBy(d, dx / L * step, dy / L * step);
+    }
+    function flyTo(d, gx, gy, dt, speed = foeSpeed(d)) {   // drones: straight over everything
+      const dx = gx - d.x, dy = gy - d.y, L = Math.hypot(dx, dy); if (L < 0.02) return 0;
+      const s = Math.min(L, speed * dt); return foeMoveBy(d, dx / L * s, dy / L * s);
+    }
+    function goHome(d, dt) {   // walks (or flies) home; true once it's there (or it's been stuck for 3 s: home is where it stands)
+      if (Math.hypot(d.x - d.home.x, d.y - d.home.y) < 0.08) { d.homeStuck = 0; return true; }
+      const m = isFlyer(d) ? flyTo(d, d.home.x, d.home.y, dt) : foeSeek(d, d.home.x, d.home.y, dt);
+      if (m > 0.001) d.homeStuck = 0; else if (!d.homeStuck) d.homeStuck = gameTime; else if (gameTime - d.homeStuck > 3000) { d.homeStuck = 0; d.home = { x: d.x, y: d.y }; return true; }
+      return false;
+    }
+    function patrolMove(d, dt) {   // idle: back and forth along its home row (Drip / Scav: home ± 1 m; drone: its a / b line)
+      const p = d.patrol; if (!p || foeHeld(d)) return;
+      const fly = isFlyer(d), flip = () => { p.target = fly ? (p.target === p.a ? p.b : p.a) : 2 * p.home - p.target; };
+      if (Math.abs(d.x - p.target) < 0.03) flip();
+      const want = p.target - d.x, step = Math.sign(want) * Math.min(Math.abs(want), foeSpeed(d) * dt);
+      const fixY = Math.max(-foeSpeed(d) * dt, Math.min(foeSpeed(d) * dt, d.home.y - d.y));   // drifts back onto its row after a push
+      if (!foeMoveBy(d, step, fixY) && step) flip();
+    }
+    function faceHero(d) { const c = foeGC(d), f = heroFeet(); if (Math.abs(f.x - c.x) > 0.1) d.lookX = f.x > c.x ? 1 : -1; }
+    function updateKnock(d) {   // knockback is a real push now: slides it away over outMs, walls stop it
+      const kb = d.kb; if (!kb) return;
+      if (d.dead) { d.kb = null; return; }
+      const p = Math.min(1, (gameTime - kb.at) / KNOCKBACK.outMs), want = kb.dist * (1 - (1 - p) ** 2), step = want - kb.done;
+      if (step > 0) { const look = d.lookX; foeMoveBy(d, kb.dx * step, kb.dy * step, false); d.lookX = look; }
+      kb.done = want; if (p >= 1) d.kb = null;
+    }
+    function separateFoes() {   // circles that ended up overlapping (crowds, leaps, pushes) ease apart; big and hidden ones hold their ground
+      for (let i = 0; i < drips.length; i++) for (let j = i + 1; j < drips.length; j++) {
+        const a = drips[i], b = drips[j];
+        if (a.dead || b.dead || isFlyer(a) !== isFlyer(b) || a.leap || b.leap) continue;
+        const ca = foeGC(a), cb = foeGC(b), rr = foeGr(a) + foeGr(b), dx = cb.x - ca.x, dy = cb.y - ca.y, L = Math.hypot(dx, dy);
+        if (L >= rr) continue;
+        const ux = L > 1e-3 ? dx / L : 1, uy = L > 1e-3 ? dy / L : 0, push = Math.min(0.06, (rr - L) / 2);
+        const fa = a.hidden || foeSize(a) === 2, fb = b.hidden || foeSize(b) === 2;
+        if (!fb) nudgeFoe(b, ux * push * (fa ? 2 : 1), uy * push * (fa ? 2 : 1));
+        if (!fa) nudgeFoe(a, -ux * push * (fb ? 2 : 1), -uy * push * (fb ? 2 : 1));
+      }
+    }
+    function nudgeFoe(d, dx, dy) { const c = foeGC(d, d.x + dx, d.y + dy); if (isFlyer(d) || !circleHitsTiles(c.x, c.y, foeGr(d) - 0.02)) { d.x += dx; d.y += dy; } }
     function updateDrips() {
       // world-wide timers: loot expiry, fade-out and respawn run in every zone (cheap: a few timestamps)
       for (const id in zoneDrips) zoneDrips[id].forEach((d, i, list) => {
@@ -3290,17 +3457,19 @@
         const keep = zoneDrips[id].filter(d => !(d.summoned && d.dead && gameTime >= d.deadAt + SUMMON_FADE_MS));
         zoneDrips[id].length = 0; zoneDrips[id].push(...keep);   // same array (drips points at it)
       }
+      const dt = Math.min(0.05, Math.max(0, (gameTime - (lastFoeT || gameTime)) / 1000)); lastFoeT = gameTime;
       for (const d of drips.slice()) {   // only the hero's zone is simulated
-        drip = d; const before = d.stepStart;
-        updateDrip();
-        if (d.stepStart !== before && !d.dead) {   // took a step this frame
-          if (gameTime < (d.slowUntil || 0)) d.slowHold = d.stepStart + stepOf(d) / (1 - (d.slowAmt || 0.4));   // slowed: the next step waits longer
-          if (d.burning) fireTiles.push({ zone: areaName, x: d.fromX, y: d.fromY, at: gameTime, until: gameTime + QUEEN.trailMs });   // burning trail
+        drip = d;
+        updateKnock(d);
+        updateDrip(dt);
+        if (!d.dead && d.burning && (d.walkDist || 0) - (d.trailAt || 0) >= QUEEN.trailStep) {   // burning trail: a fire patch every trailStep m
+          d.trailAt = d.walkDist; fireTiles.push({ zone: areaName, x: d.x, y: d.y, at: gameTime, until: gameTime + QUEEN.trailMs });
         }
       }
+      separateFoes();
     }
     const SUMMON_FADE_MS = 2500;   // a beaten summoned Drip lies 1.5 s, then fades out over 1 s
-    function updateDrip() {
+    function updateDrip(dt = 0) {
       if (!drip) return;
       const t = gameTime;
       if (drip.dead) return;
@@ -3310,74 +3479,60 @@
         if (drip.dead) return;
         if (--drip.dot.left <= 0) drip.dot = null; else drip.dot.next += sp.tickMs;
       }
-      if (drip.kind === 'scav') { updateScav(); return; }
-      if (drip.kind === 'drone') { updateDrone(); return; }
-      if (drip.kind === 'spore') { updateSpore(); return; }
-      if (drip.kind === 'crawler') { updateCrawler(); return; }
-      if (drip.kind === 'loader') { updateLoader(); return; }
-      if (drip.kind === 'queen') { updateQueen(); return; }
-      const dist = cheb(player.x, player.y, drip.x, drip.y);
-      if (!drip.aggro && dist <= DRIP.aggro) { drip.aggro = true; drip.manaT = t; }
-      if (!drip.aggro) { patrolStep(drip); return; }
-      // locked on: mana comes back (+1 per 4 s); full mana → cast Magic Tar at the hero when he's in range
-      if (drip.mana >= DRIP.mana) drip.manaT = t;
-      while (drip.mana < DRIP.mana && t - drip.manaT >= DRIP.manaRegenMs) { drip.mana++; drip.manaT += DRIP.manaRegenMs; }
+      if (drip.kind === 'scav') { updateScav(dt); return; }
+      if (drip.kind === 'drone') { updateDrone(dt); return; }
+      if (drip.kind === 'spore') { updateSpore(dt); return; }
+      if (drip.kind === 'crawler') { updateCrawler(dt); return; }
+      if (drip.kind === 'loader') { updateLoader(dt); return; }
+      if (drip.kind === 'queen') { updateQueen(dt); return; }
+      const d = drip;
+      if (!d.aggro && feetGap(d) <= DRIP.aggro && stats.health > 0) { d.aggro = true; d.manaT = t; }
+      if (!d.aggro) { patrolMove(d, dt); return; }
+      // locked on: mana comes back (+1 per 4 s); full mana → a short cast, then Magic Tar at where the hero stood
+      if (d.mana >= DRIP.mana) d.manaT = t;
+      while (d.mana < DRIP.mana && t - d.manaT >= DRIP.manaRegenMs) { d.mana++; d.manaT += DRIP.manaRegenMs; }
+      faceHero(d);
       const sp = SPELLS[DRIP.spell];
-      if (drip.mana >= sp.mana && Math.hypot(player.x - drip.x, player.y - drip.y) <= sp.range - 0.5 && stats.health > 0) {
-        drip.mana -= sp.mana; drip.manaT = t;
-        const d = dripPos(), sx = d.x + 0.5, sy = d.y + 0.5, dx = player.x + 0.5 - sx, dy = player.y + 0.5 - sy, len = Math.hypot(dx, dy) || 1;
-        projectiles.push({ x: sx, y: sy, dx: dx / len, dy: dy / len, flown: 0, spell: sp, t, enemy: true, lvl: npcLevel() });
-        drip.attackStart = t;   // casting pose
-        float('Magic Tar!', '#ff2bd6', drip.x + 0.5, drip.y - 1.3);
-      }
-      if (player.x !== drip.x) drip.lookX = player.x > drip.x ? 1 : -1;
-      if (drip.hitAt && t >= drip.hitAt) { drip.hitAt = 0; dripStrikes(); }
-      if (t - drip.stepStart < stepOf(drip)) return;             // still gliding to the next tile
-      const stuck = foeHeld(drip);                               // magic tar: can still swing, can't walk
-      if (dist === 1) {                                         // next to the hero: attack once per second
-        if (t >= drip.nextAttack && !drip.hitAt) { drip.attackStart = t; drip.hitAt = t + DRIP.windupMs; drip.nextAttack = t + DRIP.attackMs; }
+      if (d.cast) {   // casting: stands still, then the blob flies at the spot locked when he started
+        if (t < d.cast.at) return;
+        const c = d.cast; d.cast = null;
+        projectiles.push({ x: c.x, y: c.y, dx: c.dx, dy: c.dy, flown: 0, spell: sp, t, enemy: true, lvl: npcLevel() });
         return;
       }
-      if (stuck || drip.hitAt || t - drip.attackStart < 700) return;   // stuck, or letting the swing finish
-      // step to the neighbouring tile that gets closest to the hero (no corner cutting, not onto the hero or an exit)
-      let best = null;
-      for (let dy = -1; dy <= 1; dy++) for (let dx = -1; dx <= 1; dx++) {
-        const nx = drip.x + dx, ny = drip.y + dy;
-        if ((!dx && !dy) || !free(nx, ny) || exitAt(nx, ny) || takenByDrip(nx, ny, drip) || (nx === player.x && ny === player.y)) continue;
-        if (dx && dy && (!free(drip.x + dx, drip.y) || !free(drip.x, drip.y + dy))) continue;
-        const score = cheb(nx, ny, player.x, player.y) * 100 + Math.hypot(nx - player.x, ny - player.y);
-        if (!best || score < best.score) best = { nx, ny, score };
+      if (!d.hitAt && d.mana >= sp.mana && stats.health > 0) {
+        const B = foeBody(d), o = ovalC(), dx = o.x - B.x, dy = o.y - B.y, L = Math.hypot(dx, dy) || 1;
+        if (L <= sp.range - 0.5) {
+          d.mana -= sp.mana; d.manaT = t;
+          d.cast = { at: t + DRIP.castMs, x: B.x, y: B.y, dx: dx / L, dy: dy / L };
+          d.attackStart = t;   // casting pose
+          float('Magic Tar!', '#ff2bd6', d.x + 0.5, d.y - 1.3);
+          return;
+        }
       }
-      if (!best || cheb(best.nx, best.ny, player.x, player.y) >= dist) return;
-      drip.fromX = drip.x; drip.fromY = drip.y; drip.x = best.nx; drip.y = best.ny; drip.stepStart = t;
+      if (d.hitAt && t >= d.hitAt) { d.hitAt = 0; dripStrikes(); }
+      const reach = meleeReaches(d);
+      if (reach && t >= d.nextAttack && !d.hitAt) { d.attackStart = t; d.hitAt = t + DRIP.windupMs; d.nextAttack = t + DRIP.attackMs; }
+      if (reach || foeHeld(d) || d.hitAt || t - d.attackStart < 700) return;   // swinging, stuck in tar, or letting the swing finish
+      const g = heroGoal(d); foeSeek(d, g.x, g.y, dt);
     }
 
     // patrol (enemy hasn't spotted the hero): walks 1 tile per step (stepMs) toward his patrol target on his home row;
     // on reaching it the target flips to the other side of home (home ± 1), so he paces 2 tiles back and forth.
     // A blocked tile (wall, exit, another enemy, the hero) turns him around.
-    function patrolStep(d) {
-      const p = d.patrol, t = gameTime;
-      if (!p || t - d.stepStart < stepOf(d) || foeHeld(d)) return;
-      if (d.x === p.target) p.target = 2 * p.home - p.target;
-      const dir = Math.sign(p.target - d.x);
-      if (!dir) return;
-      const nx = d.x + dir, ny = d.y;
-      if (!free(nx, ny) || exitAt(nx, ny) || takenByDrip(nx, ny, d) || (nx === player.x && ny === player.y)) { p.target = 2 * p.home - p.target; return; }
-      d.fromX = d.x; d.fromY = d.y; d.x = nx; d.stepStart = t; d.lookX = dir;
-    }
+    function patrolStep(d) { patrolMove(d, 0.016); }   // (old name)
 
     // Toxic Scav: keeps his distance and sprays a cone of toxic mist (see SCAV)
-    const inSpray = (d, s) => {   // is the hero inside this spray's cone?
-      const dx = player.x - d.x, dy = player.y - d.y, len = Math.hypot(dx, dy);
+    const inSpray = (d, s) => ovalPts().some(p => {   // is any part of the hero's oval inside this spray's cone?
+      const dx = p.x - (d.x + 0.5), dy = p.y - (d.y + 0.5), len = Math.hypot(dx, dy);
       if (len > SCAV.sprayRange) return false;
       if (len < 0.9) return true;   // point blank
       let da = Math.atan2(dy, dx) - s.angle; da = Math.atan2(Math.sin(da), Math.cos(da));
       return Math.abs(da) <= SCAV.sprayHalfAngle;
-    };
-    function updateScav() {
-      const S = SCAV, t = gameTime, d = drip, reach = Math.hypot(player.x - d.x, player.y - d.y);
-      if (!d.aggro && cheb(player.x, player.y, d.x, d.y) <= S.aggro) { d.aggro = true; d.nextSpray = t + 800; }
-      if (!d.aggro) { patrolStep(d); return; }
+    });
+    function updateScav(dt) {
+      const S = SCAV, t = gameTime, d = drip, c = foeGC(d), f = heroFeet(), far = Math.hypot(f.x - c.x, f.y - c.y);
+      if (!d.aggro && feetGap(d) <= S.aggro && stats.health > 0) { d.aggro = true; d.nextSpray = t + 800; }
+      if (!d.aggro) { patrolMove(d, dt); return; }
       if (d.spray) {   // aiming / spraying: stands still, damage ticks while the hero is in the cone
         const s = d.spray;
         if (t >= s.end) d.spray = null;
@@ -3392,27 +3547,23 @@
           return;
         }
       }
-      if (player.x !== d.x) d.lookX = player.x > d.x ? 1 : -1;
-      if (t >= d.nextSpray && reach <= S.sprayRange + 0.4 && stats.health > 0 && t - d.stepStart >= S.stepMs) {   // start a spray at where the hero stands now
-        const angle = Math.atan2(player.y - d.y, player.x - d.x);
-        d.spray = { angle, start: t, sprayAt: t + S.aimMs, end: t + S.aimMs + S.sprayMs, tick: 0 };
+      faceHero(d);
+      if (t >= d.nextSpray && far <= S.sprayRange - 0.2 && stats.health > 0) {   // aim at where the hero is now (locked), once he's well inside the range
+        const o = ovalC();
+        d.spray = { angle: Math.atan2(o.y - c.y, o.x - c.x), start: t, sprayAt: t + S.aimMs, end: t + S.aimMs + S.sprayMs, tick: 0 };
         d.attackStart = t; d.nextSpray = t + S.sprayEveryMs;
         return;
       }
-      if (t - d.stepStart < S.stepMs || foeHeld(d)) return;   // gliding, or stuck in magic tar
-      // step to keep about `keep` tiles from the hero (closer when too far, back off when too close)
-      const off = (x, y) => Math.abs(Math.hypot(player.x - x, player.y - y) - S.keep);
-      let best = { nx: d.x, ny: d.y, score: off(d.x, d.y) - 0.3 };   // only move when it clearly helps
-      for (let dy = -1; dy <= 1; dy++) for (let dx = -1; dx <= 1; dx++) {
-        const nx = d.x + dx, ny = d.y + dy;
-        if ((!dx && !dy) || !free(nx, ny) || exitAt(nx, ny) || takenByDrip(nx, ny, d) || (nx === player.x && ny === player.y)) continue;
-        if (nx < 1 || ny < 1 || nx > COLS - 2 || ny > ROWS - 2) continue;   // stays off the 1-tile map border
-        if (dx && dy && (!free(d.x + dx, d.y) || !free(d.x, d.y + dy))) continue;
-        const score = off(nx, ny);
-        if (score < best.score) best = { nx, ny, score };
-      }
-      if (best.nx === d.x && best.ny === d.y) return;
-      d.fromX = d.x; d.fromY = d.y; d.x = best.nx; d.y = best.ny; d.stepStart = t;
+      if (foeHeld(d)) return;
+      if (far > S.keep + 1.5) { const g = heroGoal(d); foeSeek(d, g.x, g.y, dt); return; }   // far: walk the route in
+      // near: keep about `keep` m (back off / close in) and slowly circle around him; the circling flips every 2-4 s or when blocked
+      if (!d.strafeUntil || t >= d.strafeUntil) { d.strafe = Math.random() < 0.5 ? -1 : 1; d.strafeUntil = t + 2000 + Math.random() * 2000; }
+      const ux = (c.x - f.x) / (far || 1), uy = (c.y - f.y) / (far || 1);   // away from him
+      const radial = far < S.keep - 0.3 ? 1 : far > S.keep + 0.3 ? -1 : 0;
+      const vx = ux * radial - uy * d.strafe * S.strafe, vy = uy * radial + ux * d.strafe * S.strafe, L = Math.hypot(vx, vy) || 1;
+      const want = foeSpeed(d) * (radial ? 1 : S.circleSpeed * S.stepMs / 1000) * dt, moved = foeMoveBy(d, vx / L * want, vy / L * want);
+      if (want > 0 && moved < want * 0.3) d.strafe = -d.strafe;
+      faceHero(d);   // keeps his eyes on the hero while backing off
     }
 
     // one step (8 directions, no corner cutting) that brings a ground enemy closer to a tile; big enemies need their whole
@@ -3442,96 +3593,88 @@
     }
 
     // ---- Sporeling (see SPORE) ----
-    function revealSpore(d) {   // it and its hidden group-mates within 3 tiles pop up (the others a moment later)
-      const t = gameTime;
-      for (const o of drips) if (o.kind === 'spore' && !o.dead && o.hidden && cheb(o.x, o.y, d.x, d.y) <= 3) {
+    function revealSpore(d) {   // it and its hidden group-mates within 3 m pop up (the others a moment later)
+      const t = gameTime, c = foeGC(d);
+      for (const o of drips) if (o.kind === 'spore' && !o.dead && o.hidden && Math.hypot(foeGC(o).x - c.x, foeGC(o).y - c.y) <= SPORE.pack) {
         o.hidden = false; o.aggro = true; o.returning = false; o.popStart = t + (o === d ? 0 : 100 + Math.random() * 200);
-        o.nextAttack = o.popStart + SPORE.popMs; if (player.x !== o.x) o.lookX = player.x > o.x ? 1 : -1;
+        o.nextAttack = o.popStart + SPORE.popMs; faceHero(o);
       }
     }
-    function updateSpore() {
-      const S = SPORE, d = drip, t = gameTime, dist = cheb(player.x, player.y, d.x, d.y);
-      if (d.hidden) { if (dist <= S.reveal && stats.health > 0) revealSpore(d); return; }
+    function updateSpore(dt) {
+      const S = SPORE, d = drip, t = gameTime, gap = feetGap(d);
+      if (d.hidden) { if (gap <= S.reveal && stats.health > 0) revealSpore(d); return; }
       if (t - d.popStart < S.popMs) return;   // popping up
-      if (d.returning) {   // walks home, then hides again
-        if (t - d.stepStart < S.stepMs) return;
-        const home = (x, y) => cheb(x, y, d.home.x, d.home.y);
-        if ((d.x === d.home.x && d.y === d.home.y) || !groundStep(d, d.home.x, d.home.y, home)) { d.returning = false; d.hidden = true; d.aggro = false; if (target === d) target = null; }
-        return;
-      }
-      if (dist > S.leash || stats.health <= 0) { d.returning = true; d.aggro = false; d.hitAt = 0; return; }
-      if (player.x !== d.x) d.lookX = player.x > d.x ? 1 : -1;
-      if (d.hitAt && t >= d.hitAt) {   // the puff: a small hit + Poison if the hero is still next to it
+      if (d.returning) { if (goHome(d, dt)) { d.returning = false; d.hidden = true; d.aggro = false; if (target === d) target = null; } return; }   // walks home, then hides again
+      if (gap > S.leash || stats.health <= 0) { d.returning = true; d.aggro = false; d.hitAt = 0; return; }
+      faceHero(d);
+      if (d.hitAt && t >= d.hitAt) {   // the puff: a small hit + Poison if the hero is still in reach
         d.hitAt = 0;
-        if (cheb(player.x, player.y, d.x, d.y) <= 1 && stats.health > 0) { hurtHero(npcDamage(S.puffMult), '#b58cff'); if (stats.health > 0) poisonHero(); }
+        if (meleeReaches(d) && stats.health > 0) { hurtHero(npcDamage(S.puffMult), '#b58cff'); if (stats.health > 0) poisonHero(); }
       }
-      if (d.hitAt || t - d.attackStart < 700 || t - d.stepStart < S.stepMs) return;
-      if (dist === 1) { if (t >= d.nextAttack) { d.attackStart = t; d.hitAt = t + S.windupMs; d.nextAttack = t + S.attackMs; } return; }
+      if (d.hitAt || t - d.attackStart < 700) return;
+      if (meleeReaches(d)) { if (t >= d.nextAttack) { d.attackStart = t; d.hitAt = t + S.windupMs; d.nextAttack = t + S.attackMs; } return; }
       if (foeHeld(d)) return;
-      groundStep(d, player.x, player.y);
+      const g = heroGoal(d); foeSeek(d, g.x, g.y, dt);
     }
     // ---- Scrap Crawler (see CRAWLER) ----
-    function revealCrawler(d) {   // it and its hidden pack-mates within 4 tiles burst out of their scrap piles
-      const t = gameTime;
-      for (const o of drips) if (o.kind === 'crawler' && !o.dead && o.hidden && cheb(o.x, o.y, d.x, d.y) <= 4) {
+    function revealCrawler(d) {   // it and its hidden pack-mates within 4 m burst out of their scrap piles
+      const t = gameTime, c = foeGC(d);
+      for (const o of drips) if (o.kind === 'crawler' && !o.dead && o.hidden && Math.hypot(foeGC(o).x - c.x, foeGC(o).y - c.y) <= CRAWLER.pack) {
         o.hidden = false; o.aggro = true; o.returning = false; o.act = null; o.popStart = t + (o === d ? 0 : 80 + Math.random() * 220);
-        o.nextAttack = o.popStart + CRAWLER.popMs; o.nextPounce = o.popStart + CRAWLER.popMs + 300; if (player.x !== o.x) o.lookX = player.x > o.x ? 1 : -1;
+        o.nextAttack = o.popStart + CRAWLER.popMs; o.nextPounce = o.popStart + CRAWLER.popMs + 300; faceHero(o);
       }
     }
-    function pounceLine(d, dx, dy) {   // up to pounceLen tiles in front of it, stopping before walls and other enemies
-      const out = [];
-      for (let i = 1; i <= CRAWLER.pounceLen; i++) {
-        const x = d.x + dx * i, y = d.y + dy * i;
-        if (!free(x, y) || exitAt(x, y) || takenByDrip(x, y, d)) break;
-        if (dx && dy && (!free(x - dx, y) || !free(x, y - dy))) break;   // no corner cutting
-        out.push([x, y]);
-      }
-      return out;
+    function pounceLine(d, ux, uy) {   // how far (m, up to pounceLen) its body can leap along (ux, uy) before a wall
+      const c = foeGC(d), r = foeGr(d) - 0.03; let len = 0;
+      for (let s = 0.1; s <= CRAWLER.pounceLen + 1e-6; s += 0.1) { if (circleHitsTiles(c.x + ux * s, c.y + uy * s, r)) break; len = s; }
+      return len;
     }
-    function updateCrawler() {
-      const C = CRAWLER, d = drip, t = gameTime, dist = cheb(player.x, player.y, d.x, d.y);
-      if (d.hidden) { if (dist <= C.reveal && stats.health > 0) revealCrawler(d); return; }
+    function updateCrawler(dt) {
+      const C = CRAWLER, d = drip, t = gameTime, gap = feetGap(d);
+      if (d.hidden) { if (gap <= C.reveal && stats.health > 0) revealCrawler(d); return; }
       if (t - d.popStart < C.popMs) return;   // bursting out
+      if (d.leap) {   // flying along the strip (over the others), stopping at the hero's feet or a wall
+        const L = d.leap, p = Math.min(1, (t - L.start) / C.leapMs), s = L.len * p, nx = L.sx + L.dx * s, ny = L.sy + L.dy * s, g = foeGC(d, nx, ny), f = heroFeet();
+        const stop = Math.hypot(g.x - f.x, g.y - f.y) < foeGr(d) + HERO_MOVE.r || circleHitsTiles(g.x, g.y, foeGr(d) - 0.03);
+        if (!stop) { d.x = nx; d.y = ny; }
+        if (stop || p >= 1) { d.leap = null; d.landAt = t; }
+        return;
+      }
       const a = d.act;
       if (a && a.kind === 'pounce') {   // holding the telegraph, then the leap
         if (t < a.hitAt) return;
         d.act = null; d.nextPounce = t + C.pounceCdMs;
-        const hit = stats.health > 0 && a.tiles.some(([x, y]) => x === player.x && y === player.y);
-        let land = null;
-        for (const [x, y] of a.tiles) { if ((x === player.x && y === player.y) || takenByDrip(x, y, d)) break; land = [x, y]; }
-        if (land) { d.fromX = d.x; d.fromY = d.y; d.x = land[0]; d.y = land[1]; d.stepStart = d.leapAt = t; }
-        d.landAt = t + C.leapMs;
+        const f = heroFeet(), along = (f.x - a.sx) * a.dx + (f.y - a.sy) * a.dy, side = Math.abs((f.x - a.sx) * a.dy - (f.y - a.sy) * a.dx);
+        const hit = stats.health > 0 && along >= -HERO_MOVE.r && along <= a.len + foeGr(d) + HERO_MOVE.r && side <= C.pounceW / 2 + HERO_MOVE.r;   // ground attack: his feet touch the strip
+        d.leap = { sx: d.x, sy: d.y, dx: a.dx, dy: a.dy, len: a.len, start: t }; d.leapAt = d.stepStart = t;
         if (hit) {
           hurtHero(npcDamage(C.pounceMult), '#e5484d');
           if (stats.health > 0) { slowAmt = t < slowUntil ? Math.max(slowAmt, C.slow) : C.slow; slowUntil = Math.max(slowUntil, t + C.slowMs); }
         }
         return;
       }
-      if (t - d.stepStart < (d.leapAt === d.stepStart ? C.leapMs + 200 : 0)) return;   // just landed
-      if (d.returning) {   // walks home, then buries itself again
-        if (t - d.stepStart < C.stepMs) return;
-        const home = (x, y) => cheb(x, y, d.home.x, d.home.y);
-        if ((d.x === d.home.x && d.y === d.home.y) || !groundStep(d, d.home.x, d.home.y, home)) { d.returning = false; d.hidden = true; d.aggro = false; if (target === d) target = null; }
-        return;
-      }
-      if (cheb(d.x, d.y, d.home.x, d.home.y) >= C.leash || stats.health <= 0) { d.returning = true; d.aggro = false; d.hitAt = 0; return; }
-      if (player.x !== d.x) d.lookX = player.x > d.x ? 1 : -1;
-      if (d.hitAt && t >= d.hitAt) {   // the bite lands if the hero is still next to it
+      if (d.landAt && t - d.landAt < 200) return;   // just landed
+      if (d.returning) { if (goHome(d, dt)) { d.returning = false; d.hidden = true; d.aggro = false; if (target === d) target = null; } return; }   // walks home, then buries itself again
+      const c = foeGC(d);
+      if (homeDist(d, c.x, c.y) >= C.leash || stats.health <= 0) { d.returning = true; d.aggro = false; d.hitAt = 0; return; }
+      faceHero(d);
+      if (d.hitAt && t >= d.hitAt) {   // the bite lands if the hero is still in reach
         d.hitAt = 0;
-        if (cheb(player.x, player.y, d.x, d.y) <= 1 && stats.health > 0) hurtHero(npcDamage(C.biteMult), '#e5484d');
+        if (meleeReaches(d) && stats.health > 0) hurtHero(npcDamage(C.biteMult), '#e5484d');
       }
       if (d.hitAt || t - d.attackStart < 500) return;
-      if (dist === 1) { if (t >= d.nextAttack) { d.attackStart = t; d.hitAt = t + C.biteWindupMs; d.nextAttack = t + C.biteEveryMs; } return; }
-      const dx = player.x - d.x, dy = player.y - d.y;
-      if (dist >= C.pounceRange[0] && dist <= C.pounceRange[1] && t >= (d.nextPounce || 0) && !foeHeld(d) && (!dx || !dy || Math.abs(dx) === Math.abs(dy))) {
-        const tiles = pounceLine(d, Math.sign(dx), Math.sign(dy));
-        if (tiles.length >= dist) {   // a clear line all the way to the hero
-          d.act = { kind: 'pounce', start: t, hitAt: t + C.windupMs, tiles, dir: [Math.sign(dx), Math.sign(dy)] };
+      const reach = meleeReaches(d);
+      if (reach) { if (t >= d.nextAttack) { d.attackStart = t; d.hitAt = t + C.biteWindupMs; d.nextAttack = t + C.biteEveryMs; } return; }
+      const f = heroFeet(), far = Math.hypot(f.x - c.x, f.y - c.y);
+      if (far >= C.pounceRange[0] && far <= C.pounceRange[1] + 0.2 && t >= (d.nextPounce || 0) && !foeHeld(d)) {   // pounce at any angle (aim locked now)
+        const ux = (f.x - c.x) / far, uy = (f.y - c.y) / far, len = pounceLine(d, ux, uy);
+        if (len >= far - foeGr(d) - HERO_MOVE.r - 0.2) {   // a clear strip all the way to him
+          d.act = { kind: 'pounce', start: t, hitAt: t + C.windupMs, sx: c.x, sy: c.y, dx: ux, dy: uy, len };
           d.attackStart = -1e9; return;
         }
       }
-      if (t - d.stepStart < C.stepMs || foeHeld(d)) return;
-      groundStep(d, player.x, player.y);
+      if (foeHeld(d)) return;
+      const g = heroGoal(d); foeSeek(d, g.x, g.y, dt);
     }
     // Poison on the hero (Sporelings): ticks every second while it lasts, stops health regen
     let poisonUntil = 0, poisonNext = 0;
@@ -3548,20 +3691,20 @@
       for (let i = sporeClouds.length - 1; i >= 0; i--) {   // spore clouds left by dead Sporelings: standing in one poisons
         const c = sporeClouds[i];
         if (gameTime >= c.until) { sporeClouds.splice(i, 1); continue; }
-        if (c.zone === areaName && c.x === player.x && c.y === player.y && stats.health > 0 && gameTime - c.at > 150) poisonHero();
+        if (c.zone === areaName && feetNear(c.x + 0.5, c.y + 0.5, SPORE.cloudR) && stats.health > 0 && gameTime - c.at > 150) poisonHero();
       }
     }
     const sporeClouds = [];   // { zone, x, y, at, until } (game time)
 
     // ---- Overgrown Loader (see LOADER) ----
-    function updateLoader() {
-      const L = LOADER, d = drip, t = gameTime, fd = footDist(d, player.x, player.y);
-      const inSlam = () => Math.hypot(player.x + 0.5 - (d.x + 1), player.y + 0.5 - d.y) <= L.slamR;   // hero's tile centre inside the slam circle
+    function updateLoader(dt) {
+      const L = LOADER, d = drip, t = gameTime, c = foeGC(d), gap = feetGap(d);
+      const inSlam = () => feetNear(c.x, c.y, L.slamR);   // ground attack: the slam circle touches his feet
       if (d.act) {   // a whip or slam in progress: stands still
         const a = d.act;
         if (!a.done && t >= a.hitAt) {
           a.done = true;
-          if (a.kind === 'whip' && player.x === a.tx && player.y === a.ty && stats.health > 0) {   // still on the lashed tile
+          if (a.kind === 'whip' && feetNear(a.tx + 0.5, a.ty + 0.5, L.whipR) && stats.health > 0) {   // his feet still touch the marked circle
             hurtHero(npcDamage(L.whipMult), '#3fbf3f');
             if (stats.health > 0) { rootedUntil = Math.max(rootedUntil, t + L.rootMs); rootTotal = L.rootMs; rootVine = true; float('rooted!', '#3fbf3f', player.x + 0.5, player.y - 1.1); }
           }
@@ -3573,54 +3716,57 @@
       if (d.returning) {   // back home at walking speed, healing 100% of max HP per minute on the way, then waits there
         d.healBuf = (d.healBuf || 0) + (t - (d.healT || t)) * d.maxHp * L.homeHealPerMin / 60000; d.healT = t;
         const n = Math.floor(d.healBuf); if (n) { d.healBuf -= n; d.hp = Math.min(d.maxHp, d.hp + n); }
-        if (t - d.stepStart < L.stepMs) return;
-        const home = (x, y) => cheb(x, y, d.home.x, d.home.y);
-        if ((d.x === d.home.x && d.y === d.home.y) || !groundStep(d, d.home.x, d.home.y, home)) d.returning = false;
+        if (goHome(d, dt)) d.returning = false;
         return;
       }
       d.healT = 0;   // not walking home: no fast healing
-      if (!d.aggro) { if (fd > L.aggro || stats.health <= 0) return; d.aggro = true; d.nextWhip = t + L.firstWhipMs; }
-      if (cheb(player.x, player.y, d.home.x, d.home.y) > L.leash || stats.health <= 0) { d.aggro = false; d.returning = true; return; }
-      if (player.x + 0.5 !== d.x + 1) d.lookX = player.x + 0.5 > d.x + 1 ? 1 : -1;
-      if (t - d.stepStart < L.stepMs) return;
-      if (fd <= 1) {   // next to it: ground slam
+      if (!d.aggro) { if (gap > L.aggro || stats.health <= 0) return; d.aggro = true; d.nextWhip = t + L.firstWhipMs; }
+      const f = heroFeet();
+      if (homeDist(d, f.x, f.y) > L.leash || stats.health <= 0) { d.aggro = false; d.returning = true; return; }
+      faceHero(d);
+      if (meleeReaches(d)) {   // in reach: ground slam
         if (t >= d.nextAttack) { d.act = { kind: 'slam', start: t, hitAt: t + L.slamWindupMs, end: t + L.slamMs }; d.attackStart = t; d.nextAttack = t + L.slamEveryMs; }
         return;
       }
-      if (t >= d.nextWhip && fd <= L.whipRange && stats.health > 0) {   // vine whip at the tile the hero stands on now
-        d.act = { kind: 'whip', start: t, hitAt: t + L.whipWindupMs, end: t + L.whipMs, tx: player.x, ty: player.y }; d.attackStart = t; d.nextWhip = t + L.whipEveryMs;
+      if (t >= d.nextWhip && gap <= L.whipRange && stats.health > 0) {   // vine whip: marks the spot under his feet now
+        d.act = { kind: 'whip', start: t, hitAt: t + L.whipWindupMs, end: t + L.whipMs, tx: hpos.x, ty: hpos.y }; d.attackStart = t; d.nextWhip = t + L.whipEveryMs;
         return;
       }
       if (foeHeld(d)) return;
-      groundStep(d, player.x, player.y);
+      const g = heroGoal(d); foeSeek(d, g.x, g.y, dt);
     }
 
     // ---- Pump Queen (see QUEEN) ----
     // her own attacks hit like a level QUEEN.dmgLevel enemy: hero's max HP at that level × mult × level factor (vs the hero)
     const bossDamage = mult => Math.round(heroHealthCap(10, QUEEN.dmgLevel) * mult * QUEEN.dmgScale * levelDmgFactor(QUEEN.dmgLevel - hero.level));   // dmgScale: all of it 20% smaller
     const queenCentre = d => ({ x: d.x + 1, y: d.y });   // middle of her 2 x 2 footprint, tile units
-    function inQueenSpray(d, a) {   // the hero's tile centre inside her Fuel Spray cone?
-      const c = queenCentre(d), dx = player.x + 0.5 - c.x, dy = player.y + 0.5 - c.y, len = Math.hypot(dx, dy);
-      if (len > QUEEN.sprayRange) return false;
-      if (len < 1.4) return true;   // right next to her
-      let da = Math.atan2(dy, dx) - a.angle; da = Math.atan2(Math.sin(da), Math.cos(da));
-      return Math.abs(da) <= QUEEN.sprayHalfAngle;
+    function inQueenSpray(d, a) {   // any part of the hero's oval inside her Fuel Spray cone?
+      const c = queenCentre(d);
+      return ovalPts().some(p => {
+        const dx = p.x - c.x, dy = p.y - c.y, len = Math.hypot(dx, dy);
+        if (len > QUEEN.sprayRange) return false;
+        if (len < 1.4) return true;   // right next to her
+        let da = Math.atan2(dy, dx) - a.angle; da = Math.atan2(Math.sin(da), Math.cos(da));
+        return Math.abs(da) <= QUEEN.sprayHalfAngle;
+      });
     }
-    function queenSummon(d, n, burning) {   // pumps Drips out next to her footprint (up to the stage's limit of hers alive)
+    function queenSummon(d, n, burning) {   // pumps Drips out 0.5-1.5 m from her body, on the hero's side (up to the stage's limit of hers alive)
       const t = gameTime, mine = drips.filter(o => o.summoned && !o.dead && o.queen === d).length;
       n = Math.min(n, QUEEN.summonMax[d.stage - 1] - mine);
       if (n <= 0) return;
-      const spots = [];
-      for (let y = d.y - 2; y <= d.y + 1; y++) for (let x = d.x - 1; x <= d.x + 2; x++) {
-        if (occupies(d, x, y) || !free(x, y) || exitAt(x, y) || takenByDrip(x, y, null) || (x === player.x && y === player.y) || behindTall(areaName, x, y)) continue;
-        spots.push([x, y, Math.random()]);
+      const c = foeGC(d), f = heroFeet(), toward = Math.atan2(f.y - c.y, f.x - c.x), gr = FOE_BOX.drip.gr, spots = [];
+      for (let k = 0; k < 80 && spots.length < n; k++) {
+        const ang = toward + (Math.random() - 0.5) * Math.PI * (k < 40 ? 1 : 2), dist = foeGr(d) + gr + 0.5 + Math.random();
+        const gx = c.x + Math.cos(ang) * dist, gy = c.y + Math.sin(ang) * dist;
+        if (circleHitsTiles(gx, gy, gr) || feetNear(gx, gy, gr) || behindTall(areaName, Math.floor(gx), Math.floor(gy))) continue;
+        if (drips.some(o => !o.dead && !isFlyer(o) && Math.hypot(foeGC(o).x - gx, foeGC(o).y - gy) < foeGr(o) + gr) || spots.some(([sx, sy]) => Math.hypot(sx + 0.5 - gx, sy + 0.5 - gy) < 2 * gr)) continue;
+        spots.push([gx - 0.5, gy - 0.5]);
       }
-      spots.sort((a, b) => a[2] - b[2]);
       let made = 0;
-      for (const [x, y] of spots.slice(0, n)) {
-        const m = makeDrip({ x: x + 1, y: y + 1 }, areaName, 'drip');
+      for (const [x, y] of spots) {
+        const m = makeDrip({ x: Math.round(x) + 1, y: Math.round(y) + 1 }, areaName, 'drip');
         const lv = QUEEN.summonLevel, hp = Math.max(1, Math.round(heroHealthCap(10, lv) * DRIP.hpMult));   // her Drips' level (2: 12 HP)
-        Object.assign(m, { level: lv, hp, maxHp: hp, summoned: true, queen: d, burning: !!burning, aggro: true, mana: 1, manaT: t, nextAttack: t + 600, popAt: t });
+        Object.assign(m, { x, y, home: { x, y }, level: lv, hp, maxHp: hp, summoned: true, queen: d, burning: !!burning, aggro: true, mana: 1, manaT: t, nextAttack: t + 600, popAt: t });
         drips.push(m); made++;
         queenFx.push({ kind: 'absorb', zone: areaName, x: d.x + 1, y: d.y - 0.6, tx: x + 0.5, ty: y + 0.6, at: t, end: t + 350 });   // a squirt of oil to where it lands
       }
@@ -3633,9 +3779,9 @@
       float('IGNITION!', '#ff9a2e', d.x + 1, d.y - QUEEN.headY - 0.5);
     }
     function queenAbsorb(d) {
-      const t = gameTime; let n = 0;
+      const t = gameTime, c = foeGC(d); let n = 0;
       for (const o of drips) {
-        if (o === d || o.dead || o.kind !== 'drip' || footDist(d, o.x, o.y) > QUEEN.absorbR) continue;
+        if (o === d || o.dead || o.kind !== 'drip' || Math.hypot(foeGC(o).x - c.x, foeGC(o).y - c.y) - foeGr(d) > QUEEN.absorbR) continue;
         Object.assign(o, { dead: true, deadAt: t, loot: null, absorbed: true, hitAt: 0, dot: null, respawnAt: t + rand(DRIP.respawnMs[0], DRIP.respawnMs[1]) });
         queenFx.push({ kind: 'absorb', zone: areaName, x: o.x + 0.5, y: o.y + 0.6, tx: d.x + 1, ty: d.y - 0.6, at: t, end: t + 600 });
         if (target === o) target = null;
@@ -3645,23 +3791,23 @@
       if (heal) { d.hp = Math.min(d.maxHp, d.hp + heal); float(`absorbed ${n}: +${heal} HP`, '#3ddc84', d.x + 1, d.y - QUEEN.headY - 0.9); }
       d.stage = 2; d.burstAt = t; d.nextIgnite = t + QUEEN.firstIgniteMs; d.nextSummon = t + 5000; d.nextAttack = t + 800;
     }
-    function queenPuddles(d) {   // Pump & Ignite: oil puddles, one always under the hero
-      const t = gameTime, n = rand(QUEEN.puddles[0], QUEEN.puddles[1]), got = [[player.x, player.y]];
+    function queenPuddles(d) {   // Pump & Ignite: oil puddles (puddleR circles), one right under the hero, the rest within 3 m of him
+      const t = gameTime, n = rand(QUEEN.puddles[0], QUEEN.puddles[1]), got = [[hpos.x, hpos.y]], qc = foeGC(d), R = QUEEN.puddleR;
       for (let k = 0; k < 200 && got.length < n; k++) {
-        const x = player.x - 4 + Math.floor(Math.random() * 9), y = player.y - 3 + Math.floor(Math.random() * 7);
-        if (!free(x, y) || exitAt(x, y) || occupies(d, x, y) || got.some(([gx, gy]) => cheb(gx, gy, x, y) < 2)) continue;
+        const ang = Math.random() * Math.PI * 2, r = 1.3 + Math.random() * 1.7, x = hpos.x + Math.cos(ang) * r, y = hpos.y + Math.sin(ang) * r;
+        if (circleHitsTiles(x + 0.5, y + 0.5, R * 0.5) || Math.hypot(x + 0.5 - qc.x, y + 0.5 - qc.y) < foeGr(d) + R || got.some(([gx, gy]) => Math.hypot(gx - x, gy - y) < 2 * R + 0.2)) continue;
         got.push([x, y]);
       }
       got.forEach(([x, y], i) => queenFx.push({ kind: 'puddle', zone: areaName, x, y, land: t + 80 * i, fire: t + QUEEN.igniteFuseMs, end: t + QUEEN.igniteFuseMs + QUEEN.flameMs, lit: false }));
       float('oil!', '#ff9a2e', player.x + 0.5, player.y - 1.2);
     }
-    function updateQueen() {
-      const Q = QUEEN, d = drip, t = gameTime, fd = footDist(d, player.x, player.y), st = d.stage || 1;
+    function updateQueen(dt) {
+      const Q = QUEEN, d = drip, t = gameTime, gap = feetGap(d), st = d.stage || 1;
       if (d.act) {   // an attack in progress: stands still
         const a = d.act;
         if (!a.done && t >= a.hitAt) {
           a.done = true;
-          if (a.kind === 'slap' && footDist(d, player.x, player.y) <= 1 && stats.health > 0) hurtHero(bossDamage(Q.slapMult[st - 1]), '#ff9a2e');
+          if (a.kind === 'slap' && meleeReaches(d) && stats.health > 0) hurtHero(bossDamage(Q.slapMult[st - 1]), '#ff9a2e');
           if (a.kind === 'spray' && stats.health > 0 && inQueenSpray(d, a)) {   // soaked: slowed 40% for 3 s + 3 ticks of damage
             slowAmt = t < slowUntil ? Math.max(slowAmt, Q.slow) : Q.slow; slowUntil = Math.max(slowUntil, t + Q.slowMs);
             heroDot = { boss: true, mult: Q.sprayMult, color: '#ff9a2e', left: Q.sprayTicks, next: t + 1000, spell: { tickMs: 1000 } };
@@ -3676,35 +3822,32 @@
       if (d.returning) {   // walks home healing 100% of max HP per 30 s; full again at home: back to the pump (stage 1)
         d.healBuf = (d.healBuf || 0) + (t - (d.healT || t)) * d.maxHp * Q.homeHealPerMin / 60000; d.healT = t;
         const n = Math.floor(d.healBuf); if (n) { d.healBuf -= n; d.hp = Math.min(d.maxHp, d.hp + n); }
-        if (d.hp >= d.maxHp && d.stage === 2 && d.x === d.home.x && d.y === d.home.y) { d.stage = 1; d.woke = false; }
-        if (t - d.stepStart < stepOf(d)) return;
-        const home = (x, y) => cheb(x, y, d.home.x, d.home.y);
-        if ((d.x === d.home.x && d.y === d.home.y) || !groundStep(d, d.home.x, d.home.y, home)) { if (d.hp >= d.maxHp) { d.returning = false; d.stage = 1; d.woke = false; } }
+        if (goHome(d, dt) && d.hp >= d.maxHp) { d.returning = false; d.stage = 1; d.woke = false; }
         return;
       }
       d.healT = 0;
-      if (!d.aggro) { if (fd > Q.aggro || stats.health <= 0) return; d.aggro = true; }
+      if (!d.aggro) { if (gap > Q.aggro || stats.health <= 0) return; d.aggro = true; }
       if (!d.woke) {   // wakes up: the pump display flickers on
         d.woke = true; d.nextSpray = t + 2500; d.nextSummon = t + Q.firstSummonMs; d.nextAttack = t + 500; d.nextIgnite = t + Q.firstIgniteMs;
         float('PUMP QUEEN', '#ff9a2e', d.x + 1, d.y - Q.headY - 0.6);
       }
-      if (cheb(player.x, player.y, d.home.x, d.home.y) > Q.leash || stats.health <= 0) { d.aggro = false; d.returning = true; return; }
-      if (player.x + 0.5 !== d.x + 1) d.lookX = player.x + 0.5 > d.x + 1 ? 1 : -1;
+      const f = heroFeet();
+      if (homeDist(d, f.x, f.y) > Q.leash || stats.health <= 0) { d.aggro = false; d.returning = true; return; }
+      faceHero(d);
       if (t >= d.nextSummon) { queenSummon(d, Q.summonN[st - 1], st === 2); d.nextSummon = t + Q.summonEveryMs[st - 1]; }
-      if (t - d.stepStart < stepOf(d)) return;   // gliding to the next tile
-      const spray = () => { const c = queenCentre(d); d.act = { kind: 'spray', start: t, hitAt: t + Q.sprayWarnMs, end: t + Q.sprayWarnMs + Q.sprayMs, angle: Math.atan2(player.y + 0.5 - c.y, player.x + 0.5 - c.x) }; d.attackStart = t; d.nextSpray = t + Q.sprayEveryMs; };
-      if (st === 2 && t >= d.nextIgnite && fd <= 8 && stats.health > 0) {   // Pump & Ignite
+      const spray = () => { const c = queenCentre(d), o = ovalC(); d.act = { kind: 'spray', start: t, hitAt: t + Q.sprayWarnMs, end: t + Q.sprayWarnMs + Q.sprayMs, angle: Math.atan2(o.y - c.y, o.x - c.x) }; d.attackStart = t; d.nextSpray = t + Q.sprayEveryMs; };
+      if (st === 2 && t >= d.nextIgnite && gap <= 8 && stats.health > 0) {   // Pump & Ignite
         d.act = { kind: 'ignite', start: t, hitAt: t + 300, end: t + Q.igniteThrowMs }; d.attackStart = t; d.nextIgnite = t + Q.igniteEveryMs;
         return;
       }
-      if (fd <= 1) {   // next to her: Hose Slap (stage 1 still sprays when it's due and the slap isn't)
+      if (meleeReaches(d)) {   // in reach: Hose Slap (stage 1 still sprays when it's due and the slap isn't)
         if (t >= d.nextAttack) { d.act = { kind: 'slap', start: t, hitAt: t + Q.slapWindupMs, end: t + Q.slapWindupMs + 300 }; d.attackStart = t; d.nextAttack = t + Q.slapEveryMs; }
         else if (st === 1 && t >= d.nextSpray) spray();
         return;
       }
-      if (st === 1 && t >= d.nextSpray && fd <= 4 && stats.health > 0) { spray(); return; }
+      if (st === 1 && t >= d.nextSpray && gap <= 4 && stats.health > 0) { spray(); return; }
       if (foeHeld(d)) return;
-      groundStep(d, player.x, player.y);
+      const g = heroGoal(d); foeSeek(d, g.x, g.y, dt);
     }
     // puddles catching fire, burning trails: the hero takes the blast once, then fire burns once per second while he stands in it
     function updateQueenFx() {
@@ -3716,13 +3859,13 @@
         if (f.kind !== 'puddle' || f.lit || t < f.fire) continue;
         f.lit = true;
         if (f.zone !== areaName) continue;
-        if (player.x === f.x && player.y === f.y && stats.health > 0) blast = true;
-        for (const o of drips) if (!o.dead && o.kind === 'drip' && !o.burning && o.x === f.x && o.y === f.y) { o.burning = true; float('burning!', '#ff9a2e', o.x + 0.5, o.y - 1.3); }
+        if (feetNear(f.x + 0.5, f.y + 0.5, QUEEN.puddleR) && stats.health > 0) blast = true;
+        for (const o of drips) if (!o.dead && o.kind === 'drip' && !o.burning && Math.hypot(foeGC(o).x - f.x - 0.5, foeGC(o).y - f.y - 0.5) < QUEEN.puddleR + foeGr(o)) { o.burning = true; float('burning!', '#ff9a2e', o.x + 0.5, o.y - 1.3); }
       }
       if (blast) { hurtHero(bossDamage(QUEEN.igniteMult), '#ff6a00'); heroFireNext = t + 1000; float('IGNITED!', '#ff6a00', player.x + 0.5, player.y - 1.3); if (stats.health <= 0) return; }
       for (let i = fireTiles.length - 1; i >= 0; i--) if (t >= fireTiles[i].until) fireTiles.splice(i, 1);
-      const onFire = fireTiles.some(f => f.zone === areaName && f.x === player.x && f.y === player.y && t - f.at > 150)
-        || queenFx.some(f => f.kind === 'puddle' && f.lit && f.zone === areaName && f.x === player.x && f.y === player.y);
+      const onFire = fireTiles.some(f => f.zone === areaName && feetNear(f.x + 0.5, f.y + 0.5, QUEEN.trailR) && t - f.at > 150)
+        || queenFx.some(f => f.kind === 'puddle' && f.lit && f.zone === areaName && feetNear(f.x + 0.5, f.y + 0.5, QUEEN.puddleR));
       if (onFire && t >= heroFireNext && stats.health > 0) { heroFireNext = t + 1000; hurtHero(bossDamage(QUEEN.fireMult), '#ff6a00'); }
     }
 
@@ -3730,90 +3873,71 @@
     const cloaked = d => (d.kind === 'drone' && d.cloakUntil > gameTime) || ((d.kind === 'spore' || d.kind === 'crawler') && d.hidden);   // can't be targeted or hit
     const droneLow = d => d.kind !== 'drone' || gameTime < d.lowUntil;   // melee can only reach a drone right after its ram
     const droneFree = (x, y, d) => inGrid(x, y) && !exitAt(x, y) && !takenByDrip(x, y, d) && !(x === player.x && y === player.y);
-    function droneStep(d, tx, ty) {   // one step (8 directions, over walls and water) toward a tile; false if nothing gets closer
-      let best = null;
-      for (let dy = -1; dy <= 1; dy++) for (let dx = -1; dx <= 1; dx++) {
-        const nx = d.x + dx, ny = d.y + dy;
-        if ((!dx && !dy) || !droneFree(nx, ny, d)) continue;
-        const score = Math.hypot(nx - tx, ny - ty);
-        if (!best || score < best.score) best = { nx, ny, score };
-      }
-      if (!best || best.score >= Math.hypot(d.x - tx, d.y - ty) - 1e-9) return false;
-      d.fromX = d.x; d.fromY = d.y; d.x = best.nx; d.y = best.ny; d.stepStart = gameTime;
-      if (d.x !== d.fromX) d.lookX = d.x > d.fromX ? 1 : -1;
-      return true;
-    }
-    function dronePatrol(d) {
-      const p = d.patrol, t = gameTime;
-      if (t - d.stepStart < DRONE.stepMs || foeHeld(d)) return;
-      if (d.x === p.target) p.target = p.target === p.a ? p.b : p.a;
-      const dir = Math.sign(p.target - d.x);
-      if (!dir) return;
-      if (!droneFree(d.x + dir, d.y, d)) { p.target = p.target === p.a ? p.b : p.a; return; }
-      d.fromX = d.x; d.fromY = d.y; d.x += dir; d.stepStart = t; d.lookX = dir;
-    }
-    function updateDrone() {
-      const D = DRONE, d = drip, t = gameTime, dist = cheb(player.x, player.y, d.x, d.y);
-      if (d.cloakUntil) {   // cloaked: flies off 3 tiles and repairs +3 per second for 3 s
+    function droneStep(d, tx, ty) { return flyTo(d, tx, ty, 0.016) > 0; }   // (old name)
+    function dronePatrol(d) { patrolMove(d, 0.016); }   // (old name)
+    function updateDrone(dt) {
+      const D = DRONE, d = drip, t = gameTime, gap = feetGap(d);
+      if (d.cloakUntil) {   // cloaked: flies off 3 m and repairs +10% per second for 3 s
         while (d.repairNext && t >= d.repairNext && d.repairNext <= d.cloakUntil && d.repairTicks > 0) {   // 30% of max HP over 3 ticks
           const add = Math.ceil(d.repairLeft / d.repairTicks); d.repairLeft -= add; d.repairTicks--;
           d.hp = Math.min(d.maxHp, d.hp + add); d.repairNext += 1000;
         }
         if (t >= d.cloakUntil) { d.cloakUntil = 0; d.repairNext = 0; d.flee = null; d.aggro = true; }
-        else {
-          if (d.flee && t - d.stepStart >= D.stepMs && (!droneStep(d, d.flee.x, d.flee.y) || (d.x === d.flee.x && d.y === d.flee.y))) d.flee = null;
-          return;
-        }
+        else { if (d.flee && flyTo(d, d.flee.x, d.flee.y, dt) === 0) d.flee = null; return; }
       }
-      if (d.aggro && Math.hypot(player.x - d.x, player.y - d.y) >= D.leash) { d.aggro = false; d.returning = true; d.hitAt = 0; }   // gives up
-      if (!d.aggro && dist <= D.aggro && stats.health > 0) { d.aggro = true; d.returning = false; }
+      if (d.dash) {   // the ram: a straight dash at the locked spot; hits once if its body touches the hero's oval on the way
+        const s = d.dash, p = Math.min(1, (t - s.start) / D.dashMs), want = D.dashLen * p;
+        d.x = Math.max(0.1, Math.min(COLS - 1.1, s.sx + s.dx * want)); d.y = Math.max(0.1, Math.min(ROWS - 1.1, s.sy + s.dy * want));
+        if (!s.hit && stats.health > 0 && ellEllDist(heroOval(), foeBody(d), 0) <= 0) {
+          s.hit = true;
+          hurtHero(npcDamage(D.ramMult), '#00e5ff');   // 15% of a same-level hero's max HP
+          if (stats.health > 0 && Math.random() < D.slowChance) {
+            slowAmt = t < slowUntil ? Math.max(slowAmt, D.slow) : D.slow; slowUntil = Math.max(slowUntil, t + D.slowMs);   // refreshes, doesn't stack
+            float('slowed!', '#4ea1ff', player.x + 0.5, player.y - 1.1);
+          }
+        }
+        if (p >= 1) { d.dash = null; d.lowUntil = t + D.lowMs; }
+        return;
+      }
+      const c = foeGC(d), f = heroFeet();
+      if (d.aggro && Math.hypot(f.x - c.x, f.y - c.y) >= D.leash) { d.aggro = false; d.returning = true; d.hitAt = 0; }   // gives up
+      if (!d.aggro && gap <= D.aggro && stats.health > 0) { d.aggro = true; d.returning = false; }
       if (d.returning) {   // back to its spawn spot, then patrols again
-        if (t - d.stepStart < D.stepMs || foeHeld(d)) return;
-        if ((d.x === d.home.x && d.y === d.home.y) || !droneStep(d, d.home.x, d.home.y)) {
-          d.returning = false; d.patrol.a = Math.max(1, Math.min(COLS - 2, d.x + 2 * (d.patrol.a > d.patrol.b ? 1 : -1)));
-          d.patrol.b = Math.max(1, Math.min(COLS - 2, d.x - (d.patrol.a > d.x ? 1 : -1))); d.patrol.target = d.patrol.a;
+        if (foeHeld(d)) return;
+        if (goHome(d, dt)) {
+          d.returning = false; const dir = d.patrol.a > d.patrol.b ? 1 : -1, clampX = x => Math.max(1, Math.min(COLS - 2, x));
+          d.patrol.a = clampX(d.x + 2 * dir); d.patrol.b = clampX(d.x - dir); d.patrol.target = d.patrol.a;
         }
         return;
       }
-      if (!d.aggro) { dronePatrol(d); return; }
-      if (d.hitAt && t >= d.hitAt) { d.hitAt = 0; droneRams(d); }
+      if (!d.aggro) { patrolMove(d, dt); return; }
+      if (d.hitAt && t >= d.hitAt) { d.hitAt = 0; droneRams(d); return; }
       if (d.hitAt || t < d.lowUntil) return;                        // rising for the ram, or low right after it
-      if (player.x !== d.x) d.lookX = player.x > d.x ? 1 : -1;
-      if (t - d.stepStart < D.stepMs || foeHeld(d)) return;
-      if (dist === 1) {                                              // next to the hero: rise (beep) and ram
-        if (t >= d.nextAttack && stats.health > 0) { d.attackStart = t; d.hitAt = t + D.windupMs; }
+      faceHero(d);
+      if (meleeReaches(d)) {                                         // in reach: rise (beep), lock the spot, then dash
+        if (t >= d.nextAttack && stats.health > 0) { const L = Math.hypot(f.x - c.x, f.y - c.y) || 1; d.attackStart = t; d.hitAt = t + D.windupMs; d.ramDir = { x: (f.x - c.x) / L, y: (f.y - c.y) / L }; }
         return;
       }
-      droneStep(d, player.x, player.y);                              // rushes in
+      if (foeHeld(d)) return;
+      flyTo(d, hpos.x, hpos.y, dt);                                  // rushes in, straight over everything
     }
-    function droneRams(d) {
-      const D = DRONE, t = gameTime;
-      d.lowUntil = t + D.lowMs; d.nextAttack = t + D.cooldownMs; d.ramAt = t;
-      d.ramDir = { x: Math.sign(player.x - d.x), y: Math.sign(player.y - d.y) };
-      if (cheb(player.x, player.y, d.x, d.y) !== 1 || stats.health <= 0) return;   // the hero stepped away: missed
-      hurtHero(npcDamage(D.ramMult), '#00e5ff');   // 15% of a same-level hero's max HP
-      if (stats.health > 0 && Math.random() < D.slowChance) {
-        slowAmt = t < slowUntil ? Math.max(slowAmt, D.slow) : D.slow; slowUntil = Math.max(slowUntil, t + D.slowMs);   // refreshes, doesn't stack
-        float('slowed!', '#4ea1ff', player.x + 0.5, player.y - 1.1);
-      }
+    function droneRams(d) {   // start the dash (DRONE.dashLen m in dashMs) toward the spot locked at the wind-up
+      const D = DRONE, t = gameTime, r = d.ramDir || { x: d.lookX || 1, y: 0 };
+      d.dash = { start: t, sx: d.x, sy: d.y, dx: r.x, dy: r.y, hit: false };
+      d.ramAt = t; d.nextAttack = t + D.cooldownMs; d.lowUntil = t + D.dashMs + D.lowMs;
     }
-    function droneCloak(d) {   // 10% health or less, once per life: vanish, fly 3 tiles away from the hero, repair
+    function droneCloak(d) {   // 10% health or less, once per life: vanish, fly 3 m away from the hero, repair
       const D = DRONE, t = gameTime;
-      d.repaired = true; d.cloakUntil = t + D.cloakMs; d.repairNext = t + 1000; d.repairLeft = Math.round(d.maxHp * D.repairPct); d.repairTicks = Math.round(D.cloakMs / 1000); d.hitAt = 0; d.lowUntil = 0; d.aggro = false; d.returning = false;
-      let best = null;
-      for (let y = 0; y < ROWS; y++) for (let x = 0; x < COLS; x++) {
-        if (!droneFree(x, y, d) || Math.abs(cheb(x, y, d.x, d.y) - D.fleeDist) > 0) continue;
-        const away = Math.hypot(x - player.x, y - player.y);
-        if (!best || away > best.away) best = { x, y, away };
-      }
-      d.flee = best;
+      d.repaired = true; d.cloakUntil = t + D.cloakMs; d.repairNext = t + 1000; d.repairLeft = Math.round(d.maxHp * D.repairPct); d.repairTicks = Math.round(D.cloakMs / 1000); d.hitAt = 0; d.lowUntil = 0; d.dash = null; d.aggro = false; d.returning = false;
+      const c = foeGC(d), f = heroFeet(); let ux = c.x - f.x, uy = c.y - f.y; const L = Math.hypot(ux, uy) || 1; ux /= L; uy /= L;
+      d.flee = { x: Math.max(1, Math.min(COLS - 2, d.x + ux * D.fleeDist)), y: Math.max(1, Math.min(ROWS - 2, d.y + uy * D.fleeDist)) };
       float('cloaked!', '#00e5ff', d.x + 0.5, d.y - 1.4);
       if (target === d) target = null;
     }
 
     // Drip's swing lands (after the wind-up) if the hero is still next to him
     function dripStrikes() {
-      if (cheb(player.x, player.y, drip.x, drip.y) !== 1 || stats.health <= 0) return;
+      if (!meleeReaches(drip) || stats.health <= 0) return;
       const [lo, hi] = DRIP.atkMult;   // 10–12% of a same-level hero's max HP
       hurtHero(npcDamage(lo + Math.random() * (hi - lo)), '#e5484d');
     }
@@ -3888,21 +4012,25 @@
       return out;
     }
     const nodeReady = n => gameTime >= n.readyAt;
-    function harvestable() {   // a ready pile under the hero or on the tile he faces
-      if (moving) return null;
-      const list = zoneNodes().filter(nodeReady);
-      return list.find(n => n.x === player.x && n.y === player.y) || list.find(n => n.x === player.x + facing.x && n.y === player.y + facing.y) || null;
+    // things to use are picked from his tile and the 8 around it (no need to aim at them); when several, the one nearest his aim
+    const DIRS8 = [[1, 0], [1, 1], [0, 1], [-1, 1], [-1, 0], [-1, -1], [0, -1], [1, -1]];
+    const nearDirs = () => DIRS8.map(d => ({ d, s: (d[0] * aim.x + d[1] * aim.y) / Math.hypot(d[0], d[1]) })).sort((a, b) => b.s - a.s).map(o => o.d);
+    function harvestable() {   // a ready pile under the hero or next to him
+      if (heroSpeedNow > 1.5) return null;   // walking past: no prompt
+      const list = zoneNodes().filter(nodeReady); if (!list.length) return null;
+      for (const [dx, dy] of [[0, 0], ...nearDirs()]) { const n = list.find(n => n.x === player.x + dx && n.y === player.y + dy); if (n) return n; }
+      return null;
     }
     const roomFor = name => { const def = itemDef(name) || {}, max = def.stack || 1;
       return inventory.length < invSlots() || inventory.some(it => it.name === name && !it.quest && (it.count || 1) < max); };
     function startHarvest(n) {
       if (!roomFor(n.K.item)) { float(bag ? 'bag full' : 'no bag', '#e5484d', player.x + 0.5, player.y - 1.2); return; }
-      harvesting = { node: n, start: gameTime, x: player.x, y: player.y };
+      harvesting = { node: n, start: gameTime, x: player.x, y: player.y, px: hpos.x, py: hpos.y };
     }
     function updateHarvest() {   // every frame: cancel or finish the hold
       const h = harvesting; if (!h) return;
       const n = h.node;
-      if (!spaceDown || moving || player.x !== h.x || player.y !== h.y || anyOpen() || !nodeReady(n) || n.zone !== areaName || stats.health <= 0) { harvesting = null; return; }
+      if ((!spaceDown && !mouseAim.harvest) || Math.hypot(hpos.x - h.px, hpos.y - h.py) > HERO_MOVE.harvestDrift || anyOpen() || !nodeReady(n) || n.zone !== areaName || stats.health <= 0) { harvesting = null; return; }
       if (gameTime - h.start < HARVEST.holdMs) return;
       harvesting = null;
       if (addItem(n.K.item, 1)) { float(bag ? 'bag full' : 'no bag', '#e5484d', player.x + 0.5, player.y - 1.2); return; }
@@ -3938,34 +4066,20 @@
       }
       ctx.restore();
     }
-    function knock(d, crit) {   // start a knockback, pointing from the hero to the enemy
-      const keep = drip; drip = d; const c = foeCentre(dripPos(), d); drip = keep;
-      const dx = c.x - (player.x + 0.5), dy = c.y - (player.y + 0.5), len = Math.hypot(dx, dy);
-      const ux = len > 0.01 ? dx / len : facing.x, uy = len > 0.01 ? dy / len : facing.y, k = Math.hypot(ux, uy) || 1;
+    function knock(d, crit) {   // a real push away from the hero (see updateKnock); walls stop it
+      const c = foeGC(d), dx = c.x - (hpos.x + 0.5), dy = c.y - (hpos.y + 0.5), len = Math.hypot(dx, dy);
+      const bx = len > 0.01 ? dx / len : aim.x, by = len > 0.01 ? dy / len : aim.y;
       const w = equipped.find(it => MELEE_KINDS.includes(it.kind)), step = w ? Object.keys(RARITY).indexOf(rarityOf(w.name)) + 1 : 0;   // fists 0, common 1, rare 2…
-      let dist = (KNOCKBACK.fists + KNOCKBACK.perRarity * Math.max(0, step)) * (crit ? KNOCKBACK.crit : 1) * (d.hp > stats.health ? KNOCKBACK.tougher : 1);
-      const bx = ux / k, by = uy / k;
-      if (d.kind !== 'drone') {   // walk the push out in small steps; stop where his leading edge would enter a blocked tile
-        const half = foeSize(d) / 2; let ok = 0;
-        for (let i = 1, n = Math.ceil(dist / 0.02); i <= n; i++) { const t = Math.min(dist, i * 0.02); if (!free(Math.floor(c.x + bx * (t + half)), Math.floor(c.y + by * (t + half)))) break; ok = t; }
-        dist = ok;
-      }
-      d.kb = dist > 0 ? { at: gameTime, dx: bx, dy: by, dist } : null;
+      const dist = (KNOCKBACK.fists + KNOCKBACK.perRarity * Math.max(0, step)) * (crit ? KNOCKBACK.crit : 1) * (d.hp > stats.health ? KNOCKBACK.tougher : 1);
+      d.kb = dist > 0 ? { at: gameTime, dx: bx, dy: by, dist, done: 0 } : null;
     }
-    function knockOffset(d) {   // current nudge in canvas px: quick ease-out, then a slower ease back
-      const kb = d.kb; if (!kb || d.dead) return null;
-      const t = gameTime - kb.at, { outMs, backMs } = KNOCKBACK;
-      if (t < 0 || t >= outMs + backMs) { d.kb = null; return null; }
-      const u = t < outMs ? t / outMs : (t - outMs) / backMs;
-      const p = t < outMs ? 1 - (1 - u) ** 2 : 1 - u * u * (3 - 2 * u);   // out: ease-out; back: smoothstep
-      return { x: kb.dx * kb.dist * p * TILE, y: kb.dy * kb.dist * p * TILE };
-    }
+    function knockOffset(d) { return null; }   // knockback moves the enemy itself now (no picture nudge)
     function withKnock(d, paint) { const o = knockOffset(d); if (!o) return paint(); ctx.save(); ctx.translate(o.x, o.y); paint(); ctx.restore(); }
     function heroAttack() {
       if (gameTime < heroNextAttack) return;
       heroNextAttack = gameTime + heroAttackMs();
       heroAttackStart = gameTime;   // attack animation in the facing direction (diagonals use the side view)
-      heroAttackDir = facing.x ? 'side' : facing.y > 0 ? 'down' : 'up';
+      heroAttackDir = Math.abs(aim.x) >= Math.abs(aim.y) * 0.7 ? 'side' : aim.y > 0 ? 'down' : 'up';   // nearest view to the exact angle
       if (facing.x) lookX = facing.x;
       const crit = Math.random() < critChance(), dmg = Math.round(heroStr() * (crit ? 2 + critBonus() : 1));   // a crit adds strength once more (+ Quick Hands)
       let landed = false;
@@ -3976,17 +4090,19 @@
     const heroAttackMs = () => Math.max(300, Math.round((HERO_ATTACK_MS + equipped.reduce((t, it) => t + ((itemDef(it.name) || {}).attackMs || 0), 0)) / (1 + talentAttackSpeed())));
     const hasMeleeWeapon = () => equipped.some(it => MELEE_KINDS.includes(it.kind));
     function meleeArea() {   // origin (tile units, centre of the hero tile's front edge), unit direction, radius
-      const len = Math.hypot(facing.x, facing.y) || 1, dx = facing.x / len, dy = facing.y / len;
+      const len = Math.hypot(aim.x, aim.y) || 1, dx = aim.x / len, dy = aim.y / len;   // exact facing angle
       const w = equipped.find(it => MELEE_KINDS.includes(it.kind)), area = w ? ((itemDef(w.name) || {}).meleeArea || MELEE.weaponArea) : 1;
       const r = MELEE.radius * Math.sqrt(area);   // the weapon's meleeArea: × area (Banana sword 1.2, baNano Sword 1.3)
-      return { ox: player.x + 0.5 + dx * 0.5, oy: player.y + 0.5 + dy * 0.5, dx, dy, r };
+      const c = ovalC(); return { ox: c.x + dx * 0.5, oy: c.y + dy * 0.5, dx, dy, r };   // from his body centre (where he aims from)
     }
     function meleeTargets() {
-      const a = meleeArea(), keep = drip;
+      const a = meleeArea(), keep = drip, ang = Math.atan2(a.dy, a.dx);
+      const inSwing = p => { const ex = p.x - a.ox, ey = p.y - a.oy; return Math.hypot(ex, ey) <= a.r && ex * a.dx + ey * a.dy >= 0; };
+      const swingPts = [{ x: a.ox, y: a.oy }]; for (let i = -4; i <= 4; i++) for (const k of [0.5, 1]) swingPts.push({ x: a.ox + Math.cos(ang + i * Math.PI / 8) * a.r * k, y: a.oy + Math.sin(ang + i * Math.PI / 8) * a.r * k });
       const hits = drips.filter(d => {
         if (d.dead || cloaked(d) || !droneLow(d)) return false;   // a flying drone is out of reach except right after its ram
-        drip = d; const c = foeCentre(dripPos(), d), ex = c.x - a.ox, ey = c.y - a.oy, br = foeR(d);
-        return Math.hypot(ex, ey) <= a.r + br && ex * a.dx + ey * a.dy >= -br;   // inside the circle and on the front side
+        const B = foeBody(d);   // the swing (front half of a circle) overlaps its body
+        return ellPts(B, 32).some(inSwing) || swingPts.some(p => ellIn(B, p.x, p.y));
       });
       drip = keep; return hits;
     }
@@ -4022,8 +4138,8 @@
       if (drip.hp <= 0) {   // nothing is given yet: the loot waits on his puddle
         drip.dead = true; drip.deadAt = gameTime; drip.hitAt = 0; drip.dot = null; drip.stunUntil = 0; kills++; if ((drip.kind || 'drip') === 'drip' && !drip.summoned) dripKills++; if (drip.kind === 'queen') queenKills++;
         if (drip.kind === 'drone') {   // falls: the wreck lands on the nearest walkable tile (it may have been over a building)
-          drip.cloakUntil = 0; drip.fromX = drip.x; drip.fromY = drip.y;
-          if (!free(drip.x, drip.y)) {
+          drip.cloakUntil = 0; drip.dash = null;
+          if (!free(Math.round(drip.x), Math.round(drip.y))) {
             let best = null;
             for (let y = 0; y < ROWS; y++) for (let x = 0; x < COLS; x++) {
               if (!free(x, y) || takenByDrip(x, y, drip) || exitAt(x, y) || (x === player.x && y === player.y)) continue;
@@ -4103,12 +4219,12 @@
     function castSpell(slot) {
       const name = skills[slot], sp = name && SPELLS[name];
       if (!sp) return;
-      const hx = player.x + 0.5, hy = player.y + 0.5;
+      const { x: hx, y: hy } = ovalC();   // cast from his body centre (where the mouse aims from)
       if (stats.mana < sp.mana) { float(`no mana (${sp.mana} ${ICON.mana})`, '#4ea1ff', hx, player.y - 0.7); return; }
       stats.mana -= sp.mana; renderStats();
-      // aim at the selected target; without one, at the closest living enemy in this area; with none, where the hero faces
-      let dx = facing.x, dy = facing.y;
-      const near = hasTarget() ? (() => { drip = target; return { q: foeCentre(dripPos(), target) }; })() : drips.filter(d => !d.dead && !cloaked(d)).map(d => { drip = d; const q = foeCentre(dripPos(), d); return { q, dist: Math.hypot(q.x - hx, q.y - hy) }; })
+      // aim at the selected (Tab) target; without one: computers toward the cursor, phones at the closest living enemy; else where he faces
+      let dx = aim.x, dy = aim.y;
+      const near = hasTarget() ? { q: foeBody(target) } : mouseAim.on ? null : drips.filter(d => !d.dead && !cloaked(d)).map(d => { const q = foeBody(d); return { q, dist: Math.hypot(q.x - hx, q.y - hy) }; })
         .sort((a, b) => a.dist - b.dist)[0];
       if (near) { dx = near.q.x - hx; dy = near.q.y - hy; }
       if (!dx && !dy) dx = lookX;
@@ -4120,13 +4236,19 @@
 
     // Magic Nozzle (Fuel Spray): every enemy in the cone at once (each one rolls the hit chance)
     function fuelSpray(angle, sp) {
-      const t = gameTime, hx = player.x + 0.5, hy = player.y + 0.5, keep = drip;
-      heroSprays.push({ angle, t, range: sp.range, half: sp.halfAngle });
+      const t = gameTime, { x: hx, y: hy } = ovalC(), keep = drip;
+      heroSprays.push({ angle, t, range: sp.range, half: sp.halfAngle, x: hx, y: hy });
       for (const e of drips) {
         if (e.dead || cloaked(e)) continue;
-        drip = e; const c = foeCentre(dripPos(), e), ex = c.x - hx, ey = c.y - hy, dist = Math.hypot(ex, ey) - foeR(e);
-        let da = Math.atan2(ey, ex) - angle; da = Math.atan2(Math.sin(da), Math.cos(da));
-        if (dist > sp.range || (Math.abs(da) > sp.halfAngle + Math.min(0.6, foeR(e) / Math.max(0.5, dist)) && Math.hypot(ex, ey) > 0.9)) continue;
+        drip = e;
+        const inCone = ellPts(foeBody(e), 16).some(p => {   // any part of its body inside the cone (or right next to him)
+          const ex = p.x - hx, ey = p.y - hy, len = Math.hypot(ex, ey);
+          if (len > sp.range) return false;
+          if (len < 0.9) return true;
+          let da = Math.atan2(ey, ex) - angle; da = Math.atan2(Math.sin(da), Math.cos(da));
+          return Math.abs(da) <= sp.halfAngle;
+        });
+        if (!inCone) continue;
         if (!heroHits()) { heroMissed(e); continue; }
         e.slowUntil = t + sp.slowMs; e.slowAmt = sp.slow;
         e.dot = { spell: sp, left: sp.ticks, next: t + sp.tickMs };
@@ -4140,7 +4262,7 @@
         const pr = projectiles[i], step = Math.min(pr.spell.speed * dt / 1000, pr.spell.range - pr.flown);
         pr.x += pr.dx * step; pr.y += pr.dy * step; pr.flown += step;
         let gone = false;
-        if (pr.enemy && Math.hypot(player.x + 0.5 - pr.x, player.y + 0.5 - pr.y) < 0.55) {   // an enemy's Magic Tar hits the hero
+        if (pr.enemy && ovalDist(pr.x, pr.y) < 0.2) {   // the blob (0.2 m) touches his oval: an enemy's Magic Tar hits the hero
           rootedUntil = Math.max(rootedUntil, gameTime + pr.spell.rootMs); rootTotal = pr.spell.rootMs; rootVine = false;
           heroDot = { spell: pr.spell, left: pr.spell.ticks, next: gameTime + pr.spell.tickMs, lvl: pr.lvl };
           heroHurtStart = gameTime;
@@ -4150,8 +4272,7 @@
         for (const e of (pr.enemy ? [] : drips)) {   // hit check first, so a target right at the end of the range still counts
           if (gone || e.dead || cloaked(e)) continue;
           drip = e;
-          const c = foeCentre(dripPos(), e);
-          if (Math.hypot(c.x - pr.x, c.y - pr.y) < 0.3 + foeR(e)) {
+          if (ellDist(foeBody(e), pr.x, pr.y) < 0.3) {   // the blob (0.3 m) touches its body
             if (!heroHits()) { heroMissed(e); gone = true; continue; }   // Magic Tar missed: no root, no damage   // hit: root + damage over time (refreshes if already on)
             drip.stunUntil = gameTime + pr.spell.rootMs;
             drip.dot = { spell: pr.spell, left: pr.spell.ticks, next: gameTime + pr.spell.tickMs };
@@ -4194,8 +4315,9 @@
     }
 
     // beaten Drip with loot on the tile the hero faces (or stands on)
-    const lootable = () => drips.find(d => d.dead && d.loot &&
-      (occupies(d, player.x + facing.x, player.y + facing.y) || occupies(d, player.x, player.y))) || null;
+    const lootable = () => { const ds = drips.filter(d => d.dead && d.loot); if (!ds.length) return null;   // under him or next to him
+      for (const [dx, dy] of [[0, 0], ...nearDirs()]) { const d = ds.find(d => occupies(d, player.x + dx, player.y + dy)); if (d) return d; }
+      return null; };
 
     // a delivery's parcel: its own slot, never stacked with the same food bought in the shop (1 = no room)
     function addQuestItem(name) {
@@ -4307,12 +4429,179 @@
     const held = new Set();      // movement keys currently held
     const tapped = new Set();    // keys pressed since the last step, even if already released
     const COMBO_MS = 60;         // short wait so W+D pressed together counts as one diagonal step
-    const MOVE_MS = 180;         // time to glide from one tile to the next (steady speed)
+    const MOVE_MS = 1000 / 6;    // ms per metre: the hero walks 6 m/s
     let stepMs = MOVE_MS;        // this step's duration: longer while injured
     const currentStepMs = () => (hasState('injured') ? MOVE_MS / STATES.injured.speed : MOVE_MS) / (1 + lbSpeed() + equipSum('speed')) / (gameTime < slowUntil ? 1 - slowAmt : 1);   // Top-1 buffs: +10% speed each
     let comboTimer = null;
     // glide state: player.x/y is the tile we are on or heading to; from* is where the glide started
     let moving = false, fromX = player.x, fromY = player.y, moveStart = 0;
+    // ---- free movement (1 tile = 1 m) ----
+    // hpos: the hero's exact position in tiles (same convention as player.x/y: his feet centre is at hpos + 0.5). player.x/y is
+    // always the tile under his feet (round(hpos)), so everything still tile-based keeps working. vel in m/s. aim: unit vector he
+    // faces (any angle with the joystick, 8 with keys); facing.x/y is that angle snapped to the nearest of 8 (for faced tiles).
+    // Speed = today's (1 tile per MOVE_MS, with injured / slowed / buffs), the same in every direction; a 0.06 s ramp to start and stop.
+    // Body: a 0.5 m circle at his feet; slides along walls, buildings and enemies, and is nudged around corners it clips.
+    const HERO_MOVE = { r: 0.25, rampS: 0.06, nudge: 0.3, harvestDrift: 0.3, backMult: 0.5 };   // backMult: walking away from where he aims (mouse) = half speed
+    const hpos = { x: player.x, y: player.y }, vel = { x: 0, y: 0 }, aim = { x: 1, y: 0 };
+    let heroDist = 0, heroSpeedNow = 0, lastTile = { x: player.x, y: player.y }, stickVec = null;   // stickVec: { x, y } analog 0..1 (phones)
+    const setAim = (x, y) => { const l = Math.hypot(x, y); if (l < 1e-6) return; aim.x = x / l; aim.y = y / l;
+      const a = Math.round(Math.atan2(aim.y, aim.x) / (Math.PI / 4)), dirs = [[1, 0], [1, 1], [0, 1], [-1, 1], [-1, 0], [-1, -1], [0, -1], [1, -1]];
+      [facing.x, facing.y] = dirs[(a + 8) % 8]; if (Math.abs(aim.x) > 0.2) lookX = aim.x > 0 ? 1 : -1; };
+    // computers: the mouse cursor aims melee, Magic tar and Magic Nozzle (the hero always faces it). Phones keep the old aim.
+    const mouseAim = { on: false, inside: false, down: false, harvest: false, cx: 0, cy: 0, hud: false, hover: null, cursorKey: '' };   // cx/cy: canvas px; down: left button held (keeps swinging)
+    function updateMouseAim() {
+      if (!mouseAim.on || anyOpen()) return;
+      const wx = (mouseAim.cx - cam.ox) / cam.z / TILE, wy = (mouseAim.cy - cam.oy) / cam.z / TILE;
+      const dx = wx - (hpos.x + 0.5), dy = wy - (hpos.y + 0.1);   // from his body (a bit above the feet)
+      if (Math.hypot(dx, dy) > 0.15) setAim(dx, dy);
+    }
+    const solidTile = (x, y) => !free(x, y);   // enemies are ground circles now (bodyHits)
+    function bodyHits(px, py) {   // does the body circle at hpos (px, py) overlap a blocked tile? -> that tile, or null
+      const cx = px + 0.5, cy = py + 0.5, r = HERO_MOVE.r;
+      for (let ty = Math.floor(cy - r); ty <= Math.floor(cy + r); ty++) for (let tx = Math.floor(cx - r); tx <= Math.floor(cx + r); tx++) {
+        if (!solidTile(tx, ty)) continue;
+        const nx = Math.max(tx, Math.min(cx, tx + 1)), ny = Math.max(ty, Math.min(cy, ty + 1));
+        if ((cx - nx) ** 2 + (cy - ny) ** 2 < r * r - 1e-9) return { x: tx, y: ty };
+      }
+      for (const o of drips) {   // enemies' ground circles (drones fly over him)
+        if (o.dead || isFlyer(o)) continue;
+        const c = foeGC(o), rr = r + foeGr(o);
+        if ((cx - c.x) ** 2 + (cy - c.y) ** 2 < rr * rr - 1e-9) return { x: c.x - 0.5, y: c.y - 0.5 };
+      }
+      return null;
+    }
+    // ---- the hero's hitbox (getting hit + clicking him) ----
+    // An upright oval 0.6 m wide × 1.7 m high standing on his soles (covers the sprite). Bites, slaps, rams, sprays and Magic Tar
+    // check the oval; ground attacks (pounce, slam, vine whip, spore clouds, burning puddles) check his feet circle (the walking one).
+    // Melee lands if the oval is within HIT_REACH m of the enemy's body edge (about today's 'next tile' reach).
+    const HERO_OVAL = { w: 0.6, h: 1.7 }, HIT_REACH = 0.9;
+    const ovalC = () => ({ x: hpos.x + 0.5, y: hpos.y + 0.95 - HERO_OVAL.h / 2 });   // soles at hpos.y + 0.95 (where the sprite stands)
+    // ellipses E = { x, y, a, b }: centre and half-width / half-height in metres (a circle has a = b)
+    const ellIn = (E, px, py) => ((px - E.x) / E.a) ** 2 + ((py - E.y) / E.b) ** 2 <= 1;
+    function ellDist(E, px, py) {   // metres from a point to the ellipse's edge (0 inside)
+      if (ellIn(E, px, py)) return 0;
+      const dx = px - E.x, dy = py - E.y, at = t => Math.hypot(dx - E.a * Math.cos(t), dy - E.b * Math.sin(t));
+      let best = Infinity, bt = 0;
+      for (let i = 0; i < 48; i++) { const t = i / 48 * Math.PI * 2, d = at(t); if (d < best) { best = d; bt = t; } }
+      for (let st = Math.PI / 48; st > 0.002; st /= 2) for (const t of [bt - st, bt + st]) { const d = at(t); if (d < best) { best = d; bt = t; } }
+      return best;
+    }
+    const ellPts = (E, n = 8) => [{ x: E.x, y: E.y }, ...Array.from({ length: n }, (_, i) => ({ x: E.x + E.a * Math.cos(i * Math.PI * 2 / n), y: E.y + E.b * Math.sin(i * Math.PI * 2 / n) }))];
+    function ellEllDist(A, B, cap = Infinity) {   // gap between two ellipses (0 if they touch or overlap); anything over cap may come back as just "> cap"
+      const lower = Math.hypot(A.x - B.x, A.y - B.y) - Math.max(A.a, A.b) - Math.max(B.a, B.b);
+      if (lower > cap) return lower;   // far apart: no need to measure exactly
+      if (ellIn(A, B.x, B.y) || ellIn(B, A.x, A.y)) return 0;
+      let best = Infinity; for (const p of ellPts(B, 64).slice(1)) { const d = ellDist(A, p.x, p.y); if (d < best) best = d; if (!best) break; }
+      return best;
+    }
+    const heroOval = () => { const c = ovalC(); return { x: c.x, y: c.y, a: HERO_OVAL.w / 2, b: HERO_OVAL.h / 2 }; };
+    const ovalDist = (px, py) => ellDist(heroOval(), px, py);   // metres from a point to the hero's oval (0 inside)
+    const ovalPts = () => ellPts(heroOval());   // centre + 8 edge points (cone checks)
+    // ---- enemy hitboxes ----
+    // body: an oval (or circle) roughly the size of the model, standing on its soles (bottom of its tile / footprint), used for
+    // the hero's hits (melee, Magic tar, Fuel Spray), taps / clicks, and enemy melee reach (HIT_REACH from it to the hero's oval).
+    // ground: a circle at its feet (where it stands), for ground attacks and spells (none yet). The drone flies: its body follows
+    // the sprite in the air and it has no ground circle until it drops low after a ram.
+    // w / h: body width / height in m; lift: m from the soles up to the body's bottom; gr: ground circle radius in m.
+    const FOE_BOX = {
+      drip:    { w: 0.8, h: 1.45, lift: 0, gr: 0.4 },
+      scav:    { w: 0.85, h: 1.7, lift: 0, gr: 0.3 },
+      spore:   { w: 0.8, h: 1.1, lift: 0, gr: 0.35 },
+      crawler: { w: 1.25, h: 0.85, lift: 0, gr: 0.45 },
+      loader:  { w: 2.1, h: 2.5, lift: 0, gr: 0.9 },
+      queen:   { w: 2.0, h: 2.85, lift: 0, gr: 1.0 },
+      drone:   { w: 1.1, h: 0.6, gr: 0.35 },
+    };
+    function foeBody(d) {   // enemy d's body ellipse, where it's drawn right now
+      const keep = drip; drip = d; const q = dripPos(); drip = keep;
+      const B = FOE_BOX[d.kind || 'drip'] || FOE_BOX.drip;
+      if (d.kind === 'drone') { const L = droneLift(d, gameTime); return { x: q.x + 0.5 + L.ox / TILE, y: q.y + 1 + (L.oy - 16 - L.h) / TILE, a: B.w / 2, b: B.h / 2 }; }
+      const big = foeSize(d) === 2, h = d.kind === 'queen' && d.stage === 2 ? B.h * 1.1 : B.h;   // the Queen grows in stage 2
+      const soles = q.y + 1 - 0.03;
+      return { x: q.x + (big ? 1 : 0.5), y: soles - B.lift - h / 2, a: B.w / 2, b: h / 2 };
+    }
+    function foeGround(d) {   // its feet circle { x, y, a, b } (a = b = r), or null while a drone is up in the air
+      if (d.kind === 'drone' && !droneLow(d)) return null;
+      const keep = drip; drip = d; const q = dripPos(); drip = keep;
+      const B = FOE_BOX[d.kind || 'drip'] || FOE_BOX.drip, big = foeSize(d) === 2;
+      return { x: q.x + (big ? 1 : 0.5), y: q.y + (big ? 0 : 0.5), a: B.gr, b: B.gr };
+    }
+    function feetOnTile(tx, ty) {   // does his feet circle touch tile (tx, ty)?
+      const cx = hpos.x + 0.5, cy = hpos.y + 0.5, r = HERO_MOVE.r;
+      const nx = Math.max(tx, Math.min(cx, tx + 1)), ny = Math.max(ty, Math.min(cy, ty + 1));
+      return (cx - nx) ** 2 + (cy - ny) ** 2 < r * r;
+    }
+    function meleeReaches(d, reach = HIT_REACH) {   // does enemy d's melee reach the hero? (its body to his oval)
+      return ellEllDist(heroOval(), foeBody(d), reach) <= reach;
+    }
+    let showHitbox = false;   // cheat menu: draw the hitboxes
+    function drawHitboxes() {
+      if (!showHitbox) return;
+      const c = ovalC(); ctx.save(); ctx.lineWidth = 3;
+      ctx.strokeStyle = '#ff2bd6'; ctx.beginPath(); ctx.ellipse(c.x * TILE, c.y * TILE, HERO_OVAL.w / 2 * TILE, HERO_OVAL.h / 2 * TILE, 0, 0, Math.PI * 2); ctx.stroke();
+      ctx.strokeStyle = '#00e5ff'; ctx.beginPath(); ctx.arc((hpos.x + 0.5) * TILE, (hpos.y + 0.5) * TILE, HERO_MOVE.r * TILE, 0, Math.PI * 2); ctx.stroke();
+      for (const d of drips) { if (d.dead || cloaked(d)) continue;
+        const B = foeBody(d), G = foeGround(d);
+        ctx.strokeStyle = '#ffe600'; ctx.beginPath(); ctx.ellipse(B.x * TILE, B.y * TILE, B.a * TILE, B.b * TILE, 0, 0, Math.PI * 2); ctx.stroke();
+        if (G) { ctx.strokeStyle = '#ff8a00'; ctx.setLineDash([8, 6]); ctx.beginPath(); ctx.arc(G.x * TILE, G.y * TILE, G.a * TILE, 0, Math.PI * 2); ctx.stroke(); ctx.setLineDash([]); } }
+      ctx.restore();
+    }
+    function moveAxis(dx, dy) {   // move by (dx, dy) along one axis unless the body would hit something; returns the distance moved
+      if (!dx && !dy) return 0;
+      if (!bodyHits(hpos.x + dx, hpos.y + dy)) { hpos.x += dx; hpos.y += dy; return Math.abs(dx + dy); }
+      for (let k = 0.5; k > 0.04; k /= 2) if (!bodyHits(hpos.x + dx * k, hpos.y + dy * k)) { hpos.x += dx * k; hpos.y += dy * k; return Math.abs((dx + dy) * k); }
+      return 0;
+    }
+    function heroInput() {   // the wanted direction × strength (0..1)
+      if (stickVec) return { x: stickVec.x, y: stickVec.y };
+      const x = (held.has('d') ? 1 : 0) - (held.has('a') ? 1 : 0), y = (held.has('s') ? 1 : 0) - (held.has('w') ? 1 : 0), l = Math.hypot(x, y);
+      return l ? { x: x / l, y: y / l } : { x: 0, y: 0 };
+    }
+    function updateHeroMove(dtMs) {   // every frame, real time (0 while a window is open)
+      if (player.x !== lastTile.x || player.y !== lastTile.y) { hpos.x = player.x; hpos.y = player.y; vel.x = vel.y = 0; }   // moved by the game (teleport, load, new zone)
+      const dt = Math.min(0.05, dtMs / 1000);
+      const blocked = !dt || anyOpen() || naming() || hasState('root') || stats.health <= 0;
+      const inp = blocked ? { x: 0, y: 0 } : heroInput();
+      const back = mouseAim.on && (inp.x * aim.x + inp.y * aim.y) < 0;   // walking backwards: more than 90° away from the cursor
+      const speed = 1000 / currentStepMs() * (back ? HERO_MOVE.backMult : 1);
+      if ((inp.x || inp.y) && !mouseAim.on) setAim(inp.x, inp.y);   // with a mouse he faces the cursor, not where he walks
+      if (blocked && !dt) { heroSpeedNow = 0; moving = false; return; }
+      // ramp the velocity toward the wanted one (stops instantly when blocked by root / death / a window)
+      const tx = inp.x * speed, ty = inp.y * speed, step = speed / HERO_MOVE.rampS * dt;
+      if (blocked) { vel.x = vel.y = 0; }
+      else { const ex = tx - vel.x, ey = ty - vel.y, el = Math.hypot(ex, ey); if (el <= step) { vel.x = tx; vel.y = ty; } else { vel.x += ex / el * step; vel.y += ey / el * step; } }
+      // pushed out if an enemy stepped onto him (or he stands inside something)
+      const inside = bodyHits(hpos.x, hpos.y);
+      if (inside) {
+        const ax = hpos.x + 0.5 - (inside.x + 0.5), ay = hpos.y + 0.5 - (inside.y + 0.5), al = Math.hypot(ax, ay) || 1, push = Math.min(0.08, speed * dt);
+        hpos.x += ax / al * push; hpos.y += ay / al * push;
+      }
+      // move in small sub-steps, x then y (slides along obstacles); a clipped corner nudges him sideways around it
+      let moved = 0;
+      const n = Math.max(1, Math.ceil(Math.hypot(vel.x, vel.y) * dt / 0.1));
+      for (let i = 0; i < n; i++) {
+        const mx = vel.x * dt / n, my = vel.y * dt / n;
+        const gx = moveAxis(mx, 0), gy = moveAxis(0, my);
+        moved += Math.hypot(gx, gy);
+        if (!gx && mx && Math.abs(vel.y) < Math.abs(vel.x) * 0.5) {   // blocked sideways: is there room a little up or down?
+          for (const s of [1, -1]) { const off = s * HERO_MOVE.nudge; if (!bodyHits(hpos.x + mx, hpos.y + off) && !bodyHits(hpos.x, hpos.y + Math.sign(off) * Math.abs(mx))) { moved += moveAxis(0, s * Math.abs(mx)); break; } }
+        }
+        if (!gy && my && Math.abs(vel.x) < Math.abs(vel.y) * 0.5) {
+          for (const s of [1, -1]) { const off = s * HERO_MOVE.nudge; if (!bodyHits(hpos.x + off, hpos.y + my) && !bodyHits(hpos.x + Math.sign(off) * Math.abs(my), hpos.y)) { moved += moveAxis(s * Math.abs(my), 0); break; } }
+        }
+      }
+      heroDist += moved; heroSpeedNow = moved / dt; moving = heroSpeedNow > 0.3;
+      if (moved > 0.01) walkedOnce = true;
+      const tx2 = Math.round(hpos.x), ty2 = Math.round(hpos.y);
+      if (tx2 !== player.x || ty2 !== player.y) {   // stepped onto another tile
+        player.x = tx2; player.y = ty2; lastTile.x = tx2; lastTile.y = ty2; stepsTaken++;
+        pickUpPile();
+        const ex = exitAt(player.x, player.y);
+        if (ex) { const [nx, ny, fx, fy] = ARRIVE[ex.dir](player.x, player.y); enterArea(ex.to, nx, ny, fx, false, fy); }
+      }
+      lastTile.x = player.x; lastTile.y = player.y;
+      if (player.x !== Math.round(hpos.x) || player.y !== Math.round(hpos.y)) { hpos.x = player.x; hpos.y = player.y; vel.x = vel.y = 0; }   // entered a new zone
+    }
 
     function direction() {
       const keys = new Set([...held, ...tapped]);
@@ -4364,13 +4653,11 @@
         return;
       }
       keys.forEach(k => { held.add(k); tapped.add(k); });
-      // face along every movement key held, so W+D faces diagonally (needed to hit an enemy standing on a diagonal)
-      facing.x = (held.has('d') ? 1 : 0) - (held.has('a') ? 1 : 0);
-      facing.y = (held.has('s') ? 1 : 0) - (held.has('w') ? 1 : 0);
-      if (!facing.x && !facing.y) { facing.x = (keys.includes('d') ? 1 : 0) - (keys.includes('a') ? 1 : 0); facing.y = (keys.includes('s') ? 1 : 0) - (keys.includes('w') ? 1 : 0); }
-      if (facing.x) lookX = facing.x;
-      if (moving || comboTimer) return;   // a glide in progress picks the keys up when it lands
-      comboTimer = setTimeout(() => { comboTimer = null; tryStep(performance.now()); }, COMBO_MS);
+      // face along every movement key held, so W+D faces diagonally; walking itself happens every frame (updateHeroMove)
+      if (stickVec || mouseAim.on) return;   // the joystick steers (and aims) itself; the mouse aims
+      const fx = (held.has('d') ? 1 : 0) - (held.has('a') ? 1 : 0), fy = (held.has('s') ? 1 : 0) - (held.has('w') ? 1 : 0);
+      if (fx || fy) setAim(fx, fy);
+      else setAim((keys.includes('d') ? 1 : 0) - (keys.includes('a') ? 1 : 0), (keys.includes('s') ? 1 : 0) - (keys.includes('w') ? 1 : 0));
     }
 
     function release(keys) { keys.forEach(k => held.delete(k)); }
@@ -4426,31 +4713,16 @@
       syncChef();
       if (dt) { checkDeliveries(); checkRogueQuests(); for (let i = piles.length - 1; i >= 0; i--) if (gameTime >= piles[i].until) piles.splice(i, 1);
         updateDrips(); updateQueenFx(); updateHarvest(); updateProjectiles(dt); updateHeroDot(); updatePoison(); updateHeroMana(); updateHeroHealth(); }
-      // keys still held when Tart wears off (or a blocking enemy moves): start walking again
-      if (!moving && !comboTimer && held.size && !anyOpen()) tryStep(now);
-      let rx = player.x, ry = player.y;
-      if (moving) {
-        const t = (now - moveStart) / stepMs;
-        if (t >= 1) {
-          moving = false; walkedOnce = true;
-          pickUpPile();
-          const ex = exitAt(player.x, player.y);
-          if (ex) { const [nx, ny, fx, fy] = ARRIVE[ex.dir](player.x, player.y); enterArea(ex.to, nx, ny, fx, false, fy); }
-          // keep going without a pause if keys are still held, so speed stays constant
-          const landed = moveStart + stepMs;
-          if ((held.size || tapped.size) && tryStep(now - landed < stepMs ? landed : now)) {
-            const t2 = Math.min(1, (now - moveStart) / stepMs);
-            rx = fromX + (player.x - fromX) * t2; ry = fromY + (player.y - fromY) * t2;
-          }
-        } else {
-          rx = fromX + (player.x - fromX) * t; ry = fromY + (player.y - fromY) * t;
-        }
-      }
+      updateHeroMove(dt);   // free movement (game time: stops behind windows)
+      updateMouseAim();
+      if (mouseAim.down && dt && !anyOpen()) heroAttack();   // left button held: keep swinging (attack speed limits it)
+      const rx = hpos.x, ry = hpos.y;
       const d0 = performance.now();
       draw(rx, ry);
       if (settings.fps) { fpsStat.frames.push(now); fpsStat.draws.push(performance.now() - d0);
         const inGame = !(ui && (ui.kind === 'start' || ui.kind === 'loading')) && document.getElementById('account')?.hidden !== false;   // not on the start, loading or account screens
         if (inGame) drawFps(); }
+      drawCrosshair();
       requestAnimationFrame(frame);
     }
 
@@ -4461,8 +4733,8 @@
     function enterArea(name, x, y, face, instant, faceY = 0) {
       const firstVisit = !discovered.has(name);   // discovering a zone gives |a| + |b| exp (the city 0:0 gives none)
       areaName = name; WALLS = AREAS[name].walls; discovered.add(name);
-      player.x = x; player.y = y; fromX = x; fromY = y;
-      facing.x = face; facing.y = faceY; if (face) lookX = face; moving = false;
+      player.x = x; player.y = y; fromX = x; fromY = y; hpos.x = x; hpos.y = y; lastTile.x = x; lastTile.y = y;
+      setAim(face || 0, faceY || 0); if (face) lookX = face; moving = false;
       groundLayer = null;
       rootedUntil = 0; heroDot = null; projectiles.length = 0; target = null;
       settleZoneDrips(name);
@@ -4727,8 +4999,8 @@
       }
       // tile the hero is facing: a soft, blurred triangle (3%) with its tip toward the hero, widening away from him (colour: markerColor)
       ctx.save();
-      ctx.translate((rx + facing.x + 0.5) * TILE, (ry + facing.y + 0.5) * TILE);
-      ctx.rotate(Math.atan2(facing.y, facing.x));
+      ctx.translate((rx + aim.x + 0.5) * TILE, (ry + aim.y + 0.5) * TILE);   // 1 m in front of him, at the exact angle
+      ctx.rotate(Math.atan2(aim.y, aim.x));
       ctx.globalAlpha = 0.03;
       const fm = facingMarker(), fs = fm.width;
       ctx.drawImage(fm, -fs / 2, -fs / 2, fs, fs);
@@ -4800,9 +5072,10 @@
         ctx.beginPath(); ctx.moveTo(x - 20, y - 28); ctx.lineTo(x + 20, y - 28); ctx.lineTo(x, y); ctx.closePath(); ctx.stroke(); ctx.fill();
       }
       drawHarvestHint();
+      drawHitboxes();
       drawFloaters();
       // name of the tile the yellow highlight is on
-      const looked = wallAt(Math.round(rx) + facing.x, Math.round(ry) + facing.y);
+      const looked = facedBuilding() || wallAt(Math.round(rx) + facing.x, Math.round(ry) + facing.y);
       if (looked && looked.label && !anyOpen()) {
         ctx.fillStyle = '#fff';
         ctx.font = '600 28px ' + MONO;
@@ -4901,7 +5174,11 @@
     }
     const facingEnemy = () => !anyOpen() && !drip.dead && meleeTargets().includes(drip);   // is the enemy being drawn inside the hero's melee area?
     // the building the hero faces and can use (it has something to open)
-    const facedBuilding = () => { if (anyOpen()) return null; const w = wallAt(player.x + facing.x, player.y + facing.y); return w && w.opens ? w : null; };
+    let fbCache = { k: '', w: null };   // asked many times per frame: remembered for the same tile + aim
+    const facedBuilding = () => { if (anyOpen()) return null;   // a building / NPC next to him (any of the 8 tiles), the one nearest his aim first
+      const k = `${areaName} ${player.x} ${player.y} ${aim.x.toFixed(2)} ${aim.y.toFixed(2)}`; if (fbCache.k === k) return fbCache.w;
+      let w = null; for (const [dx, dy] of nearDirs()) { const c = wallAt(player.x + dx, player.y + dy); if (c && c.opens) { w = c; break; } }
+      fbCache = { k, w }; return w; };
 
     // the hero's dropped loot: the bag (or first item) icon on a soft yellow glow, bobbing; fades out over its last seconds
     function drawPiles() {
@@ -4946,10 +5223,7 @@
     }
 
     // ---- combat drawing ---------------------------------------------------------
-    function dripPos() {
-      const p = Math.min(1, (gameTime - drip.stepStart) / stepOf(drip));
-      return { x: drip.fromX + (drip.x - drip.fromX) * p, y: drip.fromY + (drip.y - drip.fromY) * p };
-    }
+    function dripPos() { return { x: drip.x, y: drip.y }; }   // positions are continuous now
     // one cell of a Drip sheet, puddle centre on the tile's bottom-centre, scaled so his body is DRIP_BODY tiles
     function drawDripCell(im, spec, frame, cx, feet, squash, neon) {
       const fw = im.naturalWidth / spec.frames, fh = im.naturalHeight, s = DRIP_BODY * TILE / spec.body;
@@ -4980,8 +5254,7 @@
       ctx.restore();
     }
     // walk frame (0-3) while the enemy is gliding to the next tile, else -1
-    const walkFrame = t => { const p = (t - drip.stepStart) / stepOf(drip);
-      return p >= 0 && p < 1 && (drip.x !== drip.fromX || drip.y !== drip.fromY) ? Math.min(3, Math.floor(p * 4)) : -1; };
+    const walkFrame = t => t - (drip.movedAt ?? -1e9) < 120 ? Math.floor((drip.walkDist || 0) * 4) % 4 : -1;   // 4 frames per metre walked
     function drawScavBody(cx, feet, t) {
       const s = drip.spray, A = SCAV_ART, neon = dripNeon();
       if (s && ready(ART.scavAttack)) {
@@ -5064,16 +5337,15 @@
         const pulse = 0.5 + 0.5 * Math.sin(t / 60);
         ctx.save();
         if (a.kind === 'pounce') {   // Scrap Crawler: the tiles it will leap over, a pulsing red line
-          if (t < a.hitAt) {
-            const grow = Math.min(1, (t - a.start) / 150);
-            ctx.globalAlpha = 0.18 + 0.2 * pulse; ctx.fillStyle = '#e5484d';
-            for (const [x, y] of a.tiles) ctx.fillRect(x * TILE + 8, y * TILE + 8, TILE - 16, TILE - 16);
-            const [ex, ey] = a.tiles[a.tiles.length - 1], sx = (d.x + 0.5) * TILE, sy = (d.y + 0.5) * TILE;
+          if (t < a.hitAt) {   // the strip it will leap along (pounceW wide), growing out from it
+            const grow = Math.min(1, (t - a.start) / 150), w = CRAWLER.pounceW * TILE, L = (a.len + foeGr(d)) * TILE * grow;
+            ctx.translate(a.sx * TILE, a.sy * TILE); ctx.rotate(Math.atan2(a.dy, a.dx));
+            ctx.globalAlpha = 0.18 + 0.2 * pulse; ctx.fillStyle = '#e5484d'; ctx.fillRect(0, -w / 2, L, w);
             ctx.globalAlpha = 0.75; ctx.strokeStyle = '#ff3b3b'; ctx.lineWidth = 6; ctx.lineCap = 'round';
-            ctx.beginPath(); ctx.moveTo(sx, sy); ctx.lineTo(sx + ((ex + 0.5) * TILE - sx) * grow, sy + ((ey + 0.5) * TILE - sy) * grow); ctx.stroke();
+            ctx.beginPath(); ctx.moveTo(0, 0); ctx.lineTo(L, 0); ctx.stroke();
           }
         } else if (a.kind === 'whip') {   // pulsing green circle (up to 40%) on the tile it will lash
-          if (t < a.hitAt) { ctx.globalAlpha = 0.2 + 0.2 * pulse; ctx.fillStyle = '#3fbf3f'; ctx.beginPath(); ctx.arc((a.tx + 0.5) * TILE, (a.ty + 0.5) * TILE, 0.42 * TILE, 0, Math.PI * 2); ctx.fill(); }
+          if (t < a.hitAt) { ctx.globalAlpha = 0.2 + 0.2 * pulse; ctx.fillStyle = '#3fbf3f'; ctx.beginPath(); ctx.arc((a.tx + 0.5) * TILE, (a.ty + 0.5) * TILE, LOADER.whipR * TILE, 0, Math.PI * 2); ctx.fill(); }
         } else {   // pulsing red circle: the slam area (body + 1.5 tiles)
           const cx = (d.x + 1) * TILE, cy = d.y * TILE, R = LOADER.slamR * TILE;
           if (t < a.hitAt) {
@@ -5257,9 +5529,9 @@
           const p = (t - f.at) / (f.end - f.at), x = (f.x + (f.tx - f.x) * p) * T, y = (f.y + (f.ty - f.y) * p) * T - Math.sin(p * Math.PI) * 0.8 * T;
           ctx.fillStyle = '#07080c'; ctx.strokeStyle = '#ff2bd6'; ctx.lineWidth = 2; ctx.beginPath(); ctx.arc(x, y, 12, 0, Math.PI * 2); ctx.fill(); ctx.stroke();
         } else {   // an oil puddle; its rim glows hotter as the fuse runs; then it burns
-          const x = (f.x + 0.5) * T, y = (f.y + 0.6) * T, grow = Math.min(1, (t - f.land) / 150);
+          const x = (f.x + 0.5) * T, y = (f.y + 0.5) * T, grow = Math.min(1, (t - f.land) / 150);
           ctx.fillStyle = '#07080c'; ctx.globalAlpha = f.lit ? Math.min(1, (f.end - t) / 300) : 0.92;
-          ctx.beginPath(); ctx.ellipse(x, y, 0.46 * T * grow, 0.3 * T * grow, 0, 0, Math.PI * 2); ctx.fill();
+          ctx.beginPath(); ctx.ellipse(x, y, QUEEN.puddleR * T * grow, QUEEN.puddleR * 0.65 * T * grow, 0, 0, Math.PI * 2); ctx.fill();
           if (!f.lit) {
             const heat = Math.max(0, (t - f.land) / (f.fire - f.land)), pulse = 0.5 + 0.5 * Math.sin(t / (90 - 60 * heat));
             ctx.globalAlpha = 0.35 + 0.6 * heat * pulse; ctx.strokeStyle = heat > 0.66 ? '#ff3b1f' : '#ff9a2e'; ctx.lineWidth = 3 + 3 * heat; ctx.stroke();
@@ -5282,7 +5554,7 @@
       for (let i = heroSprays.length - 1; i >= 0; i--) {   // the hero's Magic Nozzle spray
         const s = heroSprays[i], p = (t - s.t) / 400;
         if (p >= 1 || p < 0) { heroSprays.splice(i, 1); continue; }
-        const x = (player.x + 0.5) * T, y = (player.y + 0.5) * T, R = s.range * T * Math.min(1, p * 4);
+        const x = (s.x ?? player.x + 0.5) * T, y = (s.y ?? player.y + 0.5) * T, R = s.range * T * Math.min(1, p * 4);
         const g = ctx.createRadialGradient(x, y, 0, x, y, Math.max(1, R));
         g.addColorStop(0, 'rgba(60, 30, 10, 0.7)'); g.addColorStop(0.6, 'rgba(255, 130, 30, 0.6)'); g.addColorStop(1, 'rgba(255, 180, 60, 0)');
         ctx.save(); ctx.globalAlpha = 1 - p; ctx.fillStyle = g;
@@ -5294,7 +5566,7 @@
       const im = ART.sporeCloud, t = gameTime;
       for (const c of sporeClouds) {
         if (c.zone !== areaName) continue;
-        const k = Math.min(1, (t - c.at) / 200, (c.until - t) / 500), w = 1.5 * TILE * (0.8 + 0.2 * Math.min(1, (t - c.at) / 300)), cx = (c.x + 0.5) * TILE, by = (c.y + 1) * TILE;
+        const k = Math.min(1, (t - c.at) / 200, (c.until - t) / 500), w = SPORE.cloudR * 2 * TILE * (0.8 + 0.2 * Math.min(1, (t - c.at) / 300)), cx = (c.x + 0.5) * TILE, by = (c.y + 0.5 + SPORE.cloudR * 0.6) * TILE;
         ctx.save(); ctx.globalAlpha = 0.85 * Math.max(0, k);
         if (ready(im)) { const h = w * im.naturalHeight / im.naturalWidth; ctx.drawImage(im, cx - w / 2, by - h - 4 + 3 * Math.sin(t / 200), w, h); }
         else { ctx.fillStyle = '#7b6cff'; ctx.beginPath(); ctx.ellipse(cx, by - 30, w / 2, 26, 0, 0, Math.PI * 2); ctx.fill(); }
@@ -5357,16 +5629,12 @@
       ctx.fillStyle = '#e5484d'; ctx.fillRect(bx, by, bw * drip.hp / drip.maxHp, 8);
     }
     // ---- Mav-1K drawing (vector placeholder until its art exists; art keys droneFly / droneAttack / droneHurt / dronePortrait) ----
-    function droneLift(d, t) {   // height above the ground (px) and ram offset: cruising 0.95 tile, +0.25 while rising, 0.3 right after the ram
-      let h = 0.95 * TILE + 5 * Math.sin(t / 260 + d.spawn.x), ox = 0, oy = 0;
+    function droneLift(d, t) {   // height above the ground (px): cruising 0.95 m, +0.25 while rising, 0.3 through the dash and right after it
+      let h = 0.95 * TILE + 5 * Math.sin(t / 260 + d.spawn.x);
       if (d.hitAt && t >= d.attackStart) h += 0.25 * TILE * Math.min(1, (t - d.attackStart) / DRONE.windupMs);
-      else if (t < d.lowUntil) {
-        const k = (t - d.ramAt) / DRONE.lowMs;   // 0 → 1 over the low window
-        h = 0.3 * TILE + 0.65 * TILE * Math.max(0, k - 0.75) * 4;
-        const push = Math.max(0, 1 - k * 3) * 0.35 * TILE;   // lunge toward where the hero was
-        if (d.ramDir) { ox = d.ramDir.x * push; oy = d.ramDir.y * push; }
-      }
-      return { h, ox, oy };
+      else if (d.dash) h = 0.3 * TILE;
+      else if (t < d.lowUntil) { const k = 1 - (d.lowUntil - t) / DRONE.lowMs; h = 0.3 * TILE + 0.65 * TILE * Math.max(0, k - 0.75) * 4; }
+      return { h, ox: 0, oy: 0 };
     }
     function drawDroneShadow(d) {
       const t = gameTime, q = dripPos(), L = droneLift(d, t), cx = (q.x + 0.5) * TILE + L.ox, gy = (q.y + 1) * TILE - 14 + L.oy;
@@ -5403,8 +5671,8 @@
     }
     function drawDrone(d) {
       const t = gameTime, q = dripPos(), L = droneLift(d, t), cx = (q.x + 0.5) * TILE + L.ox, ground = (q.y + 1) * TILE - 14 + L.oy, cy = ground - L.h;
-      const moving = t - d.stepStart < DRONE.stepMs && (d.x !== d.fromX || d.y !== d.fromY);
-      const tilt = t < d.lowUntil && d.ramDir ? d.ramDir.x * 0.35 : moving ? Math.sign(d.x - d.fromX) * 0.18 : 0.04 * Math.sin(t / 400);   // leans into its flight
+      const moving = t - (d.movedAt ?? -1e9) < 120;
+      const tilt = t < d.lowUntil && d.ramDir ? d.ramDir.x * 0.35 : moving ? (d.lookX || 1) * 0.18 : 0.04 * Math.sin(t / 400);   // leans into its flight
       const beep = !!d.hitAt && Math.floor((t - d.attackStart) / 50) % 2 === 0;   // fast red beeping while it rises for the ram
       ctx.save();
       if (cloaked(d)) ctx.globalAlpha = DRONE.cloakAlpha;
@@ -5624,15 +5892,15 @@
         ctx.restore(); return;
       }
       // straight down / up use the front / back walk (never mirrored); everything else uses the side walk
-      const view = moving && moveDir.x === 0 ? (moveDir.y > 0 ? 'down' : 'up') : 'side';
+      const vx = mouseAim.on ? aim.x : vel.x, vy = mouseAim.on ? aim.y : vel.y;   // with a mouse he looks at the cursor (even standing)
+      const view = (moving || mouseAim.on) && Math.abs(vy) > Math.abs(vx) * 1.2 ? (vy > 0 ? 'down' : 'up') : 'side';   // nearest of side / front / back
       const vert = view === 'down' ? skinned('heroWalkDown') : view === 'up' ? skinned('heroWalkUp') : null;
       const sheet = vert && ready(vert) ? vert : walk;
       if (lookX < 0 && sheet === walk) ctx.scale(-1, 1);
       const sword = hasSword() && ready(ART[(swordDef() || {}).art]);
       if (sword && view !== 'up') drawBackSword(view, h);   // behind the body
-      if (moving && ready(sheet)) {   // walk cycle frame, picked by distance walked
-        const t = Math.min(0.999, (performance.now() - moveStart) / stepMs);
-        const f = ((stepsTaken - 1) * FRAMES_PER_TILE + Math.floor(t * FRAMES_PER_TILE)) % WALK_FRAMES;
+      if ((moving || sheet !== walk) && ready(sheet)) {   // walk cycle frame, picked by distance walked (standing front / back: frame 0)
+        const f = moving ? Math.floor(heroDist * FRAMES_PER_TILE) % WALK_FRAMES : 0;   // 2 frames per metre walked
         const fw = sheet.naturalWidth / WALK_FRAMES, fh = sheet.naturalHeight, w = h * fw / fh;
         heroImg(sheet, f * fw, 0, fw, fh, -w / 2, -h, w, h);
       } else {
@@ -5648,7 +5916,7 @@
                          down: { x: 0.12, y: -0.62, rot: 150, size: 0.52 },
                          up:   { x: 0.00, y: -0.60, rot: 180, size: 0.52 } };
     function drawBackSword(view, h) {
-      const b = BACK_SWORD[view], s = b.size * h, bob = moving ? Math.sin((performance.now() - moveStart) / stepMs * Math.PI * 2) * 1.5 : 0;
+      const b = BACK_SWORD[view], s = b.size * h, bob = moving ? Math.sin(heroDist * Math.PI * 2) * 1.5 : 0;
       ctx.save();
       ctx.translate(b.x * h, b.y * h + bob); ctx.rotate(b.rot * Math.PI / 180);
       ctx.drawImage(ART[(swordDef() || {}).art] || ART.bananaSword, -s / 2, -s / 2, s, s);
@@ -6934,9 +7202,12 @@
       try {
         for (const d of drips) {
           if (cloaked(d)) continue;
-          drip = d; const q = dripPos(), n = foeSize(d), hgt = d.kind === 'loader' ? 2.7 : d.kind === 'queen' ? 3.1 : d.kind === 'spore' ? 1.2 : d.kind === 'crawler' ? 1.1 : d.kind === 'drone' ? 2.2 : 1.8;
-          const x0 = (q.x - 0.15) * TILE, x1 = (q.x + n + 0.15) * TILE, y1 = (q.y + 1) * TILE, y0 = y1 - hgt * TILE;
-          if (wx < x0 || wx > x1 || wy < y0 || wy > y1) continue;
+          if (!d.dead) { if (ellDist(foeBody(d), wx / TILE, wy / TILE) > 0.15) continue; }   // alive: on its body (a little margin)
+          else {   // a beaten body lying there: its old box
+            drip = d; const q = dripPos(), n = foeSize(d), hgt = d.kind === 'loader' ? 2.7 : d.kind === 'queen' ? 3.1 : d.kind === 'spore' ? 1.2 : d.kind === 'crawler' ? 1.1 : d.kind === 'drone' ? 2.2 : 1.8;
+            const x0 = (q.x - 0.15) * TILE, x1 = (q.x + n + 0.15) * TILE, y1 = (q.y + 1) * TILE, y0 = y1 - hgt * TILE;
+            if (wx < x0 || wx > x1 || wy < y0 || wy > y1) continue;
+          }
           if (d.dead) { if (d.loot && lootable() === d) { spacePressed(); return true; } continue; }
           target = d;
           if (meleeTargets().includes(d)) spacePressed();
@@ -6951,9 +7222,12 @@
       }
       return false;
     }
+    // in combat: an enemy in this zone is after him (locked on, not walking home), or he was hit in the last COMBAT_MS
+    const COMBAT_MS = 3000;
+    const inCombat = () => gameTime - heroHurtStart < COMBAT_MS || drips.some(d => !d.dead && !d.hidden && d.aggro && !d.returning);
     function tapOnHero(cx, cy) {   // canvas point → is it on the hero's sprite (his tile and the head above it)?
       const wx = (cx - cam.ox) / cam.z / TILE, wy = (cy - cam.oy) / cam.z / TILE;
-      return wx >= player.x - 0.15 && wx <= player.x + 1.15 && wy >= player.y + 1 - HERO_H && wy <= player.y + 1;
+      return ovalDist(wx, wy) <= 0.1;   // on his oval (a little margin)
     }
     // right-click (or a long press on a touch screen): quest → cancel menu, bag item → throw-away menu
     function secondaryAt(cx, cy) {
@@ -6977,16 +7251,82 @@
     const endLongPress = e => { if (longPress && longPress.id === e.pointerId) { clearTimeout(longPress.timer); longPress = null; } };
     canvas.addEventListener('pointerup', endLongPress); canvas.addEventListener('pointercancel', endLongPress);
     canvas.addEventListener('pointermove', e => { if (longPress && longPress.id === e.pointerId && Math.hypot(e.clientX - longPress.x, e.clientY - longPress.y) > 12) endLongPress(e); });
+    // computers: a small neon crosshair at the cursor over the world (the system arrow over windows and HUD buttons)
+    // computers: the mouse cursor (48 px art, built from art/ui cursor sheet). regular: the world and windows; attack: over a
+    // living enemy; interact: over a building / NPC you can open (and HUD buttons); pick up: over loot, a harvest pile or your
+    // dropped pile. The hands are dimmed when it's too far to use; a left click uses it when it's next to you.
+    const CURSOR_ART = {
+      regular: { url: 'data:image/png;base64,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', x: 9, y: 4 },
+      attack: { url: 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAADAAAAAwCAYAAABXAvmHAAAXzklEQVR4nMV6eZxcVbXut/eZq+pUdXVXpbo7nR5CZ+qQARpIwmQSQiBAmENAVBSR0QGH6wPhQlAvyEP0eZULQlAUUCCSACGBAJJEQE2kIWRoMvbcXV1dXfNwxr33/QPCVVAUHr/31n/nj3P2+tZ01lrfJviERABkFUAWAjTd1KQ4VV2pCk4kqvAJapEBQG8wyL568KBHAP5JnSt/Uh8CQGZ2dMjWqKuXeTViKk64VdZMSlyWq6rlYU2qdFTlykMtLRXR3+8SgAuAAAABxMc+9P9W63eVIFtaWlS4WqgEJ3acbh7DCTm9zHgzCGDIdCTExaY/VKztMYj0sOKWMDTk7gHEKkD8PwcgALIGoECHhKaiFKrqiiF5gQGJNy0K1Cz+s1X5yl2FbNMYZyCEIkIJrjdrMqeZkQfWFzK/qYcypviS5WsV305GfaCbXfROWH1kIB8ZgADoHnTIB+uYFpLcQJ8r9KjB66bqgcbJkvapgCJ/Zlb/ofpu2/I6JJkQAXQzTzQZhnKgbdq44jpPHHC91/t89+1Bzx1roGop7En2SEJy0N3NVgD8o3jkXwYgALIFkJS6aQaRPeMA98xpstJwrGnOIaAL+nx3bp/Pjnjds/VbU0n/FM2gjx9/NCTfx2e2vYWNvif+LVYnnawZaFb0ZIss7yGcv7LbKv/pL7bT00qVElCp1KWa3PXoYrf9i4n+TwEcDpdKS4vSLsLGkJWvbdTU9vlBc3EJWPKSVZm6oVwK/aFSQb/ncnAuEpJMFikqHl65DLIi4yu/3Yg1loUU9wQATNB06eRAEMtN0z09GD5Yy/nz24ulF4a5t79Bi+R9UrQWvpvo/0y/D61Ch5WPJBJ6wpNrB91i7NSa6HxDphc/XCwet7qU1/9cKgFgrFnWcXEwSCZTmWysVBECIHwByIAOIATgmnCEZCUJW6pV9rvcGH6XyyhzzXDHtWbN9EvC4XlTfH/tlmpha1wlw+sbGopPJJPORQD7WAAEQO4H5IaGBkUWWqzosekXRKPL3wb79E2pkeiGfE7ogvvnmhFySfNEcnwggKZcCZbtYFOlCpNQUALAZ5C5gEEIvhaOoMbQkK1pIa9LBI8fGuJPpFPiylKJPFlTc8Id8fq550VqH96YyT4SDOkHed00aXNmn7UI8P+RnvTDLD813qGpJFAHic48I1pz7Vq7fPmpA73RDbmsv1gx+Nr5x9I1Zy4iF9XVoqlYAmwbB1wHvhDgh6OTC1BCIIFgl+OC50qoHc9jaSiAB08/kbyw6CR6djBENuUz/pLBvuBay/riWXXxb7m2mKNrfo2bSGhPANJHArAKIGhqUqG6NZTQWYtDkSserBTPviQ5pFuOzW6sb6DrLjyNLGubCLn7ILL7e/FEKoPLMllcOJ5BTnBYgkNwDhDAJ0BBcJw9PoalhZz4r0wOvTsPADv3YcHEGJ64+EzcPbmdMrvKVg73yw/Z5XNPq4le7XiiWQoEQvGWFkX8g3z9AAABkJnokOOSFMky1nCKGb70oUrp3CtTIyzm+/zH06aQ289ejHAmD3v7Lvx2YBRnjI+LlfkMnnRt0maakCUJBSFAPA9wXeSFgEsJTqyJYr8sSdcVi+SUTIb/oHcYma1d0IaT+MbZi/Gro+eSet/nXxzqZ09a1jlnx6KXDFv+JGbRyH+2t6t/D8T7c4BsAaToZNtIV0XtGSHz9Fcca/l1YyOo9X38dFYHufikY4C39qHv0CBuyRfwmG3xNsOQv1cXExeEwt6MQECZc3C/yDMOPp4DIUAOAqok4amWyWLcc0vPZHP66mJOubFY4L+3HfED3yedZQfnHH80JELIZ7reFFePDpO2ptZPnxGIDL1kV9Z2cG6vAXzxvv/E33jgVoC4idma51BzTiAw21KUK76eHjVd1+U3NreQi08+Dug+hJ37+nDpeEb8xrVxTV1M3jSxtefm2viDEyh9YMyy+izBSZlCKONF0LECqkIIQSlJVapp2M59l5nhB5+b1Nb1HxObyB+5L52XGhcv7usD3tiNs44/itwxbRrJ2lX27fRoVFW0FZMkOSEzZoTa2z9QdN4DIADS2NkpSYFSyBGieaoWWv7zYq75zUrRv8iMkOsXzQP29mDvnkO4Kp8XOwWn9yUa+U9qE0/7rrtqUyH/y51l+7dVzjeCgPRxXzyTyfFn01mxl3lcCE48n21P+t5zr5WKjyQrle9+Jxq/9/GW1qyrStJl2YzYemAA6D4orll4DC4J1dDNxTz7VTk/+4RQ6Py0xeIK5/qa9xn9bx5mpVKy60uhowL6jH2+e+I942lMEpTc0DkLsmUj83YvvpHNiR2Ck3sSjf4Vochjvy/n78mAvdosK7025f0NkrLxrKB5aFRAPmd0RF6eHpUOcSjnBcyxGCXrhy3eP0HVD9lge14cH3viLCP0i183tpRKhNDrc3nRv68PyBfx7/Pnol4Q/DSflUeYuGCWEZzllJgRb2lR8Fe58B6ANQCluq7kXaG3KPoJj5WKk5JOlX2uvp7MmjgB2HMQP88X8TxzcVNsAv1cuOaZ58uF+xMksDdkyek8L+fbDRT/VC3v/Fqk9sf31tW/+r3aCT13xBL999Ultl5vRlbtsNxX6kMsU2TFQrAqjTUGAr1Pp9O/W2oYv7yzvkHsYB65I5sH29uPGY1xfL6hnhyoFPz1lfKk6Xqwc1RyNENR1FsBcjih5cPhs6ajQ3JdV+vQtUljPluwrlQgCSKJlVNaCEbGsCuVxT1WmS82w/L1kei2HeXio5Ng9NtCz3SmJztrsAbhjg5mcpvsrpSevdSI/CVAaS0El6qMZzY7pWRENYvoCVUXoIsBcPtCLV6bHOavFfMbrjAjc16IlD71SD7vXzo6Tk+qj2HFpAb8NDmMJ4t5fDZgHtVOg41uGdVGdFpAlw8A9PBPq5ExbdSloSmq1v6mbbXutipikRkmHZIEDI/hsUoVYwT0qzW1nsb5hjGOXhl+tZQMucAavgLg6e5uXmLMqQ/Q/POl3ODd2dSeO/Pjbz1dzg/UyoGSxHN2D7oOt828r7/V97RKKevTAcf1XrjOrCk6FNKaQklgKIVZioyTjBB5za5iL3dnTtX1uRXhBaNxS9sCSAIgdA1Am5rmq54tBT3PnxiQ5VO7mKczzvnJgQCR8kUkixU8ZVfFvECQLjbM9JuOk5YI4QVChdU+LL0bk9REJ5nqxug+S1ZaDDXwzdqG+P+KxBqnhfTIkFNRVVVV575TSQgAMrF9WKpWqapSoQ0y31+kGeVTghHytGujL5OHUraw1DRJ1XP5G9VqtEFRT7UUpSWASigd79DXAFQOtbfLJV41DS5azjXDn+WEL91mVViQymS+LANlC7sZQ7fwyf8OhURIkSNtvnK6zgnvhbvV8Dy2p6NDdAOYxcraW2UWWW4E5iV978xflrNTfS7ofF3rOysSXrfFsd6QaDDzXHs7mlVVJPM8NFHFpEZZOaPI/HNkTYktDgb4plKOdHGO1rKF6QKghIgu16GXUXraooBZ6hPVX/b4dndDUxMjv07MDsZDXutsqtzwf3KZS56uVsioY/EoKD1FNxASArs8DzuZj0mailpFITZj5GjNyH65pu4/xz37EQSksZqsJPYZZXOpUnPyi459+/eyY5P3WhYEgFZNx7dr63ouNCN3PZvLrzuKqdXRkC1F/EBc1aQr78yNff1PliVJlPKK68DhwGRZQYwSjPsMh4SAkAgMQrAsGKY3mDWPH2DOzT4NZOgetywvoVrLS1b19LuyGcn2PH68FqDHqCoqno+Uz5CQZCzVdIQZR6pqiWHP939WyNXen8984QQlNG1PsagNUzvQiUDDXt+/4tvjqcmjluX9e6zOvyVa49uO496YGZu83bYuPzNitg7InjFo2+pRIWPyfYXshQ8X8pIO4oUZwwxFw0JNRxOlUARBi6zgZEXBdBBIXPAHcmnxlGMvOS0UmbWjWtDlnG4pMo1OSnluDeE+v6E+Qb94zJGwAwFoEgUk6Z2GzHbBfQbN99Dzdi+duX8fG2CsEZROlVx5xxjxxVIjfMSvc5lje2xLrJ4wgX7hnEUEVMKMDVvJiqEhvtGqzDjFCM4qwB/TPcUFE22jzI9HiSyendxKG2dOhq+oEACIJL3TjgsBx/ehlat4YPsu8rVUUqTBwoyQmZrn7JA1ESQM0BQQSkAQFALqSBqqogAyBWQJ8Dk0zweEABhHwvGgSDJUKhEPTJUo5SVqcwhCsz6nCoDZQQPIFwAqoUPVEAIhac+TIBCgAoQD8CgCCgj1wEXU9YgyMApFlgBZBiT6Tq0SAprPAMeD4XMCAJQLwhmIDwi5KtuMkUieCXgcQnm6XBK5Pp9Ivo8wKAgBfM4hCEGFEFR9H2kC7ghBKWcuFSRblBwWI1SA8dR0VS34lJo/T42L29/YR2TOsXosK/IE6ND0EigGuCT7Dve5AqQpUC4Lod2UyfLa8QzVBESYEKJTCiEAAYEq57AF8EffFRyCCEJshZAhW1Zd+USpju8TvHu+Edw2WzdOXluusI3lCmKEIsQBBgGZELiUYpT7qAAClMrTNA3nBc0tSebsatY0rxXAa8xOnhEIrT8jFLr6gVJRfrV3wCcE6OZMWhwyyYpA8IXdVXtfvaCWJclkyLX3rwiFX+72nJU/K+YpBeEBIUgYFLoQkPDOPOlSgpTg8ITgMwKmcroeeHufa+2eqhou2ZSYHSyErZpOFphrEfb1JGOLvpMeFf22Te6ri6HN0LGxWMJ3Cxn8W6we55oRpD13NEGlzfVUfvQtv7AjwnleZYxUlEhkgixPlCGuua+UX7G5UjEFIThWUSpficY3xKh83w7P2TvJoqU0AE9n4bm62j7ms/PHOD+zSZbbflsuku+NpbAqHMEFtbXYUa3iinQKMwxDfLeunk5StTdrBL9va6X0wkQWyMh9KcWdY1ZLO5m9J07oT5eEI+oW1z7pPyqDLKhIZG7EBHU93JUTIsU47TSC1TQXDyc9vvEAr/Y2sJrinNROdwtAool4sdet+glV/q87ahLbRsLeXCGIMlEme3ps6y9dVmWotTZQSg/EbQCY2VDmO+zywVqBB6doSqpJ07/xdiYdC4KwcyMmmV5jYr/joMKZODVoSstC4Z2vV4o/7PLsN1pUXuweMBx6Jbr8AVW1azRR7uXegarvrDta1ywQQjdVqwIhHTNqI+JcLYAnClm8Xi5RAthlySvFoVTnpKIOAL4QYPtTO21D80pVKD2/yYxtGK6U7hz2qj94qpB7OgXac4SnZdPd3fZibPUXYivbnwy5jUKy09xxgwC2VSv6M8WCWB4wMC1RC6gS1pdKAlSixxjBUsFzH+91qm9NoIF090C8PIIuRgkgVnR3e3Cccgxyrs+2dx6jGvunGkGyoVgSKQgozQny6doocXyP31vIGjFVO87niBsKVfpa+mS8u5k+3Nn6pCioonoHXN8fZMKtetzlHvccWeMAcAtA1wC0taVPhgQ1QJVERFaW/KyQC4Ez9rm6KJEbYhj0GDaUS2KKrpN5qrZ/0LF3JqhScqRK9Up0+bcBXMY7jYnY3N/qy5MHq7tcpFZqwT+cEwrNuqtaJusGkrj6xHp8qqUBK7M58mghz08NmosvDpp9TxWLmdm6KQabmorLEwm/bnxc6nO1UEwV8YWm0cEgmgGJS3poYD/z9w547lh7SwtbEQzyYrEoOa4W7PYr9SvqYuevLmZPejSf5VcHQnTRlGZA17F2KImk8MnNoTAmynTbq8VyX53Eq7n+Ee/wWPme1W4F6MKWFrXM1LoOXV9QJrhjaX9ve9T3/ZcWzqcTE7U4+PpeXHioR4wpsvRkw6TCPFl+YGOpvKZNNwZk1/fLClXCKqlnnFy3Op87r9f3TAHB62Wt+CUzsi5CyYPDlttboxq+J1zjgO3EV9bFVmyqFr96cXIodATjfM2RU0jbsbPQs7sHS7a9Iaq6Jr3U1Doc9Pl3uu3KVk6c9PJk0joM4L2B5jaAo7XVD0lu5bVSZe9szXjxy/E49nKG27v2AIKgfe4U/KihgciOxy4ZHYps8f2rzorWft7x2LGDhE0pMtbcRLXT7sxlP3d3Plv7arEobS+VlZ8XsvHv5zOXhbl0VpGSiYN2pckAmbkyFv3SOrt03edHh03T8/mP2ppJ28x28EwZt3cfRC84rq2pRYei/H6HWz4QJGolmWz0/nqo/5s1xa0A7Wxo0AXTzUZD7mwOmD88b7h/xvZiwb+/tZV+4fQTCJJp8dz2Pbg2mRRFVZFurI15X4pEDwUhXk56LKdpyrLF/T1Hhxj3n5ozg2pUwqd37GG7uK+8OnHyboOI1QlZi6fBT7m3kJl/5/g4mhhn97Q0kSWdM4BwCPe+8GdcOzLMF5gR+ZmGpt2DbvXmgkXeKtHiWFcyaf/14vdvZuLbAG4mp7qCqdX9FXZAMH/1j+KJXI2my9/s6+fPvPIG0NyAZfOOxBOtzeQoLti3R5PSmcMD0x8uFS/XNfnLE2RpNmWc1wG0fuYRiB7ZjiilkizAGwP6dFuiN/2kkPnWsqG++bemkmyhJLPHprSRJfNmATUR/O6VLtyUTPJaTZPujifS8NnD+2xnP3Q735VMuqvet3r/wGJrIbayVCZkt6tq9rly4eUjJfXxe+P1flmW6TVvH2CPPfcaUBvBsQvm4LGOqeSH4QhGy2V2+ciwdmxvT+T8/l5qc446IsHzBcAZooRAEhTnDw/QEwb64tenRtSKZbMfxxPkkaM6yFHzjgQUBY9u3o6rDvWJokTp6oZJolNRHt5SyL/cymk23d9fXQWw93MHf3e5O4IupiotlVYER5+tFn6x0oxWXUK+emUqKV9+8JD/dqlMvzV/DmJzp+IbtWFc0J8kz+WK4ulqlW8vV4gBirD8TiMGDtQIgHKO7aUi5qk6uyWeIKfFIqSlpQFI1KGUzuOH23aROzNpLmua9Eh9k3+Opj/6TDH/VFSSB/cavNAH+Cv+jq4fWNUdnvbXANROzNZbNDeco6z5dCN8+e/LpYu/lkmFD1bL3lItQK+f0kaWNDdAsRxgLAtYLt7yPFyRTOF4WcaPVi6DJMu4+Tfrsc5xsDqRwAIzBIQDQDgIhwtsTo3j7kN94iXXEW2BgHx/Q5O1RDceX5cZfyhApZ4idcZXDA05/4gr+IAHDrtIAHxVaqdT09BQ0JTIwPpC4b5lpjn4vNF21fez6aaHchls3t3tL+sZJJfG6sgCVcYkITCN0vdWHe+03wwcBAoh6AgagODoKZbxSmoca9IZ8aJdES6V5MtiE3BLLDFWL9i9T2bHXqyT1P4Sr2T3DCW9iz6EcvqH/AB59/g1yaRjtqi5YEDxN1qltceqRs/q+saV54TMRffnsuazpSKeGehjEyUZ8zQdHZpOXAAO5xDsHaM5EOCE4tZcDt2WhR22w9PcI5KkSEsitbiqtq58djDySn+ltHadU359sqSlD3rFvJ5KObd9XILjr0DwVf397syOjsJkbrtvWFbxgG0NnxoKv7G4IbjkzzFr5rOlUvSlUgFrbVustap8ApXIDEohOANkigohSHOGn2SzAlQicwxD/owRw7KgWZxnBHZIQmx6MZf8Y4lLPVOIUemWrEpwKOX9M3bmnwI4DAKAEN3d3v3oFNG4xYRpv72+kh6KMfWFkyPhGUvjwXnDNbULRhib2uU52g0jw6wsSUTpTwKyjDIhyIOLnzRMkhaHQl6CSjvjlHblXLerq1ran/WcYZNLWZ1a5epIj/v5v1NtPkS/jya3AnR5Z6eUGfJUNWIbw0U3aEhKzRGG2nyEoh6vSvLl0w/unZDzmfcpVSUUwDbXE1UilINt03ImEb/a5TtbBz13kDpeNhaUK5oVLXcl4Y18BHbyYwM4/J4ASFdnp1QaH5cMRVHLjBkjQq4/TTUu3GBVv/n9zLiR9lwICISpjG9GY95ng+YDW7zKL+IqScHzyqYbc5GE14ku/+Oy9Z/IVYM1AJ3b3i6XgfAoow3z9cDCUcdfXARvBiDpgqSbVeXlnba9WdZFv2fb2YX9/S7+p6P8/3dX4rDcCtCZHR1ys+vqf3Gc0HFqKBpXpBggtJLPim+51VRDIFC0CgXL/hfo039VPjEAwP/kBwBlrFCQy6oqWzxPwpbCaoJBPw24e7q7/Y8a5x8m/w2uWHd1Fba93QAAAABJRU5ErkJggg==', x: 24, y: 24 },
+      interact: { url: 'data:image/png;base64,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', x: 16, y: 9 },
+      pickup: { url: 'data:image/png;base64,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', x: 27, y: 24 },
+      interactFar: { url: 'data:image/png;base64,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', x: 16, y: 9 },
+      pickupFar: { url: 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAADAAAAAwCAYAAABXAvmHAAAVq0lEQVR4nMVaeZxcVZX+7r1vq7Wrq7q6uqrXpDudpLOns5AFJCwxAcLIkjiCCiiiRlkFYZChExUIw6AgDJtBoiIwCQEHkaAxECUQpbMvnaWX9Jaururqqq797Xf+6ARBEiaM83POP/Xeq3vf73xn+c699zyCMxAOYFXL6PWq1QA5k0kn5p1OyIfGnOn7Puk9p1egBdgA0D/sDFOXg2FCab89EIa9evUpxnNgwwqQYBPgiTSTuJomPlMliYwFAPBA4kNw8SDa+NbV4KvORIm/B8D65SCZuoAQS4jC3St8tHuwyF/ZZtnVTTAPZvrNkyBaWoBIFLRuXIgmumQ2qNskoxlEpCKTTZMwWaKKAhTztjWUsc2Z03xWHnm7Gz32qtV/ddT/Bshp57S0AMGhoCgxSZ7awMKvvptvDPnE9KIZzq4dh/jIZ+qZ9qtkh7UKwEE00aPaiJQsSo6p9aKn0i943QqRFZnIlmU5COViXiPUsmBSSlLb9hai8SGemjZJMpIdsHKDHfbyDaNAPi2IU47nLcA61DI9nVcWTfGVvt6an/ejlwery3wif/zblXuGM+Y+YjkKgt/WHUkDRUmUXDIvnVJD6/sSRnX3EDzxtCkOJg02NGKxWMpCdNgApRRXL/abyxfIsZGM3baptTBYHpBzebfb6Mzts1atBv+7AbS0AJMyVYLitcT3uzTHD74RmfTtNbGZimeIHOpm9KZLanILp8jbX/pTpn+8XygAQI6KJQ1lmP7YayOTn3szi6xm4EQGcYBxJhKEymVk0hy5XIH+0wIfvn9NhTY2RDu37ikcimXUZFm5oe7eEbJWbWizPw2Ij419+gZQ6qqSasLMM7lGbBxIkSmX/ctxx08fLmDD68DwQBl+fGMgJRJr78Fes38oZRQvP7u04tlNyfNuemLAfc5Cn331VZWkNiwiHBJRVibB5yVwOgTEExb+dXU7nvlFjDtkid7/1TL7mgu8Q/EkP7C9rdjn8hSyaBsyV2z4RAL7iNAP33AApa4q6hIIK3PS6tuejM+8+clO5xWXFXHOJTJuu0WCKzjMr3qgy//jV0amzqxX/KpBBNu2qUsRAIhYcaGP3HC5G2dFgIipQj+axLEtg0i2jaC8SsTTz0zEpvVTSSjI+K1PHCdXPTgYGi4Yc2ePV6p6o4KQb6qlZ6w9AOEjdxxIfd1CY4PEh7OW5+29BXHpObZ98+cJcTIbkxqBG79A8Y3vG/jT/oLrvq8IQriU0X3dVu6iWY6hxirBffd9x7m9O0YEWLA5YNuAQDiIyLDoC9UYv7gaSy4tw+45Xtx5TyeeeX7AHkiY7vXfC9fV+FkvUDABWGcKgJy0/IblINGKBgokmdfvEWZVCdWdfeqMV94thF/dlkXrRgubtgL3PyniW5f7rM/Odh9yCqzNIla+dxDy0lmO+md/l5698vE4C7gJr/IBAgMIoajwUnxmjA3ZtrFoRTWallYCIgX1Clj+uf18438N09b/qBkSif3WriN24tpHe7QzzQPKAWxtAYlW+MWgOyN/4dxyMSTYYm9MH6mPyDt+vqa67/wZbvzhj4S/s5PgwZUR3vKt8qMA2o+nTK3zuMHCQUHe26ObV5ztzN9+uYeXljD05RjahkD2xwh5fZ+K/3jHgikw/O75brRu7AV6RoCeEQQCEjgsMMIlURAcEtPpyap/JiKs+gxIRB0remle8bqk4It/GKmYOtYR100rfTBqZmoGjIPjK6WS9VvsknyeobqMxnbu1voGhm02q9EZDpTQQCxl+H0O5vV7wB66tVx/qEjJUErjmYJNXArYr7Zk6R0/K+CxbRxfm82Q6MyCNoqAwwlCRpnTtDnziGCq/GkyAKCRc8MsOZJXPr+4JLzzaGH+6hfic/d0FWctnun12paJYwkrc8FsT2ciIav1Fa5sOMBiJU7qvmi2c+LgsDr3O08lZsxf2VV3zm19/usejjue2jAitB7OUUYJqa+Suc8lWN+5NsSvXeLBsSEVWY3AU8JG6YOcZBECEAESY5CIdOKfM/SArhFhShVzdx3nk7cd1IKXXWjbv/1zIbx4pjppTJm8J5U0c8FStL9+X126WLRdfq/ga+8t1j/4n0X32jfiAMCXLC63B6JFrNucIet+bxKAE59TxrxJAl91TTmfE5JIbZkFAg7DBhjlAOEAJ6AnspDAFlSDKA4Rwnx3iPGWmElOsd76mAcknZPakOy/9F97qusa8vyJh0RURDK45J7emkApK7G5YWZztr6rI58N+qh76x5tzAV39bvXvhG3v/LFGt624yxs+q+JZO8708hw5zz8/pUZWHVXI5/e7OGbWov45weSRC8YqC0DOESkiwSiQABCAXJyNWpzJlJpXCWrtzVeltNkebu3Smg5g1ygwxrhFiHqoulOvauTkr9sB3oHBCyZ7coTTlVqSiSrEXpWgyvQFzfHfuMnfWJl2GW37ZpDnv1pHSpyebz1w33Yta4TvDuJC8+S0PK9CN5+azoef2ACjh1P48Fn45g5wQuAYjjPIUkENueAZYOBg4Ph8nv7yes71LpLFrinVigkHB2m8qTM/wxCqC5T7T/swfDaOyr2XLeGz7r+7rSwZFrAevSuUNvLm/MjfkXkIZfgEQQ68fpHYkomZ9lvvzmRjPcAv76tFQc6TcQKFEFnHhXbUvCVUpy1qBw19R5886t+/OwlN+5fn8ekCeWQZCCWtsAECkpGw1xVbXg9FDqhWHZPN//axaVjvru8zEkk453uDpZYFoW9GrBPCyDg91vZXFZ974jWOalOEfZ1a7WzJiq9u/ZqPX5F1IYzBTp7nC9yx9q4f3dH3v7l05PIjHINv2w5hM2HbLx2GEgXbQA2FtQzTAkakLxpVIZFsATBk/8+AfMW78PNj/ZANywQAkgChc0ByhhkSYRHYdi3bTpuu6sDP92Q4Jk8L398ZbC+M6rmuliVznm/TU6T1jS3rcN2uBW9o09LL53r3rfz8bGbx1fRAwMJLeuULKOyXCTHYobrV1tyqK5xYclkYOPD7XjsTwZ+uZvA5RLJA9eXkqVz3OTdThu/3EPR3qEim+Mwo0XMma7gxhsq0D+kIeyTsWQig2FxUEaAlIHv3lKJrGrgrRd7sG79VJw124stO3KkYJDK6nLB65Qp27rq9KxEV2wA70aP5ZB9+tbdmfxdz0aTPX1iNtAIVU3ljHjaMMo8bPirS0rsvl6NVi08jGt+pqG1n5AvXuAh2x+pVO9a4R98Y01leu1tFSSv2ni3wyDtR7JEkBkxDg9jzT11uPNzPlw7zYBTAlweEaAUakpFVYWNb39rLF79dQJ2IoPGRgdSeXCHREojXhpMA0q6MF7gpykPFBjd5y5f3WYPBYeMNU0p/aDSpc872G96IjVWwOs0e4atwXuv8h9ed3tYndnkwLgahTx1U4Wx9taK4zanO7bsMloPdBo7Lj3Lka4JieSdY4TvbytAVW1Q3YJSVMl37m0g5T6CunFu1NQ6YOk2qMiAvhwuPrcUIgNoSsPYiAMWt/m/b0yKNWGhPuxn5XAWpJ1fb6anAnBa13AObPpJAwswQ86orLTESYLTa5Waog53OqNrAS+N7uo2BiwdI+Eyxg8cN6RLml1NP/hVYsYPX0iRa+dQrFoZRG2jG0bBApsQIlmbciU6DLFgwh4tABC4jaLPgyfvO4wl55VgW85Nvn7HEQ4At1wZJnctLz26+f3ce+XQMu+5Y+bf7sVPu3TdsAHEYRtCckRwTwgLlV6FTNxxNB+JJTWZUyG19aA6UOomI36PWTSKYiHsEovHYkbXly8oiVeVS+TVvQbfsSt3gugJ7GNJXpLJQSiasDlGaxcHMTmBQy/i7Esq8O6WBN7e2McvvMCPLy2P8EdeTuBgT7Fs4RSHq7Mgs0ltHzc4PZULeAswNhVmQzHLMbVeqmzr0aZdfPfx8Pxbe50XtcRKD/Vp4+c2KqHuKKUuJnBVdFgOv24c6DKz4yJS/x1XlvC0RskLW4sYiasQFQZbM2FEs4TzD2oYCAEIJTCyBmYvDmPxzRMhZFWcPcmHZUtDhMBAQbUVjwcKuEaDTR/X9WNxxQHsjDTT4QGHWB6QfIrAm/7lZ0lPf8a2v/pZD+/oL9i3Pj3o0C17YmWAhDI2k5TSIgOAMSHR2N2pJq8+z6s2jXGQ1/ZbeHNLGqbJITkoiEBBCCGjqo/GKecglBIYnUnUzgrg/men4aqLvIglTXAAAmMCA5OYItOj0eaPe+BU4RNX0+RQtCjMGOcMvLg1E9jVkeX/1jKWrF0/DcunE3Kop8Af+03BP2WsPPFAl1ky3Ksplu4QZIlR06JMFChEAVAkjmhfES/8YgD9vTooJZzzUSOdvDjhEkJ1E+aBBCobS1C/uBzcVAFQqKYtCMxWbE7YoknpMwPgM1UiOUWq6Zbjud9lhNKAA1+50A07Y+DOO8dijJfhkVdTaD2Srf7iJa5pYb9Qa2pW+eEBtayxUggd7i0qezs03lwjweMgiA5q2PTbOAzzRODzD7PHCWdQSkhGhXE0CWRUNE9xASB8X7dGnQp1SoImHOvNkr/N2Q8AcPz1KFDLMK4VNa4ozBwTcXA1byF6KAHaPYLm8yLkO1f7SbFY4Fc/GGfr3shNSBVwdn2YLrx0jrKgxCuMe+w3WQJuorkKMG1AlikKRRuZjAkmgNsnSH30IIhzcHBwzrlAQbMaEFcxdVoJXC6Kd/cXoNnUH3ALDqvG87HNzkc8cNIqxaQIQZAsXefD133WWSiqJnl8Yx6QALN/hF/19Sq+ollBNM34dQ9287nf7nCcc1tv8M7nhsoX3nJMfn5zkp8/y4tx5YBqcDAKGJqFVMoAGB3l6A9b7oTpOB9d9KgjBtwBEfNnebD9gIbjcbO0Kqh4kMuxZZHmjzDnBwDIh37/4u+wKyst6/e7Mpn5Ex1DCyd7sO7NFE8mOIRMAW4nw/Ovzkbnzml47aXp+ObXKrkqCPzHL6f4uwdz/O47q/DED8Io5AwIAgWlBIQQ9B4rAiIF5x/FYJ+4FmUCuUyEwnRAAa5YVoGsqvMjfQXvmBDz9w2KUiqVEjYsxwehdMocWLUaXNC4OVIgKies//qlJUamYNFfbEoDbgYeVUFjGYSRx7LzXHji4bHo+HMz9m2bhfZd83Bfy1iUmBYCQQVa0QK3OSSZ4MCBHA7szELyCKPJwDnnAESJQJAY9rfr+NHaIZx3TRe+clUbZs50gzLOX9yaE/xlUkNDRAilikUZTUFh1WdGQZy2Ej99A2hF7RjFLbJgU61j3oJbuiKGZdm9v51A9mxL4P3WFOrqnAhHFITCMsojTiAkEuicF3vzcMgMhg28vz2JXTvS4ISAc8AwgLkLfOTss33cMjjACOnsN/g/3zuAPe1FlEdkLF4cRuv2FDQ1j4Yxbmx5p4ibrvCRB74UGNjdXth3ZMgadEmu7EG0madfSgDY1NIgHRpSnSuXBiY/9HJszr0/T9jf/3IpKcnlIHAOSggMG6Aihc8nYuJEBZOmeCG7RRhFG6JCERtQ8dIL0VHmJwSEA0XVRkOjkyz+bJC7a2Rce2svNrdx/Gb9FMxsEACpCBRsLP1yN1p3pGGbQCqr4dol5WTNdWXJeNLY88cDantoLD/98QsH8JMbG1ipZEsNtSwoMzr/yh8ORI5FsyAQ7AkVIhkf4mgoowh7AJFwFHQgHJYxo7kETZPdAAief64PiYQOUaLg9onqS4BCwUJ5SMbCCwKYfX037v9hE1Z+3on31sfw3u4sFs514qyrx+O2e3rx5ttRWIaAo+0j/PwZXvroylBsJGP/qXOoOPSJADYsB0FTUMimHc6F05wVfXG9eeu+XHBnp8XeP6JiOKVzgHOvwsgXZgmYUwtk8hyazlFX54CsMHR25CCIFAQABQcH+WBz72AcrT02fr7fQuz9ZnS/M4g7fpSApAiQKcf1V3qx7BofIJYALhEPPdKN7646TpbNd9vP3VLxx6dez7YLpwNAAPAN4M/cMGRJ4Vp184GRgQUNrvxdy4OVps3DiYwdaB/Q3Xu6VPbjV9J4eptudw0zcsV0EU4HR29vETbnUBQGgQCqRTGQIUirBNUlNgIOC0wg2HzIxqJzKhAo1bD2vRxkpwCvi8IwOB5/IYXd+3OoiyShcwNTJpdAkBhXixYEgUoCt063UfurtACI3ABaGm5iA6miqKumGPZwZdwYp7s2KHkrgjR8uCtfd9OTSWXzzgJvDFFc1UxQU0qgmxyGBQwVBBzPMmgmRq1vAdVeC6/vy+NYjuLdN2ZjPMnga7f3omAxMDp6pioxIFuwcGRQR9cwAOgcYPQX360sXjzH+dZPXs0cP+MDJN4CPBNtpo3hBBkBBK4ZJKZRgVvUuaTZPbbEiQn3vxT3P7xxBJQK9vSIDd3iKJoiVAvgtkUcIkN9uYiaUmDTAR0ZQvDGi1OxcKqG/3x0EOtey8PpYgDnkBiQKnDs6jMwlNb42IiTXrZAxoxxzsL8Rkf7ziP6Xq4auU/VEPmg9rQAz0RBw+Ew9fldYt+g4Qj7Wcm88crkV/5cGLPmpaTQFdMgMDbKPtyGzYFMlnPAxLQaBft6DbTcWYmWWwJ47bF+PP3rAkSZQhJGA7g9bmJPjw6Ak5sv9+P2K0tzFSXoGc6h951dhWGqsGx/kup/T4NwtJuDJioiLwKQDZt4z5vuiAxnrHBBtV2yRAQCEBucMoGKqmo573gqRjfv1jmlHO9tHI9gsYBv3huHwyNAFoB0kWNnr4FERufjqmS65royc9k8T29bj96xsyOfgMWKnhJbQ5tXP9j06bo5p5QTPWRSnwsxl9slxuKmVFNJpCq/rNjEkijhRGIMHMRV7hPKPQ5ae+3DUe9Lb6fsB1aGyPkTRHzviRF43BRHBk0c7Dc4wOmNn/Ph9iv9WY9Mjv5uR6ZTFMS0UxA0JEebgiv+l03B08rJVmtpuIkpMIWcbhAXAJNYRHLaRGGUDeWJPGOMIxTyC80X39Pn336wYF9zvpf0HNews8dEtmhheoODrPpiqXnRbFfngR69c0+7moj4ZY2M5Iqn2hP/nwE4KSfrx8E4cO65o8880Waij49RU1XEgZzqnNtUUpUvmnMvuqfH3Rs37NElGaW3X1mCW6/wDzsUeuT1belup2LlFUvSO/OSedNjHdaplP0/B/BJ8uiNDawpXBCPxZnr0nme2tbDavOtz8Q9nNv4wZf81mULvT2th9VDB/u02LiQpA8kC3q1O2Yt+lAz/P8VwKh3mqh7ui4PxAvKhc2+4EBKqxMphKqAOPjG+/mY5DIybm+JunvHEQtNp/6k4cPyDwUAjOaKP9nAavyG0DVoieMqmGRZjB4bNo1QuaGXJl36X/wd1v+k+En5hwM4+eVLNNpML3DFaEZwkbw6RMb4ZTsajdg3PLPz76fGf5RwPuqRlpZP/jTnk+S/ASsyJfgXekIWAAAAAElFTkSuQmCC', x: 27, y: 24 }
+    };
+    const CURSOR_CSS = Object.fromEntries(Object.entries(CURSOR_ART).map(([k, c]) => [k, `url("${c.url}") ${c.x} ${c.y}, auto`]));
+    function hoverTarget() {   // what the cursor points at in the world: { kind: 'attack' | 'pickup' | 'interact', near, act } or null
+      if (!mouseAim.inside || anyOpen() || naming()) return null;
+      const wx = (mouseAim.cx - cam.ox) / cam.z / TILE, wy = (mouseAim.cy - cam.oy) / cam.z / TILE;
+      for (const d of drips) if (!d.dead && !cloaked(d) && ellDist(foeBody(d), wx, wy) <= 0.15) return { kind: 'attack', near: true };
+      const loot = lootable();
+      for (const d of drips) {   // beaten bodies with loot (their old box)
+        if (!d.dead || !d.loot || d.absorbed) continue;
+        const n = foeSize(d), hgt = d.kind === 'loader' ? 1.6 : d.kind === 'queen' ? 1.8 : 1;
+        if (wx >= d.x - 0.15 && wx <= d.x + n + 0.15 && wy >= d.y + 1 - hgt && wy <= d.y + 1) return { kind: 'pickup', near: loot === d, act: () => { playSfx('interact'); lootTarget = d; openWindow('loot'); } };
+      }
+      const hv = harvestable();
+      for (const n of zoneNodes()) {   // glowing harvest piles
+        if (!nodeReady(n)) continue;
+        const w = n.K.w;
+        if (Math.abs(wx - (n.x + 0.5)) <= w / 2 && wy >= n.y + 1 - w * 0.8 && wy <= n.y + 1) return { kind: 'pickup', near: hv === n, act: () => { mouseAim.harvest = true; startHarvest(n); } };
+      }
+      for (const p of piles) if (p.zone === areaName && wx >= p.x && wx <= p.x + 1 && wy >= p.y - 0.3 && wy <= p.y + 1) return { kind: 'pickup', near: false };   // walk over it to pick it up
+      const fb = facedBuilding();
+      for (const w of WALLS) {   // buildings / NPCs with something to open
+        if (!w.opens) continue;
+        const f = foot(w), a = artSize(w);
+        const x0 = a ? footCX(w) - a.dw / 2 / TILE : f.x0, x1 = a ? x0 + a.dw / TILE : f.x1 + 1, y1 = f.y1 + 1, y0 = a ? y1 - a.dh / TILE : f.y0;
+        if (wx >= x0 && wx <= x1 && wy >= y0 && wy <= y1) return { kind: 'interact', near: fb === w, act: () => { playSfx('interact'); openWindow(w.opens); } };
+      }
+      return null;
+    }
+    function drawCrosshair() {   // (old name) picks the cursor for the frame
+      if (!mouseAim.on && !mouseAim.inside) return;
+      const h = mouseAim.hud ? { kind: 'interact', near: true } : hoverTarget();
+      mouseAim.hover = h;
+      const key = !h ? 'regular' : h.kind === 'attack' ? 'attack' : h.kind + (h.near ? '' : 'Far');
+      if (mouseAim.cursorKey !== key) { mouseAim.cursorKey = key; canvas.style.cursor = CURSOR_CSS[key]; }
+    }
+    function canvasPt(e) {   // client px -> canvas px (the canvas is letterboxed: object-fit contain)
+      const r = canvas.getBoundingClientRect();
+      const s = Math.min(r.width / canvas.width, r.height / canvas.height);
+      const ox = (r.width - canvas.width * s) / 2, oy = (r.height - canvas.height * s) / 2;
+      return { cx: (e.clientX - r.left - ox) / s, cy: (e.clientY - r.top - oy) / s };
+    }
+    const inRect = (b, cx, cy) => b && cx >= b.x && cx <= b.x + b.w && cy >= b.y && cy <= b.y + b.h;
+    canvas.addEventListener('pointermove', e => {   // the mouse aims (computers)
+      if (e.pointerType !== 'mouse') return;
+      const { cx, cy } = canvasPt(e);
+      mouseAim.on = true; mouseAim.inside = true; mouseAim.cx = cx; mouseAim.cy = cy;
+      mouseAim.hud = inRect(lbBtn, cx, cy) || inRect(questBtn, cx, cy);   // over a HUD button: normal pointer, no crosshair
+    });
+    canvas.addEventListener('pointerleave', e => { if (e.pointerType === 'mouse') mouseAim.inside = false; });   // keeps aiming at the last spot
+    addEventListener('pointerup', e => { if (e.button === 0) { mouseAim.down = false; mouseAim.harvest = false; } });   // letting go also stops a mouse harvest
+    addEventListener('blur', () => { mouseAim.down = false; mouseAim.harvest = false; });
     canvas.addEventListener('pointerdown', e => {
       if (naming()) return;
-      const r = canvas.getBoundingClientRect();
-      const s = Math.min(r.width / canvas.width, r.height / canvas.height);   // object-fit: contain
-      const ox = (r.width - canvas.width * s) / 2, oy = (r.height - canvas.height * s) / 2;
-      const cx = (e.clientX - r.left - ox) / s, cy = (e.clientY - r.top - oy) / s;
+      const { cx, cy } = canvasPt(e);
+      if (e.pointerType && e.pointerType !== 'mouse') mouseAim.on = false;   // a finger: phone aim again
       if (!ui && !locked() && lbBtn && e.button === 0 && cx >= lbBtn.x && cx <= lbBtn.x + lbBtn.w && cy >= lbBtn.y && cy <= lbBtn.y + lbBtn.h) { openLeaderboard(); return; }
-      if (!ui && !anyOpen() && e.button === 0 && tapOnHero(cx, cy)) { togglePanel('hero'); return; }   // tap / click the hero: stats
+      if (!ui && !anyOpen() && e.button === 0 && !inCombat() && tapOnHero(cx, cy)) { togglePanel('hero'); return; }   // tap / click the hero: stats (not mid-fight: then it's a swing)
       if (!anyOpen() && e.pointerType && e.pointerType !== 'mouse' && tapWorld(cx, cy)) return;   // finger on the faced building / an enemy
       if (!ui && !locked() && questBtn && e.button === 0 && cx >= questBtn.x && cx <= questBtn.x + questBtn.w && cy >= questBtn.y && cy <= questBtn.y + questBtn.h) { openWindow('quests'); return; }
+      if (!anyOpen() && !locked() && e.button === 0 && e.pointerType === 'mouse') {   // left click in the world: swing toward the cursor (hold to keep swinging)
+        mouseAim.on = true; mouseAim.inside = true; mouseAim.cx = cx; mouseAim.cy = cy; updateMouseAim();
+        const h = hoverTarget();
+        if (h && h.kind !== 'attack') { if (h.near && h.act) h.act(); return; }   // a hand: use it when it's next to him, else nothing (no swing)
+        mouseAim.down = true; heroAttack(); return;
+      }
       if (!anyOpen()) return;
       if (itemMenu) {   // menu open: a click on an option picks it, anywhere else closes the menu
         const b = itemMenu.box;
@@ -7145,10 +7485,13 @@
       }
     }
     function moveStick(e) {
+      mouseAim.on = false;   // the joystick aims again
       const dx = e.clientX - stick.cx, dy = e.clientY - stick.cy, len = Math.hypot(dx, dy), max = stick.r * 0.85;   // the knob can travel almost to the edge
       const k = len > max ? max / len : 1;
       knobEl.style.transform = `translate(calc(-50% + ${dx * k}px), calc(-50% + ${dy * k}px))`;
-      if (len < stick.r * 0.28) return setStickKeys([]);   // dead zone
+      const dead = stick.r * 0.28;
+      stickVec = len < dead ? null : { x: dx / len * Math.min(1, (len - dead) / (max - dead)), y: dy / len * Math.min(1, (len - dead) / (max - dead)) };   // analog: push further = faster
+      if (len < dead) return setStickKeys([]);   // dead zone
       // 8 directions, but straight ones get 60° each and diagonals only 30°: a slightly crooked push still walks straight
       const deg = (Math.atan2(dy, dx) * 180 / Math.PI + 360) % 360, near = (deg + 45) % 90 - 45;   // angle from the nearest straight axis
       let keys;
@@ -7158,7 +7501,7 @@
     }
     const endStick = e => {
       if (!stick || e.pointerId !== stick.id) return;
-      stick = null; stickEl.classList.remove('on'); knobEl.style.transform = ''; setStickKeys([]);
+      stick = null; stickVec = null; stickEl.classList.remove('on'); knobEl.style.transform = ''; setStickKeys([]);
     };
     stickEl.addEventListener('pointerdown', e => {
       e.preventDefault(); stickEl.setPointerCapture(e.pointerId);
