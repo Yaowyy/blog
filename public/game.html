@@ -6831,7 +6831,9 @@
     const BIG_MAP_N = 7;   // the big map shows 7 × 7 zones with the hero's zone in the middle; cells past the world's edge are fog
     // ---- full map: pan by dragging (mouse / one finger) or W A S D / arrows, with a little glide; zoom with the wheel or a pinch;
     // Space or the centre button returns to the hero's zone at the normal zoom. Undiscovered zones stay fog.
-    const MAPV = { cx: 0, cy: 0, span: 7, vx: 0, vy: 0, t: 0, ptrs: new Map(), pinch: null, keys: new Set(), rect: null, btn: null, lastMove: 0 };
+    const MAPV = { cx: 0, cy: 0, span: 7, vx: 0, vy: 0, t: 0, ptrs: new Map(), pinch: null, keys: new Set(), rect: null, btn: null, lastMove: 0, zoomAt: 0 };
+    const MAP_CACHE_CW = 200;   // the cached map picture's zone width at most (px); zooming closer scales it up
+    let MAPC = null;            // { canvas, key, cw, ch, b0, a0 }: the whole world drawn once
     const mapSpanMin = 3, mapSpanMax = () => Math.max(MAP_BOUNDS.bMax - MAP_BOUNDS.bMin + 1, MAP_BOUNDS.aMax - MAP_BOUNDS.aMin + 1) + 1;   // in: 3 zones across; out: the whole world
     function mapReset() { const [ha, hb] = coordOf(areaName); MAPV.cx = hb + 0.5; MAPV.cy = -ha + 0.5; MAPV.span = BIG_MAP_N; MAPV.vx = MAPV.vy = 0; MAPV.t = 0; }
     function mapClamp() {   // stay over the world (half a zone of slack at each edge); a world smaller than the view stays centred
@@ -6856,7 +6858,7 @@
     function mapZoomAt(px, py, span) {   // zoom keeping the map point under (px, py) in place
       const R = MAPV.rect; if (!R) return;
       const cw0 = R.w / MAPV.span, ch0 = R.h / MAPV.span, wx = MAPV.cx + (px - R.x - R.w / 2) / cw0, wy = MAPV.cy + (py - R.y - R.h / 2) / ch0;
-      MAPV.span = Math.max(mapSpanMin, Math.min(mapSpanMax(), span));
+      MAPV.span = Math.max(mapSpanMin, Math.min(mapSpanMax(), span)); MAPV.zoomAt = performance.now();
       const cw1 = R.w / MAPV.span, ch1 = R.h / MAPV.span;
       MAPV.cx = wx - (px - R.x - R.w / 2) / cw1; MAPV.cy = wy - (py - R.y - R.h / 2) / ch1;
       mapClamp();
@@ -6880,9 +6882,32 @@
       mapStep();
       const zcw = w / MAPV.span, zch = h / MAPV.span, hv = MAPV.span / 2;
       const bLeft = Math.floor(MAPV.cx - hv) - 1, bRight = Math.ceil(MAPV.cx + hv) + 1, aTop = Math.ceil(hv - MAPV.cy) + 1, aBottom = Math.floor(-MAPV.cy - hv) - 1;
-      const x0 = x + w / 2 + (bLeft - MAPV.cx) * zcw, y0 = y + h / 2 + (-aTop - MAPV.cy) * zch;
       ctx.save(); rr(Math.round(x), Math.round(y), Math.round(w), Math.round(h), 12); ctx.clip();   // nothing spills past the map window
-      drawMapGrid(x0, y0, zcw, zch, aTop, aBottom, bLeft, bRight, true);
+      // the map is drawn once into a picture of the whole world (MAPC) and only moved / scaled here every frame; the picture is
+      // redrawn only when a zone is discovered or the hero changes zone (MAP_CACHE_CW px a zone; zooming just scales it)
+      const M = MAP_BOUNDS, wantCw = phoneView ? 140 : MAP_CACHE_CW, key = discovered.size + '|' + areaName;   // one fixed size: zooming never redraws it
+      if (!MAPC || MAPC.key !== key || MAPC.cw !== wantCw) {
+        const cw = wantCw, ch = cw * 13 / 21, pad = 2, cols = M.bMax - M.bMin + 1 + 2 * pad, rowsN = M.aMax - M.aMin + 1 + 2 * pad;
+        const c = MAPC && MAPC.canvas.width === Math.ceil(cols * cw) && MAPC.canvas.height === Math.ceil(rowsN * ch) ? MAPC.canvas : document.createElement('canvas');
+        c.width = Math.ceil(cols * cw); c.height = Math.ceil(rowsN * ch);
+        const g = c.getContext('2d'); g.clearRect(0, 0, c.width, c.height);
+        drawMapGrid(0, 0, cw, ch, M.aMax + pad, M.aMin - pad, M.bMin - pad, M.bMax + pad, true, g, false);
+        MAPC = { canvas: c, key, cw, ch, b0: M.bMin - pad, a0: M.aMax + pad };
+      }
+      const k = zcw / MAPC.cw, ix = x + w / 2 + (MAPC.b0 - MAPV.cx) * zcw, iy = y + h / 2 + (-MAPC.a0 - MAPV.cy) * zch, iw = MAPC.canvas.width * k, ih = MAPC.canvas.height * k;
+      if (fogPattern && (ix > x || iy > y || ix + iw < x + w || iy + ih < y + h)) {   // fog past the picture's edges, lined up with the picture's own fog
+        fogPattern.setTransform(new DOMMatrix().translate(x + w / 2 + (M.bMin - MAPV.cx) * zcw, y + h / 2 + (-M.aMax - MAPV.cy) * zch).scale(zcw * 2.2 / ART.mapFog.naturalWidth));
+        ctx.fillStyle = fogPattern; ctx.fillRect(x, y, w, h);
+      }
+      {   // only the part of the picture inside the window
+        const vx0 = Math.max(x, ix), vy0 = Math.max(y, iy), vx1 = Math.min(x + w, ix + iw), vy1 = Math.min(y + h, iy + ih);
+        if (vx1 > vx0 && vy1 > vy0) ctx.drawImage(MAPC.canvas, (vx0 - ix) / k, (vy0 - iy) / k, (vx1 - vx0) / k, (vy1 - vy0) / k, vx0, vy0, vx1 - vx0, vy1 - vy0);
+      }
+      {   // the blinking dot where the hero stands (not in the picture)
+        const blink = 0.6 + 0.4 * Math.sin(performance.now() / 200);
+        const dx = x + w / 2 + (hb + (player.x + 0.5) / COLS - MAPV.cx) * zcw, dy = y + h / 2 + (-ha + (player.y + 0.5) / ROWS - MAPV.cy) * zch;
+        ctx.fillStyle = `rgba(255, 220, 0, ${blink})`; ctx.beginPath(); ctx.arc(dx, dy, 6, 0, Math.PI * 2); ctx.fill();
+      }
       ctx.restore();
       ctx.strokeStyle = '#fff'; ctx.lineWidth = 2; rr(Math.round(x) - 1, Math.round(y) - 1, Math.round(w) + 2, Math.round(h) + 2, 13); ctx.stroke();   // frame around the map, like the window's
       ctx.fillStyle = '#8a8a8a'; ctx.font = '20px ' + MONO; ctx.textAlign = 'left';
