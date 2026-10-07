@@ -664,6 +664,7 @@
     // forest enemies' loot (sold at the ATB-Market for now; MutaTech recipes later)
     { name: 'Spore Sac',  class: 'resource', stack: 64, gain: {}, value: 5, rarity: 'common', art: 'sporeSac', desc: 'A soft sac of glowing spores from a Sporeling.' },
     // harvested: hold Space (hold A on phones) for 5 s on a glowing pile in the world (see HARVEST)
+    { name: 'Damaged Courier Shell', class: 'resource', stack: 4, gain: {}, value: 450, rarity: 'rare', art: 'damagedCourierShell', desc: 'A dented courier pack, its armoured hatch jammed shut. MutaTech could fix this.' },   // Dispatch Runner loot (10%)
     { name: 'Copper Wire', class: 'resource', stack: 64, gain: {}, value: 3, rarity: 'common', art: 'copperWire', desc: 'Old copper cable pulled out of a slum junction box.' },
     { name: 'Neon Moss', class: 'resource', stack: 64, gain: {}, value: 4, rarity: 'common', art: 'neonMoss', desc: 'Glowing moss scraped off fallen logs and rusty wrecks in the forests.' },
     { name: 'Sludge Crystal', class: 'resource', stack: 64, gain: {}, value: 6, rarity: 'common', art: 'sludgeCrystal', desc: 'A toxic crystal grown out of the lakeshore sludge. Still warm.' },
@@ -692,7 +693,8 @@
   const RECIPES = [
     { make: 'Tar Orb', count: 1, cost: [['Tar', 10], ['MutaGen', 1]], energy: 20, minLevel: 2 },
     { make: 'baNano Sword', count: 1, cost: [['Banana sword', 1], ['MutaGen', 5]], energy: 30, minLevel: 4 },   // the Banana sword must be in the inventory (not equipped)
-    { make: 'Courier Shell', count: 1, cost: [], energy: 0, soon: true },   // soon: listed, recipe not ready yet
+    { make: 'Courier Shell', count: 1, cost: [['Damaged Courier Shell', 1], ['AI chip', 6], ['Copper Wire', 30]], energy: 50, minLevel: 6 },
+    // soon: listed, recipe not ready yet
     { make: 'Vault Pack', count: 1, cost: [], energy: 0, soon: true },
   ];
   const SCRAP_DEALER = { scrapPerCost: 0.0125 };
@@ -797,7 +799,8 @@
     forest:     { name: 'forest', floor: 'groundLake' },     // dead forest: lake-shore mud with fallen leaves
     deepForest: { name: 'deep forest', floor: 'groundLake' },   // same floor and passages as the forest, more leaves
     wasteland:  { name: 'industrial wasteland', floor: 'groundWasteland' },   // north of the abandoned factory: scrapyards, Scrap Crawlers
-    pit:        { name: 'industrial pit', floor: 'groundPit' },   // 4:-4, the future second boss arena (Scrap Crawlers for now)
+    pit:        { name: 'industrial pit', floor: 'groundPit' },
+    grid:       { name: 'grid', floor: 'groundGrid' },   // The Grid (-1:0 .. -2:1): above-ground power district under the city   // 4:-4, the future second boss arena (Scrap Crawlers for now)
   };
   const ZONE_LIST = {
     '0:0': 'city',
@@ -812,7 +815,12 @@
     '6:3': 'slums', '6:4': 'slums', '7:4': 'slums',
     '3:-3': 'wasteland', '3:-2': 'wasteland', '4:-3': 'wasteland', '4:-2': 'wasteland', '4:-1': 'wasteland',
     '5:-4': 'wasteland', '5:-3': 'wasteland', '5:-2': 'wasteland', '6:-2': 'wasteland', '4:-4': 'pit',
+    // The Grid (south of the city) and the southern slums below it, down to the deep forest (added 6 Oct 2026; NEW_ZONES)
+    '-1:0': 'grid', '-1:1': 'grid', '-2:0': 'grid', '-2:1': 'grid',
+    '-3:0': 'slums', '-3:1': 'slums', '-3:2': 'slums', '-4:2': 'slums', '-5:1': 'slums', '-5:2': 'slums', '-6:2': 'slums', '-7:1': 'slums', '-7:2': 'slums',
   };
+  // zones added after the world was first rolled out: generated last, so every older zone keeps its exact layout
+  const NEW_ZONES = new Set(['-1:0', '-1:1', '-2:0', '-2:1', '-3:0', '-3:1', '-3:2', '-4:2', '-5:1', '-5:2', '-6:2', '-7:1', '-7:2']);
   // passages between neighbouring zones: [zone, zone, where along the shared edge (0 = top/left end, 1 = bottom/right end)]
   const PASSAGES = [
     ['0:0', '0:1', 0.83], ['1:1', '0:1', 0.59], ['1:0', '1:1', 0.8], ['1:1', '1:2', 0.2], ['1:2', '1:3', 0.82],
@@ -835,6 +843,12 @@
     // industrial wasteland (north of the abandoned factory; only way in: 2:-3 -> 3:-3) and the industrial pit 4:-4
     ['3:-3', '2:-3', 0.07], ['3:-3', '3:-2', 0.86], ['4:-2', '3:-2', 0.5], ['4:-3', '4:-2', 0.5], ['4:-2', '4:-1', 0.41],
     ['5:-2', '4:-2', 0.5], ['5:-3', '5:-2', 0.11], ['5:-4', '5:-3', 0.89], ['5:-4', '4:-4', 0.09], ['6:-2', '5:-2', 0.91],
+    // The Grid: from the city's bottom-left road and from slums 0:1; then the southern slums down to the deep forest (-7:0).
+    // The Grid's passages sit on odd tiles (roads are drawn in 2 x 2 blocks starting on odd columns / rows) and the through
+    // roads run straight: columns 7-8 from the city down to -3:0, columns 39-40 from 0:1 down to -3:1.
+    ['0:0', '-1:0', 0.17], ['0:1', '-1:1', 0.85], ['-1:0', '-1:1', 0.15], ['-1:0', '-2:0', 0.16], ['-1:1', '-2:1', 0.86], ['-2:0', '-2:1', 0.82],
+    ['-2:0', '-3:0', 0.17], ['-2:1', '-3:1', 0.85], ['-3:0', '-3:1', 0.55], ['-3:1', '-3:2', 0.84], ['-3:2', '-4:2', 0.89], ['-4:2', '-5:2', 0.51],
+    ['-5:1', '-5:2', 0.49], ['-5:2', '-6:2', 0.88], ['-6:2', '-7:2', 0.49], ['-7:0', '-7:1', 0.15], ['-7:1', '-7:2', 0.52],
   ];
   const coordOf = id => id.split(':').map(Number);
   // zone numbers for levels and exp: negative coordinates count as positive (-3:-3 works like 3:3)
@@ -960,8 +974,11 @@
     // picture (pom-pom up) while her window is open. Both share one canvas; the raised pom-pom makes it 1.8 tiles tall so her
     // body stays the hero's 1.75 tiles.
     AREAS['0:0'].walls.push({ x: 31, y: 13, w: 1, h: 1, color: '#ff2bd6', label: 'Pixi', opens: 'pixi', art: 'npcPixi', artH: 1.8, npc: true, facesRight: true });
+    // Sparky: the electrician, gives the Grid quests. Stands at tile (38, 19), just left of the east road, south of the noodle bar,
+    // with a powered grid node behind her (added with the Grid buildings). Raises her sparking hand while a quest of hers is ready.
+    AREAS['0:0'].walls.push({ x: 39, y: 20, w: 1, h: 1, color: '#ff8a3d', label: 'Sparky', opens: 'sparky', art: 'npcSparky', artH: 1.75, npc: true, facesRight: true });
     // roads (always 2 tiles wide): [x0, y0, x1, y1] rectangles of road tiles, drawn with the road pieces (see drawRoads)
-    const ROADS = [[3, 5, 44, 6], [3, 7, 4, 14], [39, 7, 40, 24], [5, 13, 38, 14], [7, 15, 8, 26], [27, 21, 28, 24], [9, 23, 26, 24], [29, 23, 38, 24], [41, 23, 46, 24]];
+    const ROADS = [[3, 5, 44, 6], [3, 7, 4, 14], [39, 7, 40, 24], [5, 13, 38, 14], [7, 15, 8, 28], [27, 21, 28, 24], [9, 23, 26, 24], [29, 23, 38, 24], [41, 23, 46, 24]];
     const road = AREAS['0:0'].road = [...Array(ROWS)].map(() => Array(COLS).fill(false));
     for (const [x0, y0, x1, y1] of ROADS) for (let y = y0; y <= y1; y++) for (let x = x0; x <= x1; x++) road[y][x] = true;
   }
@@ -1230,11 +1247,20 @@
       rBank: { w: 3, h: 2, art: 'ruinCredBank', artW: 3.4, ht: 2.5 }, rDoc: { w: 3, h: 2, art: 'ruinRipperdoc', artW: 3.3, ht: 2.2 },
       b3a: { w: 3, h: 2, art: 'block3Abandoned', artW: 3.2, ht: 3.5 }, b6a: { w: 3, h: 2, art: 'block6Abandoned', artW: 3.2, turned: 'R', ht: 6.5 },
       billRuinA: { w: 1, h: 1, art: 'ruinBillboardL', artW: 2.2, turned: 'L', ht: 5.8 }, billRuinB: { w: 1, h: 1, art: 'ruinBillboard', artW: 2.2, turned: 'R', ht: 4.8 },
+      // The Grid. Art is picked per building after placing (GRID_ART: variants A/B/C by position, not by the random roll).
+      // Power stations are 5 x 2: their pictures came out wide and flat (a deeper footprint would leave invisible walls behind them).
+      pstation: { w: 5, h: 2, art: 'powerStationA', artW: 5.4, ht: 3.4, color: '#24405e', label: 'Power Station' },
+      transformer: { w: 2, h: 2, art: 'transformerA', artW: 2.4, ht: 2.2, color: '#3a5677', label: 'Transformer' },
+      gridNode: { w: 2, h: 1, art: 'gridNodeOff', artW: 2.4, ht: 1.8, turned: 'R', color: '#5a4a2a', label: 'Grid Node (offline)' },   // gridNodeOn / On2 once powered (Sparky's Gridlock)
     };
     let seed = 20260929;
     const rnd = () => ((seed = (seed * 1664525 + 1013904223) >>> 0) / 4294967296);
     const shuffle = a => { a = a.slice(); for (let i = a.length - 1; i > 0; i--) { const j = Math.floor(rnd() * (i + 1)); [a[i], a[j]] = [a[j], a[i]]; } return a; };
-    const zonesOf = t => Object.keys(AREAS).filter(id => ZONE_LIST[id] === t).sort();
+    const zonesOf = t => Object.keys(AREAS).filter(id => ZONE_LIST[id] === t && !NEW_ZONES.has(id)).sort();   // the original zones (NEW_ZONES: at the end)
+    // the original zones are rolled out exactly as before, i.e. without the passages to the new zones (those are added back
+    // at the end, and whatever stands in front of them is cleared)
+    const fullExits = {};
+    for (const id in AREAS) if (!NEW_ZONES.has(id) && AREAS[id].exits.some(e => NEW_ZONES.has(e.to))) { fullExits[id] = AREAS[id].exits; AREAS[id].exits = fullExits[id].filter(e => !NEW_ZONES.has(e.to)); }
     const lakeT = (A, x, y) => !!(A.lake && A.lake.rows[y] && A.lake.rows[y][x] === '#');
     const bigT = (A, x, y) => !!(A.big && A.big.rows[y] && A.big.rows[y][x] === '#');
     const inFoot = (g, x, y, p) => x >= g.x0 - p && x <= g.x1 + p && y >= g.y0 - p && y <= g.y1 + p;
@@ -1245,7 +1271,7 @@
     const quadOf = (x, y) => (y > MY ? 2 : 0) + (x > MX ? 1 : 0);
     const mirrored = (def, x0, w) => { const c = x0 + w / 2; return def.turned === 'L' ? c < COLS / 2 : def.turned === 'R' ? c > COLS / 2 : false; };
     const makeWall = (def, x0, y1) => ({ w: def.w, h: def.h, art: def.art, artW: def.artW, color: def.color || '#3a4257', label: def.label, opens: def.opens,
-      x: x0 + 1 + Math.floor(def.w / 2) - (def.w % 2 ? 0 : 1), y: y1 + 1, flip: mirrored(def, x0, def.w), scenery: def.art, ht: def.ht, open: def.open });
+      x: x0 + 1 + Math.floor(def.w / 2) - (def.w % 2 ? 0 : 1), y: y1 + 1, flip: mirrored(def, x0, def.w), scenery: def.art, ht: def.ht, open: def.open, box: def.box });
     // is the rectangle (plus a 1-tile ring) free of buildings, water, big pieces and the approach to passages?
     function areaClear(A, x0, x1, y0, y1, opt = {}) {
       if (x0 < 1 || x1 > COLS - 2 || y0 < 1 || y1 > ROWS - 2) return false;
@@ -1255,6 +1281,7 @@
         if (A.exits.some(e => e.tiles.some(([tx, ty]) => Math.abs(tx - x) < 4 && Math.abs(ty - y) < 4))) return false;
         if ((inside || !opt.shore) && lakeT(A, x, y)) return false;
         if (bigT(A, x, y)) return false;
+        if (A.road && A.road[y] && A.road[y][x]) return false;   // the Grid's roads (only zones with roads besides the fixed city)
       }
       return true;
     }
@@ -1477,6 +1504,75 @@
         const g = newGroup(); for (const [x, y] of pick) addFoe(A, 'crawler', x, y, g); p++;
       }
     }
+    // ---- zones added later (NEW_ZONES), after everything above so the older world rolls out exactly as before ----
+    // 1) the passages to them come back, and whatever was rolled out in front of them is cleared (3 tiles around)
+    for (const id in fullExits) {
+      const A = AREAS[id]; A.exits = fullExits[id];
+      const near = (x, y) => A.exits.some(e => NEW_ZONES.has(e.to) && e.tiles.some(([tx, ty]) => Math.max(Math.abs(tx - x), Math.abs(ty - y)) <= 3));
+      const blocks = o => { const f = foot(o); for (let y = f.y0; y <= f.y1; y++) for (let x = f.x0; x <= f.x1; x++) if (near(x, y)) return true; return false; };
+      if (id !== '0:0') A.walls = A.walls.filter(o => !blocks(o));   // the city's buildings are hand-placed (its road leads to the passage)
+      if (A.decos) A.decos = A.decos.filter(o => !blocks(o));
+      if (A.extraFoes) A.extraFoes = A.extraFoes.filter(f => !foeTiles(f).some(([x, y]) => near(x, y)));
+    }
+    const newOf = t => Object.keys(AREAS).filter(id => ZONE_LIST[id] === t && NEW_ZONES.has(id)).sort();
+    // 2) southern slums: built like the others (a mixed row in every quadrant, every 8th row the street block, every 3rd row
+    //    a ruined billboard), then their Drips by the same rule (4 near the city, +2 for every 2 zones further)
+    for (const id of newOf('slums')) {
+      AREAS[id].walls = [];
+      for (const q of [0, 1, 2, 3]) {
+        rowN++;
+        let row = rowN % 8 === 0 ? placeRow(id, ['street'], q) : null;
+        if (!row) row = mixedRow(id, q, null);
+        if (row && rowN % 3 === 0) billboardBy(id, row);
+      }
+    }
+    for (const id of newOf('slums')) {
+      const A = AREAS[id], ring = zoneLevel(id), n = ring <= 2 ? 4 : 4 + 2 * Math.ceil((ring - 2) / 2);
+      A.drips = 0; A.foes = A.foes.filter(f => f.kind !== 'drip');
+      for (let i = 0, t = 0; i < n && t < 3000; t++) {
+        const x = 2 + Math.floor(rnd() * (COLS - 4)), y = 2 + Math.floor(rnd() * (ROWS - 4));
+        if (!tileOk(A, x, y) || behindTall(id, x, y) || !farFromFoes(A, [[x, y]], -1)) continue;
+        addFoe(A, 'drip', x, y); i++;
+      }
+    }
+    // 3) The Grid: 2-tile roads (a main street across the middle each way, plus a spur from every passage to it), one power
+    //    station and 5 transformers per zone (never on a road, 1 tile of pavement around), 3 grid nodes in 3 of the 4 zones
+    //    right by a road (offline until the Electrician's quest), and 2-3 Mav-1K drones per zone. Since 6 Oct: the buildings and
+    //    drones come from the user's own layout (GRID_LAYOUT below); only the roads are still worked out here.
+    const grid = newOf('grid');
+    for (const id of grid) {
+      const A = AREAS[id], road = A.road = [...Array(ROWS)].map(() => Array(COLS).fill(false));
+      const fill = (x0, y0, x1, y1) => { for (let y = Math.min(y0, y1); y <= Math.max(y0, y1); y++) for (let x = Math.min(x0, x1); x <= Math.max(x0, x1); x++) if (inGrid(x, y)) road[y][x] = true; };
+      const RX = MX, RY = MY - 1;   // main streets: columns RX..RX+1 (23-24), rows RY..RY+1 (13-14): odd starts, so the 2 x 2 road pieces line up
+      fill(0, RY, COLS - 1, RY + 1); fill(RX, 0, RX + 1, ROWS - 1);
+      for (const e of A.exits) {
+        const [[ax, ay], [bx, by]] = e.tiles;
+        if (e.dir === 'up' || e.dir === 'down') fill(ax, ay, bx, RY + (e.dir === 'up' ? 1 : 0));
+        else fill(ax, ay, RX + (e.dir === 'left' ? 1 : 0), by);
+      }
+    }
+    // buildings and drones: the user's hand-made layout (the-grid-zones.xlsx, 6 Oct 2026). Token = kind + variant + top-left tile
+    // (0-based): TA/TB/TC transformer 2 x 2, PA/PB/PC power station 5 x 2, N grid node 2 x 1 (mirrored on the right half of the
+    // zone, so it faces the middle), D a Mav-1K drone spawn.
+    const GRID_LAYOUT = {
+      '-1:0': 'TA2,2 TA10,2 TA14,2 TA18,2 TA2,6 TA10,6 TA14,6 TC26,6 TC31,6 TC36,6 TC41,6 TB18,8 TC2,10 TA10,10 TA14,10 TC26,10 TC31,10 TC36,10 TC41,10 TB1,17 TB4,17 TC10,17 TB14,17 TB18,17 TA28,17 TA33,17 TA37,17 TA42,17 TB1,21 TB4,21 TA10,21 TA14,21 TA18,21 PA28,22 TB35,22 PB39,22 TB1,25 TB4,25 TA10,25 TA14,25 TA18,25 TA33,26 TA37,26 D23,3 D7,13 D23,14 D35,20',
+      '-1:1': 'TA26,2 TB30,2 TB34,2 TB2,6 TB7,6 TB12,6 TC17,6 TC26,6 TC30,6 TC34,6 TB2,10 TC7,10 TC12,10 TC17,10 TA26,10 TB30,10 TB34,10 TA3,17 TA7,17 TA13,17 TA17,17 TC26,17 TC30,17 TB34,17 TC43,17 TB26,21 TB30,21 TC34,21 TB43,21 PC3,22 PB13,22 TA26,25 TA30,25 TA34,25 TA43,25 TB10,26 TB14,26 TB18,26 N6,27 D22,4 D21,14 D40,14 D4,25 D8,25',
+      '-2:0': 'TB2,2 TC10,2 TB14,2 TB18,2 TA26,2 N34,3 TA2,6 TA10,6 TA14,6 TA18,6 PB28,6 PC38,6 TA2,10 TA10,10 TA14,10 TA18,10 TB26,10 TB31,10 TB36,10 TC41,10 TC43,16 TC2,17 TC10,17 TC14,17 TC18,17 TA25,18 TA29,18 TA33,18 TC37,18 TC43,19 TA2,21 TA10,21 TA14,21 TA18,21 TA2,25 TC10,25 TC14,25 TA18,25 TA27,25 TA31,25 TA35,25 TC39,25 D32,1 D37,4 D7,14 D23,14 D24,23',
+      '-2:1': 'TC26,1 TB30,1 TB34,1 TA2,2 TA6,2 TA10,2 TB14,2 TB18,2 TA26,5 TA30,5 TA34,5 TC43,5 PA4,6 PB15,6 TA26,9 TC30,9 TA34,9 TB2,10 TB6,10 TA10,10 TA14,10 TA18,10 TC43,10 N37,16 TA30,17 TA33,17 TA1,18 TA5,18 TA9,18 TC13,18 TB17,18 TB26,19 TB37,19 TA30,21 TC33,21 TB26,24 PA30,24 TB37,24 TC4,25 TC9,25 TC14,25 D38,12 D24,15 D34,15 D43,15 D21,24',
+    };
+    const GRID_ART = { powerStationA: [5.4, 3.42], powerStationB: [5.8, 2.61], powerStationC: [5.8, 2.56], transformerA: [2.4, 2.21], transformerB: [2.4, 3.62], transformerC: [2.4, 2.37] };
+    for (const id of grid) for (const tok of GRID_LAYOUT[id].split(' ')) {
+      const A = AREAS[id], m = tok.match(/^([TPND])([ABC]?)(\d+),(\d+)$/), x = +m[3], y = +m[4];
+      if (m[1] === 'D') { addFoe(A, 'drone', x, y); continue; }
+      const def = SCEN[{ T: 'transformer', P: 'pstation', N: 'gridNode' }[m[1]]], w = makeWall(def, x, y + def.h - 1);
+      if (m[2]) { w.art = (m[1] === 'T' ? 'transformer' : 'powerStation') + m[2]; [w.artW, w.ht] = GRID_ART[w.art]; }
+      if (m[1] === 'N') { w.gridNode = true; w.opens = 'node'; }   // offline until the hero restores it (Sparky's Gridlock)
+      A.walls.push(w);
+    }
+    // the city's powered node, behind Sparky (tiles 36-37, row 19), facing her
+    const cityNode = makeWall(SCEN.gridNode, 36, 19);
+    Object.assign(cityNode, { gridNode: 'city', flip: false, art: 'gridNodeOn', label: 'Grid Node' });
+    AREAS['0:0'].walls.push(cityNode);
   }
   const footCX = w => { const f = foot(w); return (f.x0 + f.x1 + 1) / 2; };   // footprint centre, in tiles
   const START = { x: 21, y: 11 };   // 0-based: just below HomeDome
@@ -1585,10 +1681,24 @@
   const CRAWLER = { name: 'Scrap Crawler', reveal: 4, pack: 4, pounceW: 0.9, leash: 10, stepMs: 1000 / 3, popMs: 500, windupMs: 500, leapMs: 250, pounceRange: [2, 3], pounceLen: 3,
                     pounceMult: 0.12, pounceCdMs: 3000, slow: 0.2, slowMs: 2000, biteWindupMs: 300, biteEveryMs: 1200, biteMult: 0.06,
                     respawnMs: [60000, 90000], lootMs: 30000, fadeMs: 2000, loot: { money: [3, 7], aiChipChance: 0.05 } };
-  const ENEMY = { drip: DRIP, scav: SCAV, drone: DRONE, spore: SPORE, loader: LOADER, queen: QUEEN, crawler: CRAWLER };
+  // Dispatch Runner: a wheeled courier robot, ONE in the world, the first enemy that crosses zones on its own. It rolls a fixed route
+  // (`route`: [zone, from tile, to tile] per zone; the tiles next to the passages) from the middle of deep forest -7:-1 through -7:0
+  // and slums -7:1 to the middle of slums -7:2 and back, resting `restMs` at each end. It keeps moving while the hero is elsewhere.
+  // Within `aggro` m (or when hit) it fights, keeping about `keep` m away: Parcel Toss (purple circle on the hero's spot, the parcel
+  // bursts `tossMs` later: whoever's feet are in it takes ×tossMult) and Express Dash (a purple strip for dashWarnMs, then a dash up to
+  // dashLen m: ×dashMult and the hero is shoved `shove` m). It never follows the hero through a passage; `leash`+ m away it goes back
+  // to its route. At `fleePct` HP it flees along its route at 1000/fleeStepMs m/s; `escapeDist` m from the hero (or out of his zone)
+  // it's gone with its loot. Killed or escaped: a new one starts in the forest middle after respawnMs.
+  const RUNNER = { name: 'Dispatch Runner', aggro: 4, leash: 10, keep: 3, strafe: 0.6, stepMs: 1000 / 3, fleeStepMs: 1000 / 5, fleePct: 0.3, escapeDist: 10, restMs: 10000,
+                   tossRange: [1.5, 6], tossEveryMs: 3000, firstTossMs: 600, tossMs: 800, tossReleaseMs: 400, tossR: 0.9, tossMult: 0.14,
+                   dashRange: [1.5, 4], dashEveryMs: 4500, firstDashMs: 1500, dashWarnMs: 400, dashLen: 4, dashMs: 300, dashW: 0.9, dashMult: 0.12, shove: 1.2,
+                   route: [['-7:-1', [23, 14], [45, 14]], ['-7:0', [1, 14], [45, 3]], ['-7:1', [1, 3], [45, 14]], ['-7:2', [1, 14], [23, 14]]],
+                   respawnMs: [300000, 300000], lootMs: 30000, fadeMs: 2000,
+                   loot: { money: [15, 25], copper: [1, 3], aiChipChance: 0.2, shellChance: 0.1 } };
+  const ENEMY = { drip: DRIP, scav: SCAV, drone: DRONE, spore: SPORE, loader: LOADER, queen: QUEEN, crawler: CRAWLER, runner: RUNNER };
   // enemy max health = round(the hero's max HP at the enemy's level × the enemy's hpMult). Every new enemy gets its own hpMult.
   // Drip ×1: 10 / 12 / 14 / 17 / 21 at lvl 1-5 · Mav-1K ×0.8: 8 / 10 / 11 / 14 / 17 · Toxic Scav ×1.8: 18 / 22 / 25 / 31 / 38
-  CRAWLER.hpMult = 0.6; DRIP.hpMult = 1; DRONE.hpMult = 0.8; SCAV.hpMult = 1.8; SPORE.hpMult = 0.7; LOADER.hpMult = 3; QUEEN.hpMult = 122 / 12;   // Pump Queen: 122 HP at level 2
+  CRAWLER.hpMult = 0.6; RUNNER.hpMult = 1.4; DRIP.hpMult = 1; DRONE.hpMult = 0.8; SCAV.hpMult = 1.8; SPORE.hpMult = 0.7; LOADER.hpMult = 3; QUEEN.hpMult = 122 / 12;   // Pump Queen: 122 HP at level 2
   const enemyMaxHp = (kind, zoneId) => Math.max(1, Math.round(heroHealthCap(10, zoneLevel(zoneId)) * (ENEMY[kind].hpMult ?? 1)));
   const ET = d => ENEMY[d.kind || 'drip'];   // an enemy's type (rules)
   // Scav sheets are cut to the hero's scale (277 px tall ≈ HERO_H tiles): ax = feet centre, foot = px from the cell bottom to the soles
@@ -1604,6 +1714,14 @@
   const CRAWLER_ART = { idle: { frames: 1, cellW: 174, cellH: 142, ax: 87, foot: 4 }, hidden: { frames: 1, cellW: 180, cellH: 106, ax: 90, foot: 4 },
                         emerge: { frames: 4, cellW: 181, cellH: 190, ax: 90, foot: 4 }, walk: { frames: 4, cellW: 183, cellH: 150, ax: 91, foot: 9 },
                         pounce: { frames: 4, cellW: 191, cellH: 182, ax: 95, foot: 9 }, hurt: { frames: 2, cellW: 180, cellH: 134, ax: 90, foot: 8 } };   // 0 crouch, 1-2 airborne, 3 landing
+  const RUNNER_ART = {   // cells in one row, 128 px per tile; ax = wheels centre, foot = px from the cell bottom to the ground; art faces left
+    idle:   { frames: 1, cellW: 302, cellH: 270, ax: 151, foot: 2 },
+    roll:   { frames: 4, cellW: 217, cellH: 251, ax: 108, foot: 3 },   // rolling bob
+    toss:   { frames: 4, cellW: 256, cellH: 283, ax: 128, foot: 3 },   // 0 wind-up, 1 swing, 2 release, 3 follow-through
+    dash:   { frames: 4, cellW: 424, cellH: 210, ax: 212, foot: 4 },   // 0 crouch, 1 launch, 2 full speed, 3 brake
+    hurt:   { frames: 2, cellW: 369, cellH: 275, ax: 184, foot: 3 },   // 0 hurt, 1 defeated
+    parcel: { frames: 4, cellW: 177, cellH: 157, ax: 88, ay: 78 },     // 0-1 flying (moving left), 2-3 burst
+  };
   const LOADER_ART = { idle: {frames:  1,  cellW:  340,  cellH:  325,  ax:  173,  foot:  3}, walk: {frames:  4,  cellW:  317,  cellH:  303,  ax:  161,  foot:  3},
                        whip: {frames:  4,  cellW:  437,  cellH:  349,  ax:  300,  foot:  3}, slam: {frames:  4,  cellW:  342,  cellH:  324,  ax:  172,  foot:  3}, hurt: {frames:  2,  cellW:  367,  cellH:  304,  ax:  207,  foot:  3} };
 
@@ -1647,7 +1765,10 @@
     heroMotherSide: 'art/hero/heroMotherSide.webp', heroMotherDown: 'art/hero/heroMotherDown.webp', heroMotherUp: 'art/hero/heroMotherUp.webp',   // Mothersword attacks
     heroBananoSide: 'art/hero/heroBananoSide.png', heroBananoDown: 'art/hero/heroBananoDown.png', heroBananoUp: 'art/hero/heroBananoUp.png',   // baNano Sword attacks
     ground:       'art/world/ground/ground.webp',   // seamless street floor, no joints (repeats every 6 x 6 tiles)
-    groundSlums: 'art/world/ground/groundSlums.jpg', groundFactory: 'art/world/ground/groundFactory.jpg', groundLake: 'art/world/ground/groundLake.jpg', groundWasteland: 'art/world/ground/groundWasteland.jpg', groundPit: 'art/world/ground/groundPit.jpg',   // zone floors, same repeat
+    groundSlums: 'art/world/ground/groundSlums.jpg', groundFactory: 'art/world/ground/groundFactory.jpg', groundLake: 'art/world/ground/groundLake.jpg', groundWasteland: 'art/world/ground/groundWasteland.jpg', groundPit: 'art/world/ground/groundPit.jpg', groundGrid: 'art/world/ground/groundGrid.jpg',
+    transformerA: 'art/buildings/transformerA.webp', transformerB: 'art/buildings/transformerB.webp', transformerC: 'art/buildings/transformerC.webp',
+    powerStationA: 'art/buildings/powerStationA.webp', powerStationB: 'art/buildings/powerStationB.webp', powerStationC: 'art/buildings/powerStationC.webp',
+    gridNodeOff: 'art/buildings/gridNodeOff.webp', gridNodeOn: 'art/buildings/gridNodeOn.webp', gridNodeOn2: 'art/buildings/gridNodeOn2.webp' /* On / On2: the powered node's 2-frame spark animation (with the Electrician's quest) */,   // zone floors, same repeat
     forestTL: 'art/world/big/forestTL.webp', forestTR: 'art/world/big/forestTR.webp', forestBL: 'art/world/big/forestBL.webp', forestBR: 'art/world/big/forestBR.webp',   // big forest grove quarters (see BIG)
     factoryTL: 'art/world/big/factoryTL.webp', factoryTR: 'art/world/big/factoryTR.webp', factoryBL: 'art/world/big/factoryBL.webp', factoryBR: 'art/world/big/factoryBR.webp',   // big factory quarters
     lakeTL: 'art/world/big/lakeTL.webp', lakeTR: 'art/world/big/lakeTR.webp', lakeBL: 'art/world/big/lakeBL.webp', lakeBR: 'art/world/big/lakeBR.webp',   // toxic lake quarters (see LAKE)
@@ -1690,7 +1811,7 @@
     block4Capsule: 'art/buildings/block4Capsule.png', block5Corp: 'art/buildings/block5Corp.png', block6Market: 'art/buildings/block6Market.png',
     ruinCapsule: 'art/buildings/ruinCapsule.png', ruinCorp: 'art/buildings/ruinCorp.png', ruinMarketTower: 'art/buildings/ruinMarketTower.png',
     talentPainCorrection: 'art/ui/talents/talentPainCorrection.webp', talentVampTech: 'art/ui/talents/talentVampTech.webp', talentReZero: 'art/ui/talents/talentReZero.webp', talentSideHustle: 'art/ui/talents/talentSideHustle.webp', talentCommission: 'art/ui/talents/talentCommission.webp', talentCeoMindset: 'art/ui/talents/talentCeoMindset.webp', talentQuickHands: 'art/ui/talents/talentQuickHands.webp', talentArcaneViolence: 'art/ui/talents/talentArcaneViolence.webp', talentSystemOverclock: 'art/ui/talents/talentSystemOverclock.webp',   // talent icons
-    npcRogue: 'art/npc/rogue.webp', npcPixi: 'art/npc/pixi.webp', npcPixiCheer: 'art/npc/pixiCheer.webp', pixiPortrait: 'art/npc/pixiPortrait.webp', npcChef: 'art/npc/netizenChef.webp', roguePortrait: 'art/npc/roguePortrait.webp', startScreen: 'art/ui/startScreen.webp', techVersity: 'art/buildings/techVersity.webp',   // quest giver in the city, standing, facing the viewer
+    npcRogue: 'art/npc/rogue.webp', npcSparky: 'art/npc/sparky.webp', npcSparkyHand: 'art/npc/sparkyHand.webp', sparkyPortrait: 'art/npc/sparkyPortrait.webp', npcPixi: 'art/npc/pixi.webp', npcPixiCheer: 'art/npc/pixiCheer.webp', pixiPortrait: 'art/npc/pixiPortrait.webp', npcChef: 'art/npc/netizenChef.webp', roguePortrait: 'art/npc/roguePortrait.webp', startScreen: 'art/ui/startScreen.webp', techVersity: 'art/buildings/techVersity.webp',   // quest giver in the city, standing, facing the viewer
     spellTech: 'art/buildings/spellTech.png',   // MutaTech crafting station (3 x 2), turned slightly like the shop
     ruinApartment: 'art/buildings/ruinApartment.png', ruinMarket: 'art/buildings/ruinMarket.png', ruinNoodleBar: 'art/buildings/ruinNoodleBar.png',
     holoBillboard: 'art/buildings/holoBillboard.webp', shackStack: 'art/buildings/shackStack.webp', foodCart: 'art/buildings/foodCart.webp', burntBus: 'art/buildings/burntBus.webp',
@@ -1701,10 +1822,12 @@
     crawlerIdle: 'art/enemies/crawler/crawlerIdle.webp', crawlerHidden: 'art/enemies/crawler/crawlerHidden.webp', crawlerEmerge: 'art/enemies/crawler/crawlerEmerge.webp',
     crawlerWalk: 'art/enemies/crawler/crawlerWalk.webp', crawlerPounce: 'art/enemies/crawler/crawlerPounce.webp', crawlerHurt: 'art/enemies/crawler/crawlerHurt.webp',
     crawlerPortrait: 'art/enemies/crawler/crawlerPortrait.webp',
+    runnerIdle: 'art/enemies/runner/runnerIdle.webp', runnerRoll: 'art/enemies/runner/runnerRoll.webp', runnerToss: 'art/enemies/runner/runnerToss.webp', runnerDash: 'art/enemies/runner/runnerDash.webp',
+    runnerHurt: 'art/enemies/runner/runnerHurt.webp', runnerParcel: 'art/enemies/runner/runnerParcel.webp', runnerPortrait: 'art/enemies/runner/runnerPortrait.webp', damagedCourierShell: 'art/items/bags/damagedCourierShell.webp',
   };
   // big 2 x 3 floor decals: 4 per zone type (BIG_DECALS), art/world/decals/<sheet>1-4.webp
   const BIG_DECALS = { city: 'cityBig', slums: 'slumsBig', greaser: 'greaserBig', factoryIn: 'factoryInBig', factory: 'factoryBig',
-                       wasteland: 'wastelandBig', pit: 'pitBig', lake: 'lakeBig', forest: 'forestBig', deepForest: 'deepForestBig' };
+                       wasteland: 'wastelandBig', pit: 'pitBig', grid: 'gridBig', lake: 'lakeBig', forest: 'forestBig', deepForest: 'deepForestBig' };
   for (const sheet of Object.values(BIG_DECALS)) for (let i = 1; i <= 4; i++) ART_SRC[sheet + i] = `art/world/decals/${sheet}${i}.webp`;
   const ART = Object.fromEntries(Object.entries(ART_SRC).map(([k, src]) => { const im = new Image(); im.src = src; return [k, im]; }));
   const ready = im => im && im.complete && im.naturalWidth > 0;
@@ -1901,9 +2024,17 @@
       { q: 'How do you see your stats?', a: ['Press H or click on my hero', 'Open the map (M)', 'Visit TradeCorp'], right: 0 },
     ];
     let tutN = saved.tutN ?? 0;                                   // progress inside the current task
-    // Pixi's announcement: the latest thing that opened in the city. A new id brings back her pink '!' until she's talked to.
-    const PIXI_NEWS = { id: 'credbank-vault',
-      text: `OMG OMG OMG!! The CredBank is finally OPEN!! It has a super-safe Vault: unlock a bag socket, pop a bag in, and boom, extra storage! Storing stuff is just 1$, taking it back is 2$, and get this... EVERYTHING in the Vault stays even if you, like, totally die!! Go go go, it's right here in the city!` };
+    // Pixi's news, newest first: her window shows the latest PIXI_SHOW. A new first entry brings back her pink '!' until she's talked to.
+    const PIXI_SHOW = 3;
+    const PIXI_WAVE = { delay: 200, hold: 500 };   // ms after her window closes: wait, then pom-pom up (she waves goodbye)
+    const pixiWave = { open: false, at: -1e9 };
+    const PIXI_FEED = [
+      { id: 'runner', title: 'A runaway robot?!', icon: 'runnerPortrait', text: `Okay so, someone from MutaTech saw a ROBOT racing between the deep forest and the slums, like, back and forth, all day!! It throws parcels at people who get too close. Rumour says it carries a busted courier shell that MutaTech can fix. Be careful out there!` },
+      { id: 'sparky', title: 'Meet Sparky!', icon: 'sparkyPortrait', text: `Did you meet Sparky yet?! She's SO cool!! She's the electrician by the east road, just past the noodle bar, and sparks literally come out of her fingers! She needs help getting The Grid's power back on. Go say hi!` },
+      { id: 'credbank-vault', title: 'The CredBank is open!', icon: 'credBank', text: `OMG OMG OMG!! The CredBank is finally OPEN!! It has a super-safe Vault: unlock a bag socket, pop a bag in, and boom, extra storage! Storing stuff is just 1$, taking it back is 2$, and get this... EVERYTHING in the Vault stays even if you, like, totally die!! Go go go, it's right here in the city!` },
+    ];
+    const PIXI_NEWS = { id: PIXI_FEED[0].id };   // the newest entry: her '!' until it's been heard
+    // window: one row per news (icon, title, text), newest first, then the "Yay, thanks Pixi!" button
     let pixiSeen = saved.pixiSeen ?? null;   // the news id the hero last heard from her
     let tutQuiz = saved.tutQuiz ? { ...saved.tutQuiz } : { i: 0, wrong: 0 };   // quiz: next question, wrong answers so far
     const tutReward = () => ({ money: TUT_REWARD.money - TUT_PENALTY.money * tutQuiz.wrong, exp: TUT_REWARD.exp - TUT_PENALTY.exp * tutQuiz.wrong });
@@ -2069,18 +2200,60 @@
         talk: '"Every Drip is a drop of her: the Pump Queen, living fuel in the old gas station in the greaser, 2:2. She burns and she brings friends. Gear up first: a real weapon, armour, food. Then kill her."',
         prog: () => queenKills > 0 ? 1 : 0 },
     ];
-    const rogueDone = new Set(saved.rogueDone || []);       // quests handed in
+    // ---- Sparky's quests (the electrician by the east road): same rules as the Rogue's. Item quests count what's in the bag;
+    // handing in takes the items. Grid nodes are restored by holding Space on them for NODE_HOLD_MS while Gridlock is active.
+    const carriedCount = name => inventory.filter(it => it.name === name && !it.quest).reduce((t, it) => t + (it.count || 1), 0);
+    const SPARKY_QUESTS = [
+      { id: 'gridlock', giver: 'sparky', name: 'Gridlock', lvl: 2, rarity: 'common', need: 3, goal: 'Restore power to 3 grid nodes in The Grid (hold Space on each).',
+        talk: '"The Grid went dark and nobody up there lifts a finger. Three grid nodes are down: take the road from the city\'s bottom-left corner. Hold Space on each one for 5 seconds to reboot it. It only tickles. Mostly."',
+        prog: () => Math.min(3, gridPowered.size) },
+      { id: 'wireMeIn', giver: 'sparky', name: 'Wire me in', lvl: 3, after: 'gridlock', rarity: 'common', need: 5, goal: 'Collect 5 Copper Wire.', take: 'Copper Wire',
+        talk: '"Those nodes eat copper like candy. Bring me 5 Copper Wire: pull it from the glowing copper piles in the slums and the wastelands."',
+        prog: () => Math.min(5, carriedCount('Copper Wire')) },
+      { id: 'chips', giver: 'sparky', name: 'Chips', lvl: 4, after: 'wireMeIn', rarity: 'rare', need: 3, goal: 'Bring 3 AI chips.', take: 'AI chip',
+        talk: '"Last one, promise! The Grid needs brains, not just muscle. Bring me 3 AI chips: those Mav-1K drones up there carry them, if you can catch one."',
+        prog: () => Math.min(3, carriedCount('AI chip')) },
+    ];
+    const GIVERS = { rogue: { name: 'the Rogue', list: ROGUE_QUESTS }, sparky: { name: 'Sparky', list: SPARKY_QUESTS } };
+    const giverOf = id => { const r = rqDef(id); return r && r.giver || 'rogue'; };
+    const rogueDone = new Set(saved.rogueDone || []);       // quests handed in (the Rogue's and Sparky's)
     let weaponBought = !!saved.weaponBought, dripKills = saved.dripKills || 0, queenKills = saved.queenKills || 0;
-    const rqDef = id => ROGUE_QUESTS.find(r => r.id === id);
+    const gridPowered = new Set(saved.gridPowered || []);   // restored grid nodes: "zone:x,y" (footprint top-left)
+    let powering = null;   // a grid node being restored: { w, start, px, py }
+    const rqDef = id => ROGUE_QUESTS.find(r => r.id === id) || SPARKY_QUESTS.find(r => r.id === id);
     // a boss quest pays double its rarity's reward
     const rqPay = r => { const p = questPay(r.lvl, r.rarity), k = r.boss ? 2 : 1; return { exp: p.exp * k, money: p.money * k }; };
     const rqTag = r => questTag(r.lvl, r.rarity) + (r.boss ? ' · boss' : '');
     const rqComplete = q => { const r = rqDef(q.id); return !!r && r.prog() >= r.need; };
-    const rogueOffers = () => tut < TUT_DONE ? [] : ROGUE_QUESTS.filter(r => hero.level >= r.lvl && !rogueDone.has(r.id) && (!r.after || rogueDone.has(r.after))
+    const rogueOffers = (g = 'rogue') => g === 'rogue' && tut < TUT_DONE ? [] : GIVERS[g].list.filter(r => hero.level >= r.lvl && !rogueDone.has(r.id) && (!r.after || rogueDone.has(r.after))
       && !quests.some(q => q.kind === 'rogue' && q.id === r.id));
-    const rogueReady = () => quests.filter(q => q.kind === 'rogue' && rqComplete(q));
+    const rogueReady = (g = 'rogue') => quests.filter(q => q.kind === 'rogue' && giverOf(q.id) === g && rqComplete(q));
     function checkRogueQuests() {   // a quest just got done: tell the hero once
-      for (const q of quests) if (q.kind === 'rogue' && !q.told && rqComplete(q)) { q.told = true; showHint(`Quest done: ${q.name}. Hand it in to the Rogue.`); }
+      for (const q of quests) if (q.kind === 'rogue' && !q.told && rqComplete(q)) { q.told = true; showHint(`Quest done: ${q.name}. Hand it in to ${GIVERS[giverOf(q.id)].name}.`); }
+    }
+    // a quest giver's window rows: hand in what's done, take what's offered, else ask for work
+    function npcQuestRows(g) {
+      const G = GIVERS[g], rows = [], who = g === 'sparky' ? 'Sparky' : 'Rogue';
+      for (const q of rogueReady(g)) { const r = rqDef(q.id), pay = rqPay(r); rows.push({ rq: { r, mode: 'ready' }, left: `hand in: ${q.name}`, right: `${rqTag(r)} · +${pay.exp} exp +${pay.money}$`, act() {
+        if (!rqComplete(q)) return 'Not done yet.';
+        if (r.take) takeItems(r.take, r.need);   // item quests: she keeps the items (takeItems: see crafting)
+        quests.splice(quests.indexOf(q), 1); rogueDone.add(q.id); stats.money += pay.money; gainExp(pay.exp); renderStats(); ui.cursor = 0;
+        float(`+${pay.exp} exp +${pay.money}$`, g === 'sparky' ? '#ffe600' : '#9b5cff', player.x + 0.5, player.y - 1.2);
+        const next = G.list.find(n => n.after === q.id);
+        return `Quest complete: ${q.name}. +${pay.exp} exp, +${pay.money}$.${next ? ` New quest: ${next.name}${hero.level < next.lvl ? ` (at level ${next.lvl})` : ''}.` : ''}`;
+      } }); }
+      for (const r of rogueOffers(g)) rows.push({ rq: { r, mode: 'offer' }, left: `quest: ${r.name}`, right: `${rqTag(r)} · +${rqPay(r).exp} exp +${rqPay(r).money}$`, act() {
+        if (quests.length >= MAX_QUESTS) return `You already have ${MAX_QUESTS} active quests. Cancel one first (Q).`;
+        quests.push({ kind: 'rogue', id: r.id, name: r.name, from: who, lvl: r.lvl, rarity: r.rarity }); ui.cursor = 0;
+        return `${r.talk} Quest accepted: ${r.name}.`;
+      } });
+      if (!rows.length) rows.push({ left: 'any work for me?', right: '', act() {
+        const later = G.list.filter(r => !rogueDone.has(r.id) && !quests.some(q => q.kind === 'rogue' && q.id === r.id) && (!r.after || rogueDone.has(r.after))).sort((a, b) => a.lvl - b.lvl)[0];
+        if (quests.some(q => q.kind === 'rogue' && giverOf(q.id) === g)) return g === 'sparky' ? '"You\'re still on my last job, sparkplug!"' : '"Finish what I gave you first."';
+        if (g === 'sparky') return later ? `"Not yet! Come back at level ${later.lvl}, I\'ll have something shocking."` : '"The lights are on and it\'s all thanks to you. Nothing else for now!"';
+        return later ? `"Not yet. Come back at level ${later.lvl}."` : '"Nothing right now. Keep hustling."';
+      } });
+      return rows;
     }
     // open window: null, or { kind: 'shop' | 'work' | 'menu', cursor, msg }
     let ui = null;
@@ -2300,7 +2473,8 @@
         } }];
       }
       if (['metro', 'ripperdoc'].includes(ui.kind)) return [{ left: 'ok', right: '', act() { ui = null; } }];
-      if (ui.kind === 'pixi') return [{ left: 'Yay, thanks Pixi!', right: '', act() { ui = null; } }];
+      if (ui.kind === 'pixi') return [...PIXI_FEED.slice(0, PIXI_SHOW).map((n, i) => ({ news: n, fresh: i === 0 && ui.fresh, left: n.title, right: '', act() { ui = null; } })),
+        { left: 'Yay, thanks Pixi!', right: '', short: true, act() { ui = null; } }];
       if (ui.kind === 'bank') {   // Vault tab: rows 0-3 = the sockets, 4+ = the Vault's storage slots (drawn as a grid: drawVault)
         if (WINDOW_TABS.bank[tabOf()].key !== 'vault') return [];
         return [...[0, 1, 2, 3].map(i => ({ left: `socket ${i + 1}`, right: '', act() { return vaultSocket(i); } })),
@@ -2324,25 +2498,9 @@
           ui = null; showHint(`Quest complete: Rogue's lessons. +${r.money}$ and +${r.exp} exp.`);
           float(`+${r.money}$ +${r.exp} exp`, '#9b5cff', player.x + 0.5, player.y - 1.2);
         } }]; }
-        const rows = [];
-        for (const q of rogueReady()) { const r = rqDef(q.id), pay = rqPay(r); rows.push({ rq: { r, mode: 'ready' }, left: `hand in: ${q.name}`, right: `${rqTag(r)} · +${pay.exp} exp +${pay.money}$`, act() {
-          quests.splice(quests.indexOf(q), 1); rogueDone.add(q.id); stats.money += pay.money; gainExp(pay.exp); renderStats(); ui.cursor = 0;
-          float(`+${pay.exp} exp +${pay.money}$`, '#9b5cff', player.x + 0.5, player.y - 1.2);
-          const next = ROGUE_QUESTS.find(n => n.after === q.id);
-          return `Quest complete: ${q.name}. +${pay.exp} exp, +${pay.money}$.${next ? ` New quest: ${next.name}${hero.level < next.lvl ? ` (at level ${next.lvl})` : ''}.` : ''}`;
-        } }); }
-        for (const r of rogueOffers()) rows.push({ rq: { r, mode: 'offer' }, left: `quest: ${r.name}`, right: `${rqTag(r)} · +${rqPay(r).exp} exp +${rqPay(r).money}$`, act() {
-          if (quests.length >= MAX_QUESTS) return `You already have ${MAX_QUESTS} active quests. Cancel one first (Q).`;
-          quests.push({ kind: 'rogue', id: r.id, name: r.name, from: 'Rogue', lvl: r.lvl, rarity: r.rarity }); ui.cursor = 0;
-          return `${r.talk} Quest accepted: ${r.name}.`;
-        } });
-        if (!rows.length) rows.push({ left: 'any work for me?', right: '', act() {
-          const later = ROGUE_QUESTS.filter(r => !rogueDone.has(r.id) && !quests.some(q => q.kind === 'rogue' && q.id === r.id) && (!r.after || rogueDone.has(r.after))).sort((a, b) => a.lvl - b.lvl)[0];
-          if (quests.some(q => q.kind === 'rogue')) return '"Finish what I gave you first."';
-          return later ? `"Not yet. Come back at level ${later.lvl}."` : '"Nothing right now. Keep hustling."';
-        } });
-        return rows;
+        return npcQuestRows('rogue');
       }
+      if (ui.kind === 'sparky') return npcQuestRows('sparky');
       if (ui.kind === 'loot') return lootRows();
       if (ui.kind === 'cheat') return cheatRows();
       if (ui.kind === 'spelltech') return RECIPES.map(r => ({ craft: r, left: r.make, right: '', act() { return craft(r); } }));
@@ -2387,7 +2545,7 @@
     }
     function newGame() {
       Object.assign(talents, newTalents()); ceoCalls = 0;
-      clearLbBuffs(); Object.assign(stats, START_STATS); dealsDone = 0; foodBought = 0; promotion = 0; kills = 0; dripKills = 0; queenKills = 0; weaponBought = false; rogueDone.clear(); runCheated = false; Object.assign(prices, startPrices()); deals = newDeals();
+      clearLbBuffs(); Object.assign(stats, START_STATS); dealsDone = 0; foodBought = 0; promotion = 0; kills = 0; dripKills = 0; queenKills = 0; weaponBought = false; rogueDone.clear(); gridPowered.clear(); powering = null; runCheated = false; Object.assign(prices, startPrices()); deals = newDeals();
       discovered.clear();
       quests.length = 0;
       areaName = '0:0'; spawnAllDrips();
@@ -2496,9 +2654,9 @@
     // ---- saving -------------------------------------------------------------------
     // everything a run needs; drip/fights/timers restart when loaded
     function snapshot() {
-      return { x: player.x, y: player.y, fx: facing.x, fy: facing.y, stats: statsNoBuffs(), deals, prices: { ...prices }, dealsDone, foodBought, itemsV2: true, sets: [...activeSets], promotion, kills, dripKills, queenKills, weaponBought, rogueDone: [...rogueDone], cheated: runCheated, quests: quests.map(q => q.kind === 'delivery' ? { ...q, left: Math.max(0, q.until - gameTime) } : { ...q }),
+      return { x: player.x, y: player.y, fx: facing.x, fy: facing.y, stats: statsNoBuffs(), deals, prices: { ...prices }, dealsDone, foodBought, itemsV2: true, sets: [...activeSets], promotion, kills, dripKills, queenKills, weaponBought, rogueDone: [...rogueDone], gridPowered: [...gridPowered], cheated: runCheated, quests: quests.map(q => q.kind === 'delivery' ? { ...q, left: Math.max(0, q.until - gameTime) } : { ...q }),
                inventory: inventory.map(it => ({ ...it })), equipped: equipped.map(it => ({ ...it })), skills: [...skills],
-               weaponsV: 2, areaName, restReadyAt, levels: { ...levels }, manaCap: CAP_BASE.mana, energyCap: CAP_BASE.energy, level: hero.level, exp: hero.exp, strengthLevel: hero.level, bags: [...bags], vault: { open: vault.open, bags: [...vault.bags], items: vault.items.map(it => ({ ...it })) }, talents: JSON.parse(JSON.stringify(talents)), ceoCalls, tut, tutV: 3, pixiSeen, tutN, tutQuiz: { ...tutQuiz }, discovered: [...discovered], enemies: saveEnemies(), harvest: saveHarvest(),
+               weaponsV: 2, areaName, restReadyAt, levels: { ...levels }, manaCap: CAP_BASE.mana, energyCap: CAP_BASE.energy, level: hero.level, exp: hero.exp, strengthLevel: hero.level, bags: [...bags], vault: { open: vault.open, bags: [...vault.bags], items: vault.items.map(it => ({ ...it })) }, talents: JSON.parse(JSON.stringify(talents)), ceoCalls, tut, tutV: 3, pixiSeen, tutN, tutQuiz: { ...tutQuiz }, discovered: [...discovered], enemies: saveEnemies(), runner: saveRunner(), harvest: saveHarvest(),
                piles: piles.map(p => ({ ...p, gear: p.gear.map(it => ({ ...it })), items: p.items.map(it => ({ ...it })), left: Math.max(0, p.until - gameTime), until: undefined })) };
     }
     function applySave(s) {
@@ -2509,7 +2667,7 @@
       clearLbBuffs(); Object.assign(stats, START_STATS, s.stats || {});
       if (s.strengthLevel === undefined) stats.strength += levelStrength(hero.level) - levelStrength(1);   // saves from before strength grew with level
       deals = s.deals && s.deals.every(d => d && d.type) ? s.deals : null; dealsDone = s.dealsDone || 0; foodBought = s.foodBought || 0; promotion = s.promotion || 0; kills = s.kills || 0; runCheated = !!s.cheated;
-      dripKills = s.dripKills || 0; queenKills = s.queenKills || 0; weaponBought = !!s.weaponBought; rogueDone.clear(); for (const id of s.rogueDone || []) rogueDone.add(id);
+      dripKills = s.dripKills || 0; queenKills = s.queenKills || 0; weaponBought = !!s.weaponBought; rogueDone.clear(); for (const id of s.rogueDone || []) rogueDone.add(id); gridPowered.clear(); for (const k of s.gridPowered || []) gridPowered.add(k); powering = null;
       quests.length = 0; quests.push(...(s.quests || []).map(q => q.kind === 'delivery' ? { ...q, until: gameTime + (q.left ?? 0) } : q));
       for (const k in prices) delete prices[k]; for (const k in levels) delete levels[k];
       Object.assign(prices, startPrices(), renameKeys(s.prices)); Object.assign(levels, startLevels(), renameKeys(s.levels)); rebasePatch('Social');
@@ -2538,7 +2696,7 @@
       restReadyAt = s.restReadyAt || 0; rootedUntil = 0; slowUntil = 0; poisonUntil = 0; floaters.length = 0; closePanels();
       discovered.clear(); for (const id of s.discovered || ['0:0']) discovered.add(AREA_ALIAS[id] || id);
       const sa = AREA_ALIAS[s.areaName] || s.areaName, area = AREAS[sa] ? sa : '0:0';
-      areaName = area; spawnAllDrips(); loadEnemies(s.enemies); loadHarvest(s.harvest);   // enemies come back as saved (older saves: all spawned)
+      areaName = area; spawnAllDrips(); loadEnemies(s.enemies); loadRunner(s.runner); loadHarvest(s.harvest);   // enemies come back as saved (older saves: all spawned)
       enterArea(area, s.x ?? START.x, s.y ?? START.y, s.fx || 1, true);
       facing.x = s.fx ?? 1; facing.y = s.fy ?? 0;
       if (!free(player.x, player.y)) { player.x = START.x; player.y = START.y; fromX = player.x; fromY = player.y; }
@@ -2779,11 +2937,15 @@
       stats.energy -= r.energy; renderStats();
       return `Crafted ${r.count} ${r.make}.`;
     }
-    const TITLES = { pixi: 'Pixi', techversity: 'TechVersity · Talents', chef: 'Netizen Chef', intro: 'Controls', rogue: 'Rogue', metro: 'Metro Station', bank: 'CredBank', ripperdoc: 'Ripperdoc Clinic', spelltech: 'MutaTech', shop: 'ATB-Market', work: 'TradeCorp', menu: 'Menu', controls: 'Controls', hero: 'Hero', inventory: 'Inventory', gameover: 'Game over', loot: 'Loot · Drip', rest: 'HomeDome', cheat: 'Cheats (testing)', scrap: 'Scrap Dealer',
+    const TITLES = { pixi: 'Pixi', sparky: 'Sparky', techversity: 'TechVersity · Talents', chef: 'Netizen Chef', intro: 'Controls', rogue: 'Rogue', metro: 'Metro Station', bank: 'CredBank', ripperdoc: 'Ripperdoc Clinic', spelltech: 'MutaTech', shop: 'ATB-Market', work: 'TradeCorp', menu: 'Menu', controls: 'Controls', hero: 'Hero', inventory: 'Inventory', gameover: 'Game over', loot: 'Loot · Drip', rest: 'HomeDome', cheat: 'Cheats (testing)', scrap: 'Scrap Dealer',
                      map: 'Map', settings: 'Settings', sound: 'Sound', video: 'Video', decals: 'Decal density', restart: 'Restart', throw: 'Throw away', cancelQuest: 'Cancel quest', quests: 'Quests', leaderboard: 'Leaderboard', save: 'Save', load: 'Load game', logout: 'Log out', guest: 'Playing as guest' };
     // windows with a paragraph above their options
     const WINDOW_TEXT = {
-      pixi: () => PIXI_NEWS.text,
+      pixi: '"Hiii! Here\'s what\'s new in the city!"',
+      sparky: () => rogueReady('sparky').length ? '"Ooh, done already? Lemme see, lemme see!"'
+        : rogueOffers('sparky').length ? '"Hey hey! Got a job for you. It\'s gonna be electrifying. Literally."'
+        : quests.some(q => q.kind === 'rogue' && giverOf(q.id) === 'sparky') ? '"Still on it? No rush! Okay, a little rush."'
+        : '"Name\'s Sparky. I keep the lights on around here. Well, I try."',
       metro: 'The gates are down and the departure board is blank. "Opening soon," says a flickering sign.',
       ripperdoc: 'The ripperdoc is still unpacking chrome. "Come back soon, choom."',
       chef: () => { const q = quests.find(q => q.kind === 'delivery' && q.dest === areaName);
@@ -2960,7 +3122,7 @@
     const deliveryPay = q => questPay(deliveryLvl(q), q.rare ? 'rare' : 'common');   // Scheduled = common, Priority = rare
     const clockText = ms => { const t = Math.max(0, Math.ceil(ms / 1000)); return `${Math.floor(t / 60)}:${String(t % 60).padStart(2, '0')}`; };
     const questView = q => q.kind === 'rogue' ? (() => { const r = rqDef(q.id) || { goal: '', need: 1, prog: () => 0, lvl: 1, rarity: 'common' }, n = Math.min(r.need, r.prog()), pay = rqPay(r);
-        return { ...q, lvl: r.lvl, rarity: r.rarity, desc: rqComplete(q) ? `Done! Hand it in to the Rogue. +${pay.exp} exp +${pay.money}$` : `${r.goal}${r.need > 1 ? ` (${n}/${r.need})` : ''} · +${pay.exp} exp +${pay.money}$` }; })()
+        return { ...q, lvl: r.lvl, rarity: r.rarity, desc: rqComplete(q) ? `Done! Hand it in to ${GIVERS[giverOf(q.id)].name}. +${pay.exp} exp +${pay.money}$` : `${r.goal}${r.need > 1 ? ` (${n}/${r.need})` : ''} · +${pay.exp} exp +${pay.money}$` }; })()
       : q.kind !== 'delivery' ? q : { ...q, lvl: deliveryLvl(q), rarity: q.rare ? 'rare' : 'common', desc: `Bring the ${q.item} to the Netizen Chef at her food cart in ${areaLabel(q.dest)}. ${clockText(q.until - gameTime)} left · +${deliveryPay(q).money}$ +${deliveryPay(q).exp} exp` };
     function checkDeliveries() {   // runs with the game clock: late deliveries fail
       for (let i = quests.length - 1; i >= 0; i--) {
@@ -3001,8 +3163,9 @@
     function endIntro() { ui = null; showHint('Someone near the ATB-Market wants a word.'); }
     function openWindow(kind, cursor = 0, back = null) {
       if (kind === 'rogue') tutEvent('talk');   // last task: come back and talk to her
-      if (kind === 'pixi') pixiSeen = PIXI_NEWS.id;   // her '!' goes away once you've heard the news
-      ui = { kind, cursor, msg: '', back };
+      const fresh = kind === 'pixi' && pixiSeen !== PIXI_NEWS.id;
+      if (kind === 'pixi') { pixiSeen = PIXI_NEWS.id; cursor = Math.min(PIXI_SHOW, PIXI_FEED.length); }   // her '!' goes away once you've heard the news; cursor on "Yay"
+      ui = { kind, cursor, msg: '', back, fresh };
       focus = 'window';   // keys go to the window (a click on an open panel gives them to the panel)
       if (((kind === 'shop' && fillView) || kind === 'scrap' || kind === 'bank') && !panels.inventory) panels.inventory = { cursor: 0, msg: '' };   // computers: the shop opens the inventory; the Scrap Dealer everywhere (sell from the bag)   // computers: the shop opens the inventory next to it
       held.clear(); tapped.clear();
@@ -3139,6 +3302,7 @@
       if (!meleeTargets().length && !moving) {
         if (lootable()) { playSfx('interact'); lootTarget = lootable(); openWindow('loot'); return; }
         const w = facedBuilding();
+        if (w && w.opens === 'node') { startPowering(w); return; }   // an offline grid node: hold to restore it
         if (w && w.opens) { playSfx('interact'); openWindow(w.opens); return; }
         const hv = harvestable(); if (hv) { startHarvest(hv); return; }   // a glowing pile here or in front: hold to harvest
       }
@@ -3387,7 +3551,7 @@
     const stepOf = d => d.leapAt != null && d.leapAt === d.stepStart ? CRAWLER.leapMs : d.burning ? QUEEN.burnStepMs : d.kind === 'queen' ? QUEEN.stepMs[(d.stage || 1) - 1] : ET(d).stepMs;
     // can't take a step right now: stuck in Magic Tar, or waiting out a slow (Magic Nozzle) after the last step
     const foeHeld = d => gameTime < (d.stunUntil || 0);   // rooted by Magic tar (slows lower its speed instead)
-    const foeHeadY = d => d.kind === 'loader' ? 2.4 : d.kind === 'queen' ? QUEEN.headY : 0.9;   // floating text height over its feet row, tiles
+    const foeHeadY = d => d.kind === 'loader' ? 2.4 : d.kind === 'queen' ? QUEEN.headY : d.kind === 'runner' ? 1.9 : 0.9;   // floating text height over its feet row, tiles
     const occupies = (d, x, y) => { const X = Math.round(d.x), Y = Math.round(d.y); return x >= X && x < X + foeSize(d) && y <= Y && y > Y - foeSize(d); };   // the tiles under it (positions are continuous)
     const footDist = (d, x, y) => { const n = foeSize(d), X = Math.round(d.x), Y = Math.round(d.y); return Math.max(Math.max(X - x, 0, x - (X + n - 1)), Math.max(Y - n + 1 - y, 0, y - Y)); };   // tiles from the footprint (diagonals count as 1)
     const foeCentre = (q, d) => foeSize(d) === 2 ? { x: q.x + 1, y: q.y } : { x: q.x + 0.5, y: q.y + 0.5 };   // body centre from its (drawn) anchor tile
@@ -3398,6 +3562,8 @@
 
     // every zone's Drips, kept for the whole game (zone id -> list); `drips` is the current zone's list
     let zoneDrips = {};
+    let runner = null, runnerRespawnAt = 0, runnerRoute = null;   // the one Dispatch Runner (null while it's gone), when the next one starts, its planned route
+    const runnerParcels = [];   // its thrown parcels { zone, sx, sy, tx, ty, launch, land } (ground points, tiles), drawn above everyone
     const queenFx = [];     // Pump & Ignite oil puddles { kind: 'puddle', zone, x, y, land, fire, end, lit } and absorb streaks { kind: 'absorb', ... }
     const fireTiles = [];   // burning trail of Burning Drips: { zone, x, y, at, until }
     let heroFireNext = 0;   // next time fire can burn the hero (once per second while he stands in it)
@@ -3417,6 +3583,7 @@
         first.forEach((d, i) => { const o = TWIN_OFFSETS[i % TWIN_OFFSETS.length]; zoneDrips[id].push(makeDrip(twinSpawn(d.spawn, o), id, d.kind)); });
         for (const f of AREAS[id].extraFoes || []) zoneDrips[id].push(makeDrip(f.spawn, id, f.kind));   // no twins (e.g. the satellite's drones)
       }
+      runner = null; runnerRespawnAt = 0; runnerParcels.length = 0; spawnRunner();   // the one Dispatch Runner, at the start of its route
       drips = zoneDrips[areaName] || []; drip = null;
       resetHarvest();   // every harvest pile fresh (a save puts them back after)
     }
@@ -3424,7 +3591,7 @@
     // how long ago a Drip died and how long until he respawns. Living Drips keep their health.
     function saveEnemies() {
       const out = {};
-      for (const id in zoneDrips) out[id] = zoneDrips[id].filter(d => !d.summoned).map(d => d.dead
+      for (const id in zoneDrips) out[id] = zoneDrips[id].filter(d => !d.summoned && !d.runner).map(d => d.dead
         ? { dead: true, x: d.x, y: d.y, since: gameTime - d.deadAt, respawnIn: Math.max(0, d.respawnAt - gameTime), loot: d.loot || null }
         : { hp: d.hp, kind: d.kind, max: d.maxHp });
       return out;
@@ -3444,7 +3611,8 @@
     function settleZoneDrips(id) {
       const list = zoneDrips[id] || [];
       for (let i = list.length - 1; i >= 0; i--) if (list[i].summoned) list.splice(i, 1);   // the Pump Queen's Drips melt away
-      list.forEach((d, i) => { if (!d.dead) { const n = makeDrip(d.spawn, id, d.kind); n.hp = d.kind === 'queen' ? n.maxHp : d.hp; n.regenT = d.regenT; list[i] = n; } });   // the Queen resets fully
+      list.forEach((d, i) => { if (d.runner) { d.aggro = false; d.act = null; d.dash = null; return; }   // the Runner keeps its place on its route
+        if (!d.dead) { const n = makeDrip(d.spawn, id, d.kind); n.hp = d.kind === 'queen' ? n.maxHp : d.hp; n.regenT = d.regenT; list[i] = n; } });   // the Queen resets fully
       for (let i = queenFx.length - 1; i >= 0; i--) if (queenFx[i].zone !== id) queenFx.splice(i, 1);
       for (let i = fireTiles.length - 1; i >= 0; i--) if (fireTiles[i].zone !== id) fireTiles.splice(i, 1);
       drips = list; drip = null;
@@ -3652,7 +3820,7 @@
           return;
         }
         if (d.loot && gameTime >= d.deadAt + ET(d).lootMs) { d.loot = null; if (lootTarget === d) lootTarget = null; }
-        if (d.summoned) return;   // the Pump Queen's Drips never come back (cleared below once they've faded)
+        if (d.summoned || d.runner) return;   // the Pump Queen's Drips never come back (cleared below once they've faded); the Runner: runnerWorld
         if (gameTime >= d.respawnAt) list[i] = makeDrip(d.spawn, id, d.kind);
       });
       for (const id in zoneDrips) if (zoneDrips[id].some(d => d.summoned && d.dead && gameTime >= d.deadAt + SUMMON_FADE_MS)) {
@@ -3660,6 +3828,7 @@
         zoneDrips[id].length = 0; zoneDrips[id].push(...keep);   // same array (drips points at it)
       }
       const dt = Math.min(0.05, Math.max(0, (gameTime - (lastFoeT || gameTime)) / 1000)); lastFoeT = gameTime;
+      runnerWorld(dt);   // the Dispatch Runner travels even when the hero isn't in its zone
       for (const d of drips.slice()) {   // only the hero's zone is simulated
         drip = d;
         updateKnock(d);
@@ -3685,6 +3854,7 @@
       if (drip.kind === 'drone') { updateDrone(dt); return; }
       if (drip.kind === 'spore') { updateSpore(dt); return; }
       if (drip.kind === 'crawler') { updateCrawler(dt); return; }
+      if (drip.kind === 'runner') { updateRunner(dt); return; }
       if (drip.kind === 'loader') { updateLoader(dt); return; }
       if (drip.kind === 'queen') { updateQueen(dt); return; }
       const d = drip;
@@ -3877,6 +4047,174 @@
       }
       if (foeHeld(d)) return;
       const g = heroGoal(d); foeSeek(d, g.x, g.y, dt);
+    }
+    // ---- Dispatch Runner (see RUNNER) ----
+    // Its route is planned once per zone (A* on that zone's grid, from the `from` tile to the `to` tile). In the hero's zone it rolls
+    // for real (foeSeek toward a node a few ahead); anywhere else it slides along the nodes at its speed (runnerAdvance).
+    // d.leg = which zone of the route, d.pi = the node it's at, d.dir = +1 toward the slums, -1 back to the forest.
+    function planRunnerRoute() {
+      if (runnerRoute) return runnerRoute;
+      const saveA = areaName, saveW = WALLS;
+      runnerRoute = RUNNER.route.map(([zone, from, to]) => {
+        areaName = zone; WALLS = AREAS[zone].walls;   // free() / exitAt() read the current zone
+        const pts = [from, ...foePath({ kind: 'runner', x: from[0], y: from[1] }, to[0], to[1])];
+        areaName = saveA; WALLS = saveW;
+        return { zone, pts };
+      });
+      return runnerRoute;
+    }
+    function spawnRunner() {
+      const L0 = planRunnerRoute()[0], [x, y] = L0.pts[0];
+      const d = makeDrip({ x: x + 1, y: y + 1 }, L0.zone, 'runner');
+      Object.assign(d, { x, y, fromX: x, fromY: y, home: { x, y }, patrol: null, runner: true, zone: L0.zone, leg: 0, pi: 0, dir: 1, restUntil: 0, fleeing: false, fled: false });
+      zoneDrips[L0.zone].push(d); runner = d;
+      return d;
+    }
+    function runnerResume(d) {   // back on its route: the closest node of this zone's part
+      const pts = runnerRoute[d.leg].pts; let best = 0, bd = Infinity;
+      pts.forEach(([x, y], i) => { const dd = Math.hypot(x - d.x, y - d.y); if (dd < bd) { bd = dd; best = i; } });
+      d.pi = best; d.path = null; d.steer = null;
+    }
+    function runnerCross(d) {   // at the end of this zone's part: into the next zone (true), or turn around and rest at a route end (false)
+      const nl = d.leg + d.dir;
+      if (nl < 0 || nl >= runnerRoute.length) { d.restUntil = gameTime + RUNNER.restMs; d.dir = -d.dir; return false; }
+      const from = zoneDrips[d.zone], i = from.indexOf(d); if (i >= 0) from.splice(i, 1);
+      if (target === d) target = null;
+      const L = runnerRoute[nl]; d.leg = nl; d.zone = L.zone; d.pi = d.dir > 0 ? 0 : L.pts.length - 1;
+      [d.x, d.y] = L.pts[d.pi]; d.fromX = d.x; d.fromY = d.y; d.path = null; d.steer = null; d.kb = null;
+      zoneDrips[L.zone].push(d);   // same array as `drips` when it's the hero's zone: it rolls in through the passage
+      return true;
+    }
+    function runnerAdvance(d, m) {   // off-screen: m metres along its route (crossing zones, resting at the ends)
+      for (let guard = 0; m > 1e-6 && guard < 400; guard++) {
+        if (gameTime < d.restUntil) return;
+        const pts = runnerRoute[d.leg].pts, ni = d.pi + d.dir;
+        if (ni < 0 || ni >= pts.length) { if (!runnerCross(d) || d.zone === areaName) return; continue; }   // just rolled into the hero's zone: it moves for real from here
+        const [nx, ny] = pts[ni], L = Math.hypot(nx - d.x, ny - d.y);
+        if (Math.abs(nx - d.x) > 0.01) d.lookX = nx > d.x ? 1 : -1;
+        if (L <= m) { d.x = nx; d.y = ny; d.pi = ni; m -= L; }
+        else { d.x += (nx - d.x) / L * m; d.y += (ny - d.y) / L * m; m = 0; }
+      }
+    }
+    function runnerRoll(d, dt, speed = foeSpeed(d)) {   // in the hero's zone: rolls along its route for real; true when it left the zone
+      if (gameTime < d.restUntil) return false;
+      const pts = runnerRoute[d.leg].pts, end = d.dir > 0 ? pts.length - 1 : 0;
+      let best = d.pi, bd = Infinity;   // the node it's at: the closest of the next few
+      for (let k = 0; k <= 6; k++) { const i = d.pi + k * d.dir; if (i < 0 || i >= pts.length) break; const dd = Math.hypot(pts[i][0] - d.x, pts[i][1] - d.y); if (dd < bd) { bd = dd; best = i; } }
+      d.pi = best;
+      if (d.pi === end && bd < 0.35) { const was = d.zone; runnerCross(d); return d.zone !== was; }
+      const gi = d.dir > 0 ? Math.min(end, d.pi + 4) : Math.max(end, d.pi - 4);
+      foeSeek(d, pts[gi][0], pts[gi][1], dt, speed);
+      return false;
+    }
+    function runnerEscape(d) {   // fled far enough: gone with its loot, a new one starts later
+      const l = zoneDrips[d.zone], i = l.indexOf(d); if (i >= 0) l.splice(i, 1);
+      if (d.zone === areaName) float('escaped!', '#b06cff', d.x + 0.5, d.y - 2);
+      if (target === d) retarget();
+      runner = null; runnerRespawnAt = gameTime + RUNNER.respawnMs[0];
+    }
+    function runnerWorld(dt) {   // every frame: respawn, and its trip while the hero is in another zone
+      if (!runner) { if (gameTime >= runnerRespawnAt) spawnRunner(); return; }
+      const d = runner;
+      if (d.dead) {
+        if (gameTime < d.respawnAt) return;
+        const l = zoneDrips[d.zone], i = l.indexOf(d); if (i >= 0) l.splice(i, 1);
+        if (lootTarget === d) lootTarget = null;
+        runner = null; spawnRunner(); return;
+      }
+      if (d.zone === areaName) return;   // the hero's zone: updateRunner moves it
+      if (d.fleeing) { runnerEscape(d); return; }
+      if (d.aggro || d.act || d.dash) { d.aggro = false; d.act = null; d.dash = null; runnerResume(d); }
+      runnerAdvance(d, foeSpeed(d) * dt);
+    }
+    function runnerLine(d, ux, uy, max) {   // how far (m, up to max) its body can dash along (ux, uy) before a wall
+      const c = foeGC(d), r = foeGr(d) - 0.03; let len = 0;
+      for (let s = 0.1; s <= max + 1e-6; s += 0.1) { if (circleHitsTiles(c.x + ux * s, c.y + uy * s, r)) break; len = s; }
+      return len;
+    }
+    function shoveHeroAlong(dx, dy, m) {   // the Express Dash knocks the hero m metres along its path (walls stop him)
+      for (let s = 0; s < m; s += 0.1) { if (bodyHits(hpos.x + dx * 0.1, hpos.y + dy * 0.1)) break; hpos.x += dx * 0.1; hpos.y += dy * 0.1; }
+    }
+    function updateRunner(dt) {
+      const R = RUNNER, d = drip, t = gameTime, c = foeGC(d), f = heroFeet(), far = Math.hypot(f.x - c.x, f.y - c.y), gap = feetGap(d);
+      if (d.dash) {   // dashing along the strip, stopping at the hero's feet or a wall
+        const D = d.dash, p = Math.min(1, (t - D.start) / R.dashMs), sx = D.len * p, nx = D.sx + D.dx * sx, ny = D.sy + D.dy * sx, g = foeGC(d, nx, ny);
+        const stop = Math.hypot(g.x - f.x, g.y - f.y) < foeGr(d) + HERO_MOVE.r || circleHitsTiles(g.x, g.y, foeGr(d) - 0.03);
+        if (!stop) { d.walkDist = (d.walkDist || 0) + Math.hypot(nx - d.x, ny - d.y); d.x = nx; d.y = ny; }
+        if (stop || p >= 1) { d.dash = null; d.dashEnd = t; }
+        return;
+      }
+      const a = d.act;
+      if (a && a.kind === 'toss') {   // stands still: wind-up, the parcel leaves at tossReleaseMs and bursts on the marked circle at hitAt
+        if (!a.thrown && t >= a.start + R.tossReleaseMs) { a.thrown = true; runnerParcels.push({ zone: areaName, sx: c.x + 0.35 * d.lookX, sy: c.y - 1.3, tx: a.tx, ty: a.ty, launch: t, land: a.hitAt }); }
+        if (!a.done && t >= a.hitAt) { a.done = true; if (feetNear(a.tx, a.ty, R.tossR) && stats.health > 0) hurtHero(npcDamage(R.tossMult), '#b06cff'); }
+        if (t < a.end) return;
+        d.act = null;
+      }
+      if (a && a.kind === 'dash') {   // the strip shows for dashWarnMs; whoever's feet are on it when it goes is hit and shoved
+        if (t < a.hitAt) return;
+        d.act = null; d.nextDash = t + R.dashEveryMs;
+        const along = (f.x - a.sx) * a.dx + (f.y - a.sy) * a.dy, side = Math.abs((f.x - a.sx) * a.dy - (f.y - a.sy) * a.dx);
+        if (stats.health > 0 && along >= -HERO_MOVE.r && along <= a.len + foeGr(d) + HERO_MOVE.r && side <= R.dashW / 2 + HERO_MOVE.r) {
+          hurtHero(npcDamage(R.dashMult), '#b06cff');
+          if (stats.health > 0) { shoveHeroAlong(a.dx, a.dy, R.shove); float('shoved!', '#b06cff', player.x + 0.5, player.y - 1.1); }
+        }
+        d.dash = { sx: d.x, sy: d.y, dx: a.dx, dy: a.dy, len: a.len, start: t };
+        return;
+      }
+      if (d.fleeing) {   // along its route, away from the hero, faster; far enough (or out of his zone): gone
+        if (gap >= R.escapeDist || stats.health <= 0) { runnerEscape(d); return; }
+        const pts = runnerRoute[d.leg].pts; runnerResume(d);
+        const ahead = pts[Math.max(0, Math.min(pts.length - 1, d.pi + 5))], back = pts[Math.max(0, Math.min(pts.length - 1, d.pi - 5))];
+        d.dir = Math.hypot(ahead[0] + 0.5 - f.x, ahead[1] + 0.5 - f.y) >= Math.hypot(back[0] + 0.5 - f.x, back[1] + 0.5 - f.y) ? 1 : -1;
+        d.restUntil = 0;
+        if (runnerRoll(d, dt, 1000 / R.fleeStepMs * (gameTime < (d.slowUntil || 0) ? 1 - (d.slowAmt || 0.4) : 1)) || foeHeld(d)) return;
+        if (d.zone !== areaName) runnerEscape(d);
+        return;
+      }
+      if (d.aggro && (gap > R.leash || stats.health <= 0)) { d.aggro = false; runnerResume(d); }
+      if (!d.aggro) {
+        if (gap <= R.aggro && stats.health > 0) { d.aggro = true; d.restUntil = 0; d.nextToss = t + R.firstTossMs; d.nextDash = t + R.firstDashMs; }
+        else { runnerRoll(d, dt); return; }
+      }
+      faceHero(d);
+      if (t >= (d.nextDash || 0) && far >= R.dashRange[0] && far <= R.dashRange[1] && !foeHeld(d) && stats.health > 0) {   // Express Dash (aim locked now)
+        const ux = (f.x - c.x) / far, uy = (f.y - c.y) / far, len = runnerLine(d, ux, uy, R.dashLen);
+        if (len >= far - foeGr(d) - HERO_MOVE.r - 0.2) {   // a clear strip all the way to him
+          d.act = { kind: 'dash', start: t, hitAt: t + R.dashWarnMs, sx: c.x, sy: c.y, dx: ux, dy: uy, len }; d.lookX = ux > 0 ? 1 : -1;
+          return;
+        }
+      }
+      if (t >= (d.nextToss || 0) && far >= R.tossRange[0] && far <= R.tossRange[1] && stats.health > 0) {   // Parcel Toss at where he stands now
+        d.act = { kind: 'toss', start: t, hitAt: t + R.tossMs, end: t + R.tossMs + 150, tx: f.x, ty: f.y }; d.attackStart = t; d.nextToss = t + R.tossEveryMs;
+        return;
+      }
+      if (foeHeld(d)) return;
+      if (far > R.keep + 1.5) { const g = heroGoal(d); foeSeek(d, g.x, g.y, dt); return; }   // far: roll in
+      // near: keep about `keep` m and circle him (like the Scav); the circling flips every 2-4 s or when blocked
+      if (!d.strafeUntil || t >= d.strafeUntil) { d.strafe = Math.random() < 0.5 ? -1 : 1; d.strafeUntil = t + 2000 + Math.random() * 2000; }
+      const ux = (c.x - f.x) / (far || 1), uy = (c.y - f.y) / (far || 1), radial = far < R.keep - 0.3 ? 1 : far > R.keep + 0.3 ? -1 : 0;
+      const vx = ux * radial - uy * d.strafe * R.strafe, vy = uy * radial + ux * d.strafe * R.strafe, L = Math.hypot(vx, vy) || 1;
+      const want = foeSpeed(d) * (radial ? 1 : 0.5) * dt, moved = foeMoveBy(d, vx / L * want, vy / L * want);
+      if (want > 0 && moved < want * 0.3) d.strafe = -d.strafe;
+      faceHero(d);
+    }
+    // saves: the Runner is kept apart from the zone lists (it moves between them)
+    const saveRunner = () => !runner ? { gone: true, respawnIn: Math.max(0, runnerRespawnAt - gameTime) }
+      : runner.dead ? { dead: true, zone: runner.zone, x: runner.x, y: runner.y, since: gameTime - runner.deadAt, respawnIn: Math.max(0, runner.respawnAt - gameTime), loot: runner.loot || null }
+      : { zone: runner.zone, leg: runner.leg, pi: runner.pi, dir: runner.dir, x: runner.x, y: runner.y, hp: runner.hp, max: runner.maxHp, restLeft: Math.max(0, runner.restUntil - gameTime) };
+    function loadRunner(sv) {   // after spawnAllDrips (which started a fresh one)
+      if (!sv || !runner) return;
+      const d = runner, l = zoneDrips[d.zone];
+      if (sv.gone) { l.splice(l.indexOf(d), 1); runner = null; runnerRespawnAt = gameTime + (sv.respawnIn || 0); return; }
+      const leg = sv.dead ? runnerRoute.findIndex(L => L.zone === sv.zone) : sv.leg;
+      if (!runnerRoute[leg] || runnerRoute[leg].zone !== sv.zone || !zoneDrips[sv.zone]) return;   // route changed: keep the fresh one
+      l.splice(l.indexOf(d), 1); zoneDrips[sv.zone].push(d);
+      Object.assign(d, { zone: sv.zone, leg, x: sv.x, y: sv.y, fromX: sv.x, fromY: sv.y });
+      if (sv.dead) { Object.assign(d, { dead: true, hp: 0, deadAt: gameTime - sv.since, respawnAt: gameTime + sv.respawnIn, loot: sv.loot ? { ...sv.loot, items: renameItems(sv.loot.items) } : null }); return; }
+      d.pi = Math.max(0, Math.min(runnerRoute[leg].pts.length - 1, sv.pi | 0)); d.dir = sv.dir === -1 ? -1 : 1; d.restUntil = gameTime + (sv.restLeft || 0);
+      if (sv.max === d.maxHp) d.hp = Math.max(1, Math.min(d.maxHp, sv.hp ?? d.maxHp));
+      if (d.hp <= d.maxHp * RUNNER.fleePct) d.fled = true;   // it already ran once this life
     }
     // Poison on the hero (Sporelings): ticks every second while it lasts, stops health regen
     let poisonUntil = 0, poisonNext = 0;
@@ -4152,7 +4490,7 @@
     const npcDamage = (mult, lvl = npcLevel()) => Math.round(heroHealthCap(10, lvl) * mult * levelDmgFactor(lvl - hero.level));
     // an enemy's hit lands on the hero (0 damage: a grey "0", no blink)
     function hurtHero(dmg, color) {
-      harvesting = null;   // any hit stops a harvest
+      harvesting = null; powering = null;   // any hit stops a harvest or a node restore
       if (dmg <= 0) { float('0', '#8a8a8a', player.x + 0.5, player.y - 0.6); return; }
       const pc = tal('chrome', 0);   // Pain Correction
       if (pc && stats.health <= CAPS.health * [0.10, 0.15, 0.20, 0.25][pc - 1]) dmg = Math.max(1, Math.round(dmg * 0.5));
@@ -4240,6 +4578,46 @@
       n.prev = { zone: n.zone, x: n.x, y: n.y }; n.readyAt = gameTime + n.K.cooldownMs;
       n.zone = n.zones[Math.floor(Math.random() * n.zones.length)]; n.x = n.y = null;   // regrows on another tile (maybe the paired zone)
       if (n.zone === areaName) placeNode(n);
+    }
+    // ---- grid nodes (Sparky's Gridlock): hold Space (phones: hold A; mouse: hold the button) on an offline node for NODE_HOLD_MS
+    // while the quest is active. Moving, letting go, a window or a hit stops it. A restored node stays on for the run (saved)
+    // and sparks between gridNodeOn and gridNodeOn2. The city's node (behind Sparky) is always on.
+    const NODE_HOLD_MS = 5000, NODE_SPARK_MS = 180;
+    const nodeKey = w => { const f = foot(w); return `${areaName}:${f.x0},${f.y0}`; };
+    const gridlockActive = () => quests.some(q => q.kind === 'rogue' && q.id === 'gridlock');
+    function syncGridNodes() {   // every frame: picture, label, and whether Space works on it
+      const on2 = Math.floor(performance.now() / NODE_SPARK_MS) % 2 === 1;
+      for (const w of WALLS) if (w.gridNode) {
+        const on = w.gridNode === 'city' || gridPowered.has(nodeKey(w));
+        w.art = on ? (on2 ? 'gridNodeOn2' : 'gridNodeOn') : 'gridNodeOff';
+        w.label = on ? 'Grid Node (online)' : 'Grid Node (offline)'; w.opens = on ? null : 'node';
+      }
+    }
+    function startPowering(w) {
+      if (!gridlockActive()) { float('no power', '#8a8a8a', player.x + 0.5, player.y - 1.2); showHint('This grid node is dead. Someone in the city might know how to fix it.'); return; }
+      powering = { w, start: gameTime, px: hpos.x, py: hpos.y };
+    }
+    function updatePowering() {   // every frame: cancel or finish the hold
+      const h = powering; if (!h) return;
+      if ((!spaceDown && !mouseAim.harvest) || Math.hypot(hpos.x - h.px, hpos.y - h.py) > HERO_MOVE.harvestDrift || anyOpen() || !WALLS.includes(h.w) || h.w.opens !== 'node' || stats.health <= 0) { powering = null; return; }
+      if (gameTime - h.start < NODE_HOLD_MS) return;
+      powering = null; gridPowered.add(nodeKey(h.w)); syncGridNodes(); fbCache = { k: '', w: null };
+      float('power restored', '#00e5ff', footCX(h.w), foot(h.w).y0 - 0.6); playSfx('interact'); renderStats();
+    }
+    function drawNodeHint() {   // over the faced offline node: "hold Space", or the hold ring while restoring
+      const h = powering, w = h ? h.w : !anyOpen() ? facedBuilding() : null;
+      if (!w || w.opens !== 'node' || (!h && !gridlockActive())) return;
+      const cx = footCX(w) * TILE, top = wallTop(w) - 50;
+      ctx.save(); ctx.textAlign = 'center'; ctx.textBaseline = 'bottom'; ctx.font = '600 24px ' + MONO;
+      ctx.lineWidth = 5; ctx.strokeStyle = '#000';
+      const label = h ? 'restoring power…' : `restore power · hold ${touchOn() ? 'A' : 'Space'}`;
+      ctx.strokeText(label, cx, top); ctx.fillStyle = '#00e5ff'; ctx.fillText(label, cx, top);
+      if (h) {   // progress ring above the label
+        const p = Math.min(1, (gameTime - h.start) / NODE_HOLD_MS), ry = top - 50, R = 18;
+        ctx.lineWidth = 6; ctx.strokeStyle = 'rgba(0, 0, 0, 0.7)'; ctx.beginPath(); ctx.arc(cx, ry, R, 0, Math.PI * 2); ctx.stroke();
+        ctx.strokeStyle = '#00e5ff'; ctx.beginPath(); ctx.arc(cx, ry, R, -Math.PI / 2, -Math.PI / 2 + p * Math.PI * 2); ctx.stroke();
+      }
+      ctx.restore();
     }
     function drawHarvest() {   // the piles of this zone, on the ground under everyone
       const t = performance.now();
@@ -4337,6 +4715,9 @@
       if (drip.kind === 'spore' && drip.hidden) revealSpore(drip);
       if (drip.kind === 'crawler' && drip.hidden) revealCrawler(drip);
       if (drip.kind === 'drone' && drip.hp > 0 && drip.hp <= drip.maxHp * DRONE.cloakPct && !drip.repaired) droneCloak(drip);   // once per life, at 10% HP or less
+      if (drip.kind === 'runner' && drip.hp > 0 && !drip.fled && drip.hp <= drip.maxHp * RUNNER.fleePct) {   // once per life: it bolts along its route
+        drip.fleeing = drip.fled = true; drip.act = null; drip.dash = null; float('fleeing!', '#b06cff', drip.x + 0.5, drip.y - 2.2);
+      }
       if (drip.hp <= 0) {   // nothing is given yet: the loot waits on his puddle
         drip.dead = true; drip.deadAt = gameTime; drip.hitAt = 0; drip.dot = null; drip.stunUntil = 0; kills++; lbEarn('kills', 1); if ((drip.kind || 'drip') === 'drip' && !drip.summoned) dripKills++; if (drip.kind === 'queen') queenKills++;
         if (drip.kind === 'drone') {   // falls: the wreck lands on the nearest walkable tile (it may have been over a building)
@@ -4350,7 +4731,7 @@
             if (best) { drip.x = drip.fromX = best.x; drip.y = drip.fromY = best.y; }
           }
         }
-        const T = ET(drip); drip.spray = null; drip.act = null;
+        const T = ET(drip); drip.spray = null; drip.act = null; drip.dash = null; drip.fleeing = false;
         if (drip.kind === 'spore') sporeClouds.push({ zone: areaName, x: drip.x, y: drip.y, at: gameTime, until: gameTime + SPORE.cloudMs });   // bursts into a spore cloud
         drip.respawnAt = gameTime + rand(T.respawnMs[0], T.respawnMs[1]);   // respawn timer starts now
         if (drip.summoned) { drip.loot = null; if (target === drip) retarget(); return; }   // the Queen's Drips: no exp, no loot
@@ -4363,6 +4744,8 @@
         if (L.aiChipChance && Math.random() < L.aiChipChance) items.push({ name: 'AI chip', count: 1 });
         if (L.sporeSacChance && Math.random() < L.sporeSacChance) items.push({ name: 'Spore Sac', count: 1 });
         if (L.coreChance && Math.random() < L.coreChance) items.push({ name: 'Loader Core', count: 1 });
+        if (L.copper) { const n = rand(L.copper[0], L.copper[1]); if (n) items.push({ name: 'Copper Wire', count: n }); }   // Dispatch Runner
+        if (L.shellChance && Math.random() < L.shellChance) items.push({ name: 'Damaged Courier Shell', count: 1 });
         if (L.queenRare) items.push({ name: Math.random() < (L.queenTarShare ?? 0.5) ? 'Magic tar' : 'Magic Nozzle', count: 1 });   // Pump Queen: one spell, Magic tar 75% / Magic Nozzle 25%
         const zm = L.zoneMoney ? zoneCoords(areaName).reduce((a, b) => a + b, 0) : 0;   // Loader: + |x| + |y| of its zone
         drip.loot = { money: rand(L.money[0] + zm, L.money[1] + zm), items };
@@ -4713,6 +5096,7 @@
       loader:  { w: 2.1, h: 2.5, lift: 0, gr: 0.9 },
       queen:   { w: 2.0, h: 2.85, lift: 0, gr: 1.0 },
       drone:   { w: 1.1, h: 0.6, gr: 0.35 },
+      runner:  { w: 1.0, h: 1.85, lift: 0, gr: 0.42 },
     };
     function foeBody(d) {   // enemy d's body ellipse, where it's drawn right now
       const keep = drip; drip = d; const q = dripPos(); drip = keep;
@@ -4933,7 +5317,7 @@
       lastFrame = now;
       syncChef();
       if (dt) { checkDeliveries(); checkRogueQuests(); for (let i = piles.length - 1; i >= 0; i--) if (gameTime >= piles[i].until) piles.splice(i, 1);
-        updateDrips(); updateQueenFx(); updateHarvest(); updateProjectiles(dt); updateHeroDot(); updatePoison(); updateHeroMana(); updateHeroHealth(); }
+        updateDrips(); updateQueenFx(); updateHarvest(); updatePowering(); updateProjectiles(dt); updateHeroDot(); updatePoison(); updateHeroMana(); updateHeroHealth(); }
       updateHeroMove(dt);   // free movement (game time: stops behind windows)
       updateMouseAim();
       if (mouseAim.down && dt && !anyOpen()) heroAttack();   // left button held: keep swinging (attack speed limits it)
@@ -4966,13 +5350,14 @@
     const GROUND_REPEAT = 6;   // tiles per texture repeat
     const groundScale = () => Math.min(1.25, Math.max(1, Math.ceil(PX * worldCam(0, 0).z * 4) / 4));   // capped: a whole 47 x 29 zone at 2x would be too big for phones
     // roads: 2 x 2 tile blocks starting on odd columns / rows. Each block picks a piece from which neighbour blocks are road
-    // (off the map counts as road, so a road runs out through a passage) and turns it to fit.
+    // (off the map counts as road only where a passage is, so a road runs out through it; elsewhere it gets an end piece) and turns it to fit.
     const ROAD_PIECES = ['roadPlain', 'roadStraight', 'roadCorner', 'roadT', 'roadCross', 'roadEnd'];
     const roadAt = (x, y) => { const r = AREAS[areaName].road; return !!(r && r[y] && r[y][x]); };
     function drawRoads(gx) {
       const r = AREAS[areaName].road;
       if (!r || !ROAD_PIECES.every(k => ready(ART[k]))) return;
-      const on = (x, y) => x < 0 || y < 0 || x >= COLS || y >= ROWS || !!r[y][x];
+      const pass = new Set(AREAS[areaName].exits.flatMap(e => e.tiles.map(t => t.join())));
+      const on = (x, y) => inGrid(x, y) ? !!r[y][x] : pass.has(Math.max(0, Math.min(COLS - 1, x)) + ',' + Math.max(0, Math.min(ROWS - 1, y)));
       for (let y0 = 1; y0 < ROWS; y0 += 2) for (let x0 = 1; x0 < COLS; x0 += 2) {
         if (!r[y0][x0]) continue;
         const n = on(x0, y0 - 2), e = on(x0 + 2, y0), s = on(x0, y0 + 2), w = on(x0 - 2, y0), c = n + e + s + w;
@@ -4985,6 +5370,13 @@
         else { piece = 'roadCorner'; rot = e && s ? 0 : s && w ? 1 : w && n ? 2 : 3; }
         gx.save(); gx.translate((x0 + 1) * TILE, (y0 + 1) * TILE); gx.rotate(rot * Math.PI / 2);
         gx.drawImage(ART[piece], -TILE, -TILE, 2 * TILE, 2 * TILE); gx.restore();
+        // blocks start on column / row 1, so column 0 and row 0 are left over: where the road runs out through a passage
+        // on the left or top edge, a straight piece fills that last tile up to the map edge (the canvas clips the rest)
+        for (const [open, dx, dy, r2] of [[x0 === 1 && w, -2, 0, 0], [y0 === 1 && n, 0, -2, 1]]) {
+          if (!open) continue;
+          gx.save(); gx.translate((x0 + dx + 1) * TILE, (y0 + dy + 1) * TILE); gx.rotate(r2 * Math.PI / 2);
+          gx.drawImage(ART.roadStraight, -TILE, -TILE, 2 * TILE, 2 * TILE); gx.restore();
+        }
       }
     }
     function buildGround() {
@@ -5105,11 +5497,11 @@
     // left in its quadrant goes to the nearest quadrant that has room; only when the whole zone is full is it skipped.
     // Never on buildings, walls / wire, roads, lake water or big map pieces; large ones keep 2 tiles from a passage,
     // small ones stay off passage tiles. The layout is fixed per zone (seeded) and the same every visit.
-    const DECAL_DENSITY = { city: 2, slums: 3, greaser: 4, lake: 2, factoryIn: 2, factory: 2, wasteland: 3, pit: 2, forest: 3, deepForest: 4 };   // defaults
+    const DECAL_DENSITY = { grid: 2, city: 2, slums: 3, greaser: 4, lake: 2, factoryIn: 2, factory: 2, wasteland: 3, pit: 2, forest: 3, deepForest: 4 };   // defaults
     const DECAL_STEP = { big: 2, small: 10 };   // per density step, per zone quarter
     const DECAL_EDGE = [0.85, 0.95];   // near the zone edge decals are less likely: × this on the outermost tile row, the next one (then × 1)
     const DECAL_SPREAD = { any: 2.5, edge: 5 };   // small decals: how strongly they keep away from any other decal and from the zone border
-    const DECAL_TYPES_ORDER = ['city', 'slums', 'greaser', 'lake', 'factoryIn', 'factory', 'wasteland', 'pit', 'forest', 'deepForest'];
+    const DECAL_TYPES_ORDER = ['city', 'grid', 'slums', 'greaser', 'lake', 'factoryIn', 'factory', 'wasteland', 'pit', 'forest', 'deepForest'];
     const decalDensity = type => Math.max(1, Math.min(5, (settings.decalDensity || {})[type] ?? DECAL_DENSITY[type] ?? 0));   // menu › settings › video › decal density
     function stepDensity(type, d, wrap = true) {
       let n = decalDensity(type) + d;
@@ -5123,6 +5515,7 @@
       wasteland: ['crack', 'crack web', 'oil stain', 'litter', 'puddle cyan', 'puddle pink'], pit: ['crack', 'crack web', 'oil stain', 'litter', 'puddle cyan', 'puddle pink'],
       factoryIn: ['crack', 'crack web', 'oil stain', 'manhole'], factory: ['crack', 'crack web', 'oil stain', 'manhole'],
       lake: ['leaves', 'oil stain', 'puddle cyan', 'puddle pink'], forest: ['leaves', 'crack'], deepForest: ['leaves', 'crack'],
+      grid: ['crack', 'crack web', 'manhole', 'oil stain', 'puddle cyan', 'litter'],
     };
     const decalPlans = {};   // zone id -> { big: [...], small: [...] } (worked out once per zone)
     const planKey = id => id + '@' + decalDensity(ZONE_LIST[id]);
@@ -5313,6 +5706,7 @@
       ctx.fillRect(0, 0, canvas.width, canvas.height);
       cam = worldCam(rx, ry);
       ctx.setTransform(cam.z, 0, 0, cam.z, cam.ox, cam.oy);   // world drawing below is in zone pixels
+      syncGridNodes();   // node pictures (powered ones spark) before anything is drawn
       const wantDecals = AREAS[areaName].decals && ready(ART.decals);
       const wantWire = !!AREAS[areaName].coils && ['wallStraight', 'wallBroken', 'wallCorner', 'wallEnd'].every(k => ready(ART[k]));
       const wantTar = AREAS[areaName].exits.length > 0 && AREAS[areaName].exits.every(e => { const st = passageStyle(areaName, e.to); return ready(st ? ART[st.art] : ART.tar); });
@@ -5408,12 +5802,20 @@
       for (const e of drips) if (e.kind === 'drone' && !e.dead) { drip = e; withKnock(e, () => drawDrone(e)); }   // flying: above everything
       drawMeleeFlash();
       drawProjectiles();
+      drawRunnerParcels();
       // the Rogue: turns toward the hero when he is within 2 tiles; a '!' over her head until the tutorial starts
-      for (const w of WALLS) if (w.opens === 'rogue' || w.opens === 'chef' || w.opens === 'pixi') {
+      for (const w of WALLS) if (w.opens === 'rogue' || w.opens === 'chef' || w.opens === 'pixi' || w.opens === 'sparky') {
         const f = foot(w);
         if (cheb(player.x, player.y, f.x0, f.y0) <= 2 && player.x !== f.x0) w.flip = (player.x < f.x0) === !!w.facesRight;
-        if (w.opens === 'pixi') w.art = ui && ui.kind === 'pixi' ? 'npcPixiCheer' : 'npcPixi';   // pom-pom up while she talks
-        const mark = w.opens === 'pixi' ? (pixiSeen !== PIXI_NEWS.id ? '!' : '') : w.opens === 'chef' || tut === 0 || tut === TUT_READY ? '!' : w.opens === 'rogue' && rogueReady().length ? '?' : w.opens === 'rogue' && rogueOffers().length ? '!' : '';   // her quests: ! new, ? ready to hand in
+        if (w.opens === 'pixi') {   // pom-pom up while she talks; after the window closes: idle PIXI_WAVE.delay, pom-pom up PIXI_WAVE.hold (a wave goodbye), idle
+          const open = !!ui && ui.kind === 'pixi', now = performance.now();
+          if (pixiWave.open && !open) pixiWave.at = now;   // just closed
+          pixiWave.open = open;
+          const t = now - pixiWave.at, waving = t >= PIXI_WAVE.delay && t < PIXI_WAVE.delay + PIXI_WAVE.hold;
+          w.art = open || waving ? 'npcPixiCheer' : 'npcPixi';
+        }
+        if (w.opens === 'sparky') w.art = rogueReady('sparky').length ? 'npcSparkyHand' : 'npcSparky';   // sparking hand up: a quest is ready to hand in
+        const mark = w.opens === 'pixi' ? (pixiSeen !== PIXI_NEWS.id ? '!' : '') : w.opens === 'sparky' ? (!rogueReady('sparky').length && rogueOffers('sparky').length ? '!' : '') : w.opens === 'chef' || tut === 0 || tut === TUT_READY ? '!' : w.opens === 'rogue' && rogueReady().length ? '?' : w.opens === 'rogue' && rogueOffers().length ? '!' : '';   // her quests: ! new, ? ready to hand in
         if (mark) {
           const bob = Math.sin(performance.now() / 300) * 5, x = (f.x0 + 0.5) * TILE, y = wallTop(w) - 50 + bob;   // above the purple arrow
           ctx.font = '800 44px ' + MONO; ctx.textAlign = 'center'; ctx.textBaseline = 'bottom';
@@ -5428,6 +5830,7 @@
         ctx.beginPath(); ctx.moveTo(x - 20, y - 28); ctx.lineTo(x + 20, y - 28); ctx.lineTo(x, y); ctx.closePath(); ctx.stroke(); ctx.fill();
       }
       drawHarvestHint();
+      drawNodeHint();
       drawHitboxes();
       drawFloaters();
       // name of the tile the yellow highlight is on
@@ -5572,6 +5975,15 @@
         ctx.fillStyle = w.color; ctx.beginPath(); ctx.ellipse(cx, by - hgt * 0.32, TILE * 0.26, hgt * 0.34, 0, 0, Math.PI * 2); ctx.fill();
         ctx.beginPath(); ctx.arc(cx, by - hgt * 0.78, TILE * 0.2, 0, Math.PI * 2); ctx.fill();
         ctx.fillStyle = '#00e5ff'; ctx.fillRect(cx - TILE * 0.13, by - hgt * 0.8, TILE * 0.26, 5);
+      } else if (w.box) {   // placeholder until the art exists: a block with a roof (the footprint, raised) and a front wall with its name
+        const x0 = f.x0 * TILE, x1 = (f.x1 + 1) * TILE, yb = (f.y1 + 1) * TILE, wallH = w.box * TILE * 0.6, roofY = f.y0 * TILE - wallH;
+        ctx.fillStyle = w.color; ctx.fillRect(x0, roofY, x1 - x0, yb - roofY);
+        ctx.fillStyle = 'rgba(255, 255, 255, 0.16)'; ctx.fillRect(x0, roofY, x1 - x0, yb - wallH - roofY);   // roof: lighter
+        ctx.strokeStyle = '#10131c'; ctx.lineWidth = 4; ctx.strokeRect(x0 + 2, roofY + 2, x1 - x0 - 4, yb - roofY - 4);
+        ctx.beginPath(); ctx.moveTo(x0, yb - wallH); ctx.lineTo(x1, yb - wallH); ctx.stroke();
+        ctx.fillStyle = /Node/.test(w.label || '') ? '#ffcf4a' : '#9fd8ff';
+        ctx.font = `700 ${Math.round(Math.min(24, (x1 - x0) / 7))}px ${MONO}`; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+        ctx.fillText(w.label || '', (x0 + x1) / 2, yb - wallH / 2);
       } else {
         ctx.fillStyle = w.color;
         ctx.fillRect(f.x0 * TILE, f.y0 * TILE, (f.x1 - f.x0 + 1) * TILE, (f.y1 - f.y0 + 1) * TILE);
@@ -5659,6 +6071,34 @@
       else ok = cell('crawlerIdle', 'idle', 0);
       if (!ok) { ctx.fillStyle = '#8a4a24'; ctx.beginPath(); ctx.ellipse(cx, feet - 34, 40, 26, 0, 0, Math.PI * 2); ctx.fill(); ctx.fillStyle = '#ff3b3b'; ctx.beginPath(); ctx.arc(cx - 14, feet - 38, 7, 0, Math.PI * 2); ctx.fill(); }
     }
+    function drawRunnerBody(cx, feet, t) {
+      const A = RUNNER_ART, R = RUNNER, neon = dripNeon(), a = drip.act, D = drip.dash;
+      const cell = (key, name, f) => ready(ART[key]) && (drawScavCell(ART[key], A[name], f, cx, feet, neon, FOE_K), true);
+      let ok;
+      if (a && a.kind === 'dash') ok = cell('runnerDash', 'dash', 0);   // crouched, about to go
+      else if (D) ok = cell('runnerDash', 'dash', t - D.start < R.dashMs / 2 ? 1 : 2);
+      else if (drip.dashEnd && t - drip.dashEnd < 220) ok = cell('runnerDash', 'dash', 3);   // braking
+      else if (a && a.kind === 'toss') { const p = t - a.start; ok = cell('runnerToss', 'toss', p < 250 ? 0 : p < R.tossReleaseMs ? 1 : p < R.tossReleaseMs + 150 ? 2 : 3); }
+      else if (t - drip.hurtStart < 300) ok = cell('runnerHurt', 'hurt', 0);
+      else if (walkFrame(t) >= 0) ok = cell('runnerRoll', 'roll', walkFrame(t));
+      else ok = cell('runnerIdle', 'idle', 0);
+      if (!ok) { ctx.fillStyle = '#6b3fd6'; ctx.fillRect(cx - 30, feet - 140, 60, 120); ctx.fillStyle = '#10131C'; ctx.beginPath(); ctx.arc(cx - 18, feet - 14, 14, 0, Math.PI * 2); ctx.arc(cx + 18, feet - 14, 14, 0, Math.PI * 2); ctx.fill(); }
+    }
+    function drawRunnerParcels() {   // parcels in flight (an arc to the marked circle) and their bursts, above everyone
+      const t = gameTime, im = ART.runnerParcel, A = RUNNER_ART.parcel;
+      for (let i = runnerParcels.length - 1; i >= 0; i--) {
+        const p = runnerParcels[i];
+        if (t > p.land + 340 || t < p.launch - 5000) { runnerParcels.splice(i, 1); continue; }
+        if (p.zone !== areaName) continue;
+        let x, y, f, s;
+        if (t < p.land) { const u = Math.max(0, (t - p.launch) / (p.land - p.launch)); x = p.sx + (p.tx - p.sx) * u; y = p.sy + (p.ty - 0.3 - p.sy) * u - Math.sin(Math.PI * u) * 1.2; f = Math.floor(t / 90) % 2; s = FOE_K * 0.75; }
+        else { x = p.tx; y = p.ty - 0.3; f = t - p.land < 170 ? 2 : 3; s = FOE_K * 1.3; }
+        ctx.save(); ctx.translate(x * TILE, y * TILE);
+        if (ready(im)) { if (f < 2 && p.tx > p.sx) ctx.scale(-1, 1); ctx.imageSmoothingQuality = 'high'; ctx.drawImage(im, f * A.cellW, 0, A.cellW, A.cellH, -A.ax * s, -A.ay * s, A.cellW * s, A.cellH * s); }   // art flies left
+        else { ctx.fillStyle = f < 2 ? '#c49a6c' : '#b06cff'; ctx.fillRect(-14, -12, 28, 24); }
+        ctx.restore();
+      }
+    }
     function drawLoaderBody(cx, feet, t) {
       const A = LOADER_ART, L = LOADER, k = FOE_K, neon = dripNeon(), a = drip.act;
       const cell = (key, name, f) => ready(ART[key]) && (drawScavCell(ART[key], A[name], f, cx, feet, neon, k), true);
@@ -5700,6 +6140,22 @@
             ctx.globalAlpha = 0.18 + 0.2 * pulse; ctx.fillStyle = '#e5484d'; ctx.fillRect(0, -w / 2, L, w);
             ctx.globalAlpha = 0.75; ctx.strokeStyle = '#ff3b3b'; ctx.lineWidth = 6; ctx.lineCap = 'round';
             ctx.beginPath(); ctx.moveTo(0, 0); ctx.lineTo(L, 0); ctx.stroke();
+          }
+        } else if (a.kind === 'toss') {   // Dispatch Runner: purple circle where the parcel will burst, filling up until it lands
+          if (t < a.hitAt) {
+            const R = RUNNER.tossR * TILE, x = a.tx * TILE, y = a.ty * TILE, k = (t - a.start) / (a.hitAt - a.start);
+            ctx.globalAlpha = 0.14 + 0.12 * pulse; ctx.fillStyle = '#b06cff'; ctx.beginPath(); ctx.arc(x, y, R, 0, Math.PI * 2); ctx.fill();
+            ctx.globalAlpha = 0.35; ctx.beginPath(); ctx.arc(x, y, R * k, 0, Math.PI * 2); ctx.fill();
+            ctx.globalAlpha = 0.85; ctx.strokeStyle = '#c99bff'; ctx.lineWidth = 4; ctx.beginPath(); ctx.arc(x, y, R, 0, Math.PI * 2); ctx.stroke();
+          }
+        } else if (a.kind === 'dash') {   // Dispatch Runner: a purple strip with an arrow head along its dash
+          if (t < a.hitAt) {
+            const grow = Math.min(1, (t - a.start) / 150), w = RUNNER.dashW * TILE, L = (a.len + foeGr(d)) * TILE * grow;
+            ctx.translate(a.sx * TILE, a.sy * TILE); ctx.rotate(Math.atan2(a.dy, a.dx));
+            ctx.globalAlpha = 0.18 + 0.2 * pulse; ctx.fillStyle = '#b06cff'; ctx.fillRect(0, -w / 2, L, w);
+            ctx.globalAlpha = 0.85; ctx.fillStyle = '#c99bff';
+            ctx.beginPath(); ctx.moveTo(L, 0); ctx.lineTo(L - 26, -w / 2); ctx.lineTo(L - 26, w / 2); ctx.closePath(); ctx.fill();
+            ctx.strokeStyle = '#c99bff'; ctx.lineWidth = 5; ctx.lineCap = 'round'; ctx.beginPath(); ctx.moveTo(0, 0); ctx.lineTo(L - 24, 0); ctx.stroke();
           }
         } else if (a.kind === 'whip') {   // pulsing green circle (up to 40%) on the tile it will lash
           if (t < a.hitAt) { ctx.globalAlpha = 0.2 + 0.2 * pulse; ctx.fillStyle = '#3fbf3f'; ctx.beginPath(); ctx.arc((a.tx + 0.5) * TILE, (a.ty + 0.5) * TILE, LOADER.whipR * TILE, 0, Math.PI * 2); ctx.fill(); }
@@ -5942,6 +6398,7 @@
         else if (drip.kind === 'spore') { if (ready(ART.sporelingHurt)) drawScavCell(ART.sporelingHurt, SPORE_ART.hurt, 1, cx, feet, lootNeon, FOE_K); }
         else if (drip.kind === 'crawler') { if (ready(ART.crawlerHurt)) drawScavCell(ART.crawlerHurt, CRAWLER_ART.hurt, 1, cx, feet, lootNeon, FOE_K); }
         else if (drip.kind === 'loader') { if (ready(ART.loaderHurt)) drawScavCell(ART.loaderHurt, LOADER_ART.hurt, 1, cx, feet, lootNeon, FOE_K); }
+        else if (drip.kind === 'runner') { if (ready(ART.runnerHurt)) drawScavCell(ART.runnerHurt, RUNNER_ART.hurt, 1, cx, feet, lootNeon, FOE_K); }
         else if (drip.kind === 'queen') drawQueenDead(cx, feet, lootNeon);
         else if (ready(ART.dripHurt)) drawDripCell(ART.dripHurt, DRIP_ART.hurt, 1, cx, feet, 1, lootNeon);
         if (drip.loot) {   // loot waiting: a pulsing gold glint over the puddle, "loot" when faced
@@ -5962,6 +6419,7 @@
       if (scav) drawScavBody(cx, feet, t);
       else if (drip.kind === 'spore') { drawSporeBody(cx, feet, t); if (drip.hidden) return; }   // disguised: no bar, no rings
       else if (drip.kind === 'crawler') { drawCrawlerBody(cx, feet, t); if (drip.hidden) return; }
+      else if (drip.kind === 'runner') drawRunnerBody(cx, feet, t);
       else if (drip.kind === 'loader') drawLoaderBody(cx, feet, t);
       else if (drip.kind === 'queen') drawQueenBody(cx, feet, t);
       else if (sinceAtk < 700 && ready(ART.dripAttack)) drawDripCell(ART.dripAttack, DRIP_ART.attack, Math.min(3, Math.floor(sinceAtk / 175)), cx, feet, 1, dripNeon());
@@ -5981,7 +6439,7 @@
         ctx.beginPath(); ctx.ellipse(cx, feet - 8, 46, 16, 0, 0, Math.PI * 2); ctx.stroke(); ctx.restore();
       }
       // health bar over his head
-      const bw = drip.kind === 'queen' ? 130 : drip.kind === 'loader' ? 110 : 64, bx = cx - bw / 2, by = feet - (scav ? HERO_H : drip.kind === 'spore' ? 1.15 : drip.kind === 'crawler' ? 1.05 : drip.kind === 'loader' ? 2.75 : drip.kind === 'queen' ? (drip.stage === 2 ? 3.25 : 2.95) : DRIP_BODY) * TILE - 18;
+      const bw = drip.kind === 'queen' ? 130 : drip.kind === 'loader' ? 110 : 64, bx = cx - bw / 2, by = feet - (scav ? HERO_H : drip.kind === 'spore' ? 1.15 : drip.kind === 'crawler' ? 1.05 : drip.kind === 'runner' ? 2.05 : drip.kind === 'loader' ? 2.75 : drip.kind === 'queen' ? (drip.stage === 2 ? 3.25 : 2.95) : DRIP_BODY) * TILE - 18;
       ctx.fillStyle = 'rgba(0, 0, 0, 0.7)'; ctx.fillRect(bx - 2, by - 2, bw + 4, 12);
       ctx.fillStyle = '#e5484d'; ctx.fillRect(bx, by, bw * drip.hp / drip.maxHp, 8);
     }
@@ -6116,7 +6574,7 @@
       const w = 340, h = 80, x = (canvas.width - w) / 2, y = phoneView && canvas.height > canvas.width ? phudBottom() + 12 : 12;
       ctx.fillStyle = 'rgba(0, 0, 0, 0.75)'; rr(x, y, w, h, 12); ctx.fill();
       ctx.strokeStyle = 'rgba(255, 43, 214, 0.6)'; ctx.lineWidth = 2; rr(x + 1, y + 1, w - 2, h - 2, 11); ctx.stroke();
-      const T = ET(drip), pic = ART[({ scav: 'scavPortrait', drone: 'dronePortrait', spore: 'sporelingPortrait', crawler: 'crawlerPortrait', loader: 'loaderPortrait', queen: 'queenPortrait' })[drip.kind] || 'dripPortrait'];
+      const T = ET(drip), pic = ART[({ scav: 'scavPortrait', drone: 'dronePortrait', spore: 'sporelingPortrait', crawler: 'crawlerPortrait', loader: 'loaderPortrait', queen: 'queenPortrait', runner: 'runnerPortrait' })[drip.kind] || 'dripPortrait'];
       if (ready(pic)) { ctx.imageSmoothingQuality = 'high'; ctx.drawImage(pic, x + 8, y + 8, 64, 64); }
       else if (drip.kind === 'drone') { ctx.fillStyle = '#1B2233'; ctx.fillRect(x + 8, y + 8, 64, 64); drawDroneBody(x + 40, y + 44, 0, gameTime, !!drip.hitAt, -1); }
       else if (drip.kind === 'queen') {   // placeholder portrait: the pump's display face / the blob's eyes
@@ -6151,6 +6609,7 @@
         else if (drip.kind === 'spore') { ctx.fillStyle = '#b58cff'; ctx.fillText(drip.hitAt ? 'puffing spores!' : 'poison spores', tx, y + 63); }
         else if (drip.kind === 'crawler') { ctx.fillStyle = '#ff8a5c'; ctx.fillText(drip.act ? 'POUNCE!' : drip.hitAt ? 'biting!' : 'pack hunter · pounce', tx, y + 63); }
         else if (drip.kind === 'queen') { const a = drip.act; ctx.fillStyle = '#ff9a2e'; ctx.fillText(a ? ({ roar: 'IGNITION!', slap: 'hose slap!', spray: 'fuel spray!', ignite: 'pump & ignite!' })[a.kind] : drip.stage === 2 ? 'stage 2 · ignition' : 'stage 1 · the pump', tx, y + 63); }
+        else if (drip.kind === 'runner') { const a = drip.act; ctx.fillStyle = '#c99bff'; ctx.fillText(drip.fleeing ? 'fleeing!' : a ? (a.kind === 'toss' ? 'parcel toss!' : 'express dash!') : drip.dash ? 'express dash!' : 'courier · toss · dash', tx, y + 63); }
         else if (drip.kind === 'loader') { ctx.fillStyle = '#9dff5c'; ctx.fillText(drip.act ? (drip.act.kind === 'whip' ? 'vine whip!' : 'ground slam!') : 'whip · slam', tx, y + 63); }
         else { ctx.fillStyle = '#7fff3a'; ctx.fillText(drip.spray ? 'spraying!' : 'toxic spray', tx, y + 63); }
       }
@@ -6377,6 +6836,23 @@
       ctx.fillStyle = sel ? '#000' : done ? '#3ddc84' : '#ffdc00'; ctx.textAlign = 'center'; ctx.fillText(act, rx - bw / 2, by + bh / 2 + 1);
       ctx.textAlign = 'left';
     }
+    // one of Pixi's news: its picture in a slot (aspect kept), the title in pink ("NEW" on the newest while unheard), the text
+    function drawNewsRow(r, x, y, w, h, sel) {
+      const n = r.news, big = Math.min(h - 40, 130), sx = x + 20, sy = y + 20;
+      if (ready(ART.slot)) ctx.drawImage(ART.slot, sx, sy, big, big);
+      const im = ART[n.icon];
+      if (im && ready(im)) { const i = big * 0.12, s = Math.min((big - 2 * i) / im.naturalWidth, (big - 2 * i) / im.naturalHeight), dw = im.naturalWidth * s, dh = im.naturalHeight * s;
+        ctx.imageSmoothingQuality = 'high'; ctx.drawImage(im, sx + (big - dw) / 2, sy + (big - dh) / 2, dw, dh); }
+      const tx = sx + big + 24, tw = x + w - 20 - tx;
+      ctx.textAlign = 'left'; ctx.textBaseline = 'middle';
+      ctx.font = `700 28px ${MONO}`; ctx.fillStyle = '#ff2bd6'; ctx.fillText(n.title, tx, sy + 14);
+      if (r.fresh) { const nw = ctx.measureText(n.title).width; ctx.font = `700 18px ${MONO}`; const bw = ctx.measureText('NEW').width + 16;
+        ctx.fillStyle = '#ff2bd6'; rr(tx + nw + 14, sy + 1, bw, 26, 6); ctx.fill(); ctx.fillStyle = '#000'; ctx.fillText('NEW', tx + nw + 22, sy + 15); }
+      let fs = 21, lines;   // text: shrinks until it fits the row
+      for (;; fs--) { ctx.font = `${fs}px ${MONO}`; lines = wrapText(n.text, tw); if (lines.length * (fs + 6) <= h - 56 || fs <= 14) break; }
+      ctx.fillStyle = sel ? '#fff' : '#d6d6d6';
+      lines.forEach((l, i) => ctx.fillText(l, tx, sy + 48 + i * (fs + 6)));
+    }
     function glyphSlot(x, y, size, key, glyph, color) {   // an icon picture if its art exists, else a big drawn symbol in a slot
       if (ready(ART.slot)) ctx.drawImage(ART.slot, x, y, size, size);
       if (key && ready(ART[key])) { const i = size * 0.14; ctx.drawImage(ART[key], x + i, y + i, size - 2 * i, size - 2 * i); return; }
@@ -6568,16 +7044,26 @@
         ctx.textAlign = 'right'; ctx.fillStyle = '#f5c542'; ctx.font = '700 28px ' + MONO; ctx.fillText(`${def.price}$`, x + w - 20, cy + cs / 2);
         return;
       }
-      let cx = rx;
+      // the costs + energy fit the row: names on one line if they fit, else wrapped to 2 lines, then everything shrinks a little
+      const avail = x + w - 20 - rx, lbl = name => `${name} (${countOf(name)})`;
+      const lines = (name, q, wrap) => { ctx.font = `${Math.round(16 * q)}px ${MONO}`; if (!wrap) return [lbl(name)];
+        const w = wrapText(name, 135 * q), out = [w[0], w.slice(1).join(' ')].filter(Boolean); out[out.length - 1] += ` (${countOf(name)})`; return out; };   // the count always stays
+      const widthAt = (q, wrap) => { let t = 0;
+        for (const [name] of r.cost) { const ls = lines(name, q, wrap); t += cs * q + 8 * q + Math.max(...ls.map(l => ctx.measureText(l).width), 30 * q) + 22 * q; }
+        ctx.font = `600 ${Math.round(26 * q)}px ${MONO}`; return t + ctx.measureText(`${r.energy} ${ICON.energy}`).width; };
+      let k = 1, wrap = widthAt(1, false) > avail;
+      while (k > 0.7 && widthAt(k, wrap) > avail) k -= 0.05;
+      const ss = cs * k; let cx = rx;
       for (const [name, n] of r.cost) {
-        drawSlot(cx, cy, cs, { name });
-        const have = countOf(name); ctx.textAlign = 'left'; ctx.textBaseline = 'middle';
-        ctx.fillStyle = have >= n ? '#3ddc84' : '#e5484d'; ctx.font = '600 24px ' + MONO;
-        ctx.fillText(`${n}`, cx + cs + 8, cy + cs / 2 - 12);
-        ctx.fillStyle = '#8a8a8a'; ctx.font = '16px ' + MONO; ctx.fillText(`${name} (${have})`, cx + cs + 8, cy + cs / 2 + 14);
-        cx += cs + 8 + Math.max(ctx.measureText(`${name} (${have})`).width, 30) + 22;
+        drawSlot(cx, cy + (cs - ss) / 2, ss, { name });
+        const have = countOf(name), ls = lines(name, k, wrap), up = (ls.length - 1) * 9 * k; ctx.textAlign = 'left'; ctx.textBaseline = 'middle';
+        ctx.fillStyle = have >= n ? '#3ddc84' : '#e5484d'; ctx.font = `600 ${Math.round(24 * k)}px ${MONO}`;
+        ctx.fillText(`${n}`, cx + ss + 8 * k, cy + cs / 2 - 12 * k - up);
+        ctx.fillStyle = '#8a8a8a'; ctx.font = `${Math.round(16 * k)}px ${MONO}`;
+        ls.forEach((l, i) => ctx.fillText(l, cx + ss + 8 * k, cy + cs / 2 + 14 * k - up + i * 18 * k));
+        cx += ss + 8 * k + Math.max(...ls.map(l => ctx.measureText(l).width), 30 * k) + 22 * k;
       }
-      ctx.font = '600 26px ' + MONO; ctx.fillStyle = stats.energy >= r.energy ? '#9dff5c' : '#e5484d';
+      ctx.font = `600 ${Math.round(26 * k)}px ${MONO}`; ctx.fillStyle = stats.energy >= r.energy ? '#9dff5c' : '#e5484d';
       ctx.fillText(`${r.energy} ${ICON.energy}`, cx, cy + cs / 2);
       ctx.font = '19px ' + MONO; ctx.fillStyle = '#cfcfcf';
       wrapText(def.desc || '', x + w - 20 - rx).slice(0, 5).forEach((l, i) => ctx.fillText(l, rx, cy + cs + 26 + i * 24));
@@ -6612,17 +7098,17 @@
       if (ui.kind === 'techversity') { drawTalentWindow(); return; }
       const list = rows();
       const info = ui.kind === 'controls';          // read-only list, nothing to select
-      const rowH = info ? 38 : list.some(r => r.rq) ? 150 : ui.kind === 'shop' || ui.kind === 'work' || ui.kind === 'rest' ? 150 : ui.kind === 'quests' ? 96 : ui.kind === 'leaderboard' ? 60 : ui.kind === 'loot' || ui.kind === 'scrap' ? 88 : ui.kind === 'cheat' ? 50 : ui.kind === 'spelltech' ? 262 : 64;   // shop and loot rows are taller for the item pictures
+      const rowH = info ? 38 : list.some(r => r.news) ? 186 : list.some(r => r.rq) ? 150 : ui.kind === 'shop' || ui.kind === 'work' || ui.kind === 'rest' ? 150 : ui.kind === 'quests' ? 96 : ui.kind === 'leaderboard' ? 60 : ui.kind === 'loot' || ui.kind === 'scrap' ? 88 : ui.kind === 'cheat' ? 50 : ui.kind === 'spelltech' ? 262 : 64;   // shop and loot rows are taller for the item pictures
       const hero = ui.kind === 'hero', inv = ui.kind === 'inventory';
-      const wide = hero || inv || ['leaderboard', 'quests', 'shop', 'scrap', 'bank', 'save', 'load', 'logout', 'guest', 'sound', 'decals', 'spelltech', 'rogue'].includes(ui.kind);
-      const pw = (ui.kind === 'spelltech' || ui.kind === 'shop' || ui.kind === 'work' || ui.kind === 'rest' || ui.kind === 'rogue' ? 15 : wide ? 11 : 9) * TILE;
+      const wide = hero || inv || ['leaderboard', 'quests', 'shop', 'scrap', 'bank', 'save', 'load', 'logout', 'guest', 'sound', 'decals', 'spelltech', 'rogue', 'sparky', 'pixi'].includes(ui.kind);
+      const pw = (ui.kind === 'spelltech' || ui.kind === 'shop' || ui.kind === 'work' || ui.kind === 'rest' || ui.kind === 'rogue' || ui.kind === 'sparky' || ui.kind === 'pixi' ? 15 : wide ? 11 : 9) * TILE;
       ctx.font = '26px ' + MONO;
       const wtext = typeof WINDOW_TEXT[ui.kind] === 'function' ? WINDOW_TEXT[ui.kind]() : WINDOW_TEXT[ui.kind];
       const textLines = wtext ? wrapText(wtext, pw - 80) : [];
       const msgLines = ui.msg ? wrapText(ui.msg, pw - 80) : [];
       const tabs = WINDOW_TABS[ui.kind], shop = !!tabs, tabsH = tabs ? 70 : 0;   // tabbed windows: row of tabs under the title, fixed height
       const listN = ui.kind === 'shop' ? Math.max(...SHOP_TABS.map(t => [...SHOP_ITEMS, ...BAG_ITEMS()].filter(it => it.tab === t.key).length)) : ui.kind === 'work' ? 3 : ui.kind === 'leaderboard' ? LB_TOP + 2 : ui.kind === 'cheat' ? 11 : list.length;
-      const textH = (textLines.length ? textLines.length * 34 + 24 : 0) + tabsH, gaps = list.filter(r => r.gapBefore).length * 24;
+      const textH = (textLines.length ? textLines.length * 34 + 24 : 0) + tabsH, gaps = list.filter(r => r.gapBefore).length * 24 - list.filter(r => r.short).length * (rowH - 72);   // short rows (Pixi's button) are 72 tall
       const ph = hero || inv ? 7 * TILE : ui.kind === 'bank' ? Math.min(canvas.height - 20, 11 * TILE)
         : Math.min(canvas.height - 20, Math.max((ui.kind === 'rest' ? 4.5 : 6) * TILE, 110 + textH + listN * rowH + gaps + Math.max(1, msgLines.length) * 32 + 100));
       let px = (canvas.width - pw) / 2;
@@ -6642,7 +7128,7 @@
       ctx.textAlign = 'left';
       ctx.font = '600 40px ' + MONO;
       ctx.fillText(hero ? (heroName || DEFAULT_NAME) : ui.kind === 'loot' && lootTarget ? `Loot · ${ET(lootTarget).name}` : ui.kind === 'quests' ? `Quests ${quests.length}/${MAX_QUESTS}` : TITLES[ui.kind], px + 40, py + 56);
-      const portrait = ui.kind === 'rogue' ? ART.roguePortrait : ui.kind === 'pixi' ? ART.pixiPortrait : null;
+      const portrait = ui.kind === 'rogue' ? ART.roguePortrait : ui.kind === 'pixi' ? ART.pixiPortrait : ui.kind === 'sparky' ? ART.sparkyPortrait : null;
       if (portrait && ready(portrait)) {   // her portrait stands on the window's top edge, left of the close button
         const im = portrait, h = 200, w = h * im.naturalWidth / im.naturalHeight;
         ctx.imageSmoothingQuality = 'high'; ctx.drawImage(im, px + pw - w - 80, py - h + 6, w, h);
@@ -6690,7 +7176,7 @@
       // row of look-ahead, so clicking or tapping the last visible row brings the next one into view (mouse wheel works too)
       const listBottom = py + ph - 104 - Math.max(0, msgLines.length - 1) * 32, fitN = Math.max(1, Math.floor((listBottom - top + 8) / rowH));
       if (ui.kind === 'bank' && list.length) drawVault(px, py, pw, ph, top);
-      const scrolls = ui.kind !== 'bank' && !info && !list.some(r => r.gapBefore) && !(list.length && list[0].side) && list.length > fitN;
+      const scrolls = ui.kind !== 'bank' && !info && !list.some(r => r.gapBefore || r.short) && !(list.length && list[0].side) && list.length > fitN;
       if (scrolls) {
         const ahead = fitN >= 3 ? 1 : 0;
         ui.scroll = Math.max(0, Math.min(ui.scroll || 0, list.length - fitN));
@@ -6704,8 +7190,11 @@
         if (r.gapBefore) gapY += 24;
         if (scrolls && (i < first || i >= first + fitN)) return;
         const y = top + (i - first) * rowH + gapY, sel = !info && i === ui.cursor;
-        rowRects.push({ x: px + 24, y, w: pw - 48, h: rowH - 8, i });
-        if (sel) { ctx.fillStyle = 'rgba(255, 220, 0, 0.12)'; ctx.fillRect(px + 24, y, pw - 48, rowH - 8); }
+        const rh = r.short ? 72 : rowH;   // a short row is the last one, so the rows below don't move
+        rowRects.push({ x: px + 24, y, w: pw - 48, h: rh - 8, i });
+        if (sel) { ctx.fillStyle = 'rgba(255, 220, 0, 0.12)'; ctx.fillRect(px + 24, y, pw - 48, rh - 8); }
+        if (r.news) { drawNewsRow(r, px + 24, y, pw - 48, rowH - 8, sel); return; }
+        if (r.short) { ctx.fillStyle = sel ? '#fff' : '#cfcfcf'; ctx.font = (sel ? '600 ' : '') + '30px ' + MONO; ctx.textAlign = 'left'; ctx.textBaseline = 'middle'; ctx.fillText((sel ? '> ' : '  ') + r.left, px + 40, y + (rh - 8) / 2); return; }
         if (r.craft) { drawCraftRow(r.craft, px + 24, y, pw - 48, rowH - 8, sel); return; }
         if (r.rq) { drawRogueQuestRow(r.rq, px + 24, y, pw - 48, rowH - 8, sel); return; }
         if (r.shopItem) { drawShopRow(r.shopItem, px + 24, y, pw - 48, rowH - 8, sel); return; }
@@ -7025,7 +7514,7 @@
     // Zone cells keep the zone's 21:13 shape. Undiscovered zones are fog (a drawn placeholder until fog art exists).
     const MAP_BOUNDS = (() => { const c = Object.keys(ZONE_LIST).map(coordOf);
       return { aMin: Math.min(...c.map(v => v[0])), aMax: Math.max(...c.map(v => v[0])), bMin: Math.min(...c.map(v => v[1])), bMax: Math.max(...c.map(v => v[1])) }; })();
-    const ZONE_COLORS = { wasteland: '#7a3a1c', pit: '#4a2010', city: '#8a93a6', slums: '#58617a', greaser: '#7a6d3e', lake: '#2f8a45', factoryIn: '#6a5a4a', factory: '#57493c', forest: '#4f7a3a', deepForest: '#2f5a26' };
+    const ZONE_COLORS = { grid: '#1d4a6b', wasteland: '#7a3a1c', pit: '#4a2010', city: '#8a93a6', slums: '#58617a', greaser: '#7a6d3e', lake: '#2f8a45', factoryIn: '#6a5a4a', factory: '#57493c', forest: '#4f7a3a', deepForest: '#2f5a26' };
     const fogCache = new Map();
     function fogTile(w, h) {   // soft grey clouds, same pattern every time for a given size
       const key = `${w}x${h}`;
@@ -7276,7 +7765,7 @@
     }
 
     function wrapText(text, maxW) {   // uses the current ctx.font; '\n' starts a new line
-      if (text.includes('\n')) return text.split('\n').flatMap(t => wrapText(t, maxW));
+      if (text.includes('\n')) return text.split('\n').flatMap(t => t ? wrapText(t, maxW) : ['']);   // an empty line stays (a gap)
       const out = []; let line = '';
       for (const w of text.split(' ')) {
         const t = line ? line + ' ' + w : w;
@@ -7868,7 +8357,7 @@
         if (!w.opens) continue;
         const f = foot(w), a = artSize(w);
         const x0 = a ? footCX(w) - a.dw / 2 / TILE : f.x0, x1 = a ? x0 + a.dw / TILE : f.x1 + 1, y1 = f.y1 + 1, y0 = a ? y1 - a.dh / TILE : f.y0;
-        if (wx >= x0 && wx <= x1 && wy >= y0 && wy <= y1) return { kind: 'interact', near: fb === w, act: () => { playSfx('interact'); openWindow(w.opens); } };
+        if (wx >= x0 && wx <= x1 && wy >= y0 && wy <= y1) return { kind: 'interact', near: fb === w, act: () => { if (w.opens === 'node') { mouseAim.harvest = true; startPowering(w); return; } playSfx('interact'); openWindow(w.opens); } };
       }
       return null;
     }
