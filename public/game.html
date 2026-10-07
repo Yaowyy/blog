@@ -159,7 +159,9 @@
   .ph-bar.hp i { background: #e5484d; } .ph-bar.mana i { background: #4ea1ff; }
   .ph-bar.xp { height: 5px; } .ph-bar.xp i { background: linear-gradient(90deg, #6a3fd0, #b58cff); }
   .ph-bar span { position: absolute; inset: 0; font-size: 9px; line-height: 10px; text-align: center; text-shadow: 0 0 2px #000, 0 0 2px #000; }
-  .ph-res { display: flex; gap: 12px; font-size: 11px; }
+  .ph-res { display: flex; flex-wrap: nowrap; gap: 8px; font-size: 11px; align-items: center; white-space: nowrap; }
+  .ph-res span { display: inline-flex; align-items: center; white-space: nowrap; }
+  .sti { height: 1.25em; width: auto; vertical-align: -0.28em; margin: 0 0.15em; }   /* stat icon inside text */
   .ph-res .nrg { color: #9dff5c; } .ph-res .gold { color: #f5c542; } .ph-res b { color: #fff; }
   /* naming screen, shown over the grid at the start of a game */
   .naming[hidden] { display: none; }
@@ -279,7 +281,7 @@
       <div class="ph-bar hp"><i id="ph-hp"></i><span id="ph-hpt"></span></div>
       <div class="ph-bar mana"><i id="ph-mana"></i><span id="ph-manat"></span></div>
       <div class="ph-bar xp"><i id="ph-xp"></i></div>
-      <div class="ph-res"><span class="nrg">&#x26A1;&#xFE0E; <b id="ph-nrg">0</b></span><span class="gold">$ <b id="ph-money">0</b></span><span class="deals ph-more" title="Deals made at work">deals <b id="ph-deals">0</b></span></div>
+      <div class="ph-res"><span class="nrg" title="Energy"><b id="ph-nrg">0</b><img class="sti" src="art/ui/stat/statEnergy.webp" alt=""></span><span class="gold" title="Money"><b id="ph-money">0</b><img class="sti" src="art/ui/stat/statMoney.webp" alt=""></span><span class="deals ph-more" title="Deals made at work"><b id="ph-deals">0</b><img class="sti" src="art/ui/stat/statDeals.webp" alt=""></span></div>
     </div>
   </div>
   <!-- phone controls over the map (touch screens; Settings → touch controls): joystick, action + spells, menu row -->
@@ -353,9 +355,9 @@
     <div class="hero-col">
     <div class="hero-name" id="hud-name">hero</div>
     <div class="stats" aria-label="Hero stats">
-      <span class="stat hp" title="Health"><i aria-hidden="true">&#x2665;&#xFE0E;</i><b id="stat-health">10</b></span>
-      <span class="stat str" title="Strength"><i aria-hidden="true">&#x2694;&#xFE0E;</i><b id="stat-strength">1</b></span>
-      <span class="stat mana" title="Mana"><i aria-hidden="true">&#x25C6;</i><b id="stat-mana">0</b></span>
+      <span class="stat hp" title="Health"><i aria-hidden="true"><img class="sti" src="art/ui/stat/statHealth.webp" alt=""></i><b id="stat-health">10</b></span>
+      <span class="stat str" title="Strength"><i aria-hidden="true"><img class="sti" src="art/ui/stat/statStrength.webp" alt=""></i><b id="stat-strength">1</b></span>
+      <span class="stat mana" title="Mana"><i aria-hidden="true"><img class="sti" src="art/ui/stat/statMana.webp" alt=""></i><b id="stat-mana">0</b></span>
     </div>
     </div>
   </div>
@@ -368,11 +370,11 @@
     <div class="area-name" id="area-name" title="Current area">city</div>
     <div class="right-row">
     <div class="stats">
-      <span class="stat nrg" title="Energy"><i aria-hidden="true">&#x26A1;&#xFE0E;</i><b id="stat-energy">10</b></span>
-      <span class="stat cha" title="Charisma"><i aria-hidden="true">&#x2726;</i><b id="stat-charisma">1</b></span>
-      <span class="stat gold" title="Money"><i aria-hidden="true">$</i><b id="stat-money">0</b></span>
+      <span class="stat nrg" title="Energy"><i aria-hidden="true"><img class="sti" src="art/ui/stat/statEnergy.webp" alt=""></i><b id="stat-energy">10</b></span>
+      <span class="stat cha" title="Charisma"><i aria-hidden="true"><img class="sti" src="art/ui/stat/statCharisma.webp" alt=""></i><b id="stat-charisma">1</b></span>
+      <span class="stat gold" title="Money"><b id="stat-money">0</b><i aria-hidden="true"><img class="sti" src="art/ui/stat/statMoney.webp" alt=""></i></span>
     </div>
-    <div class="counter" title="Deals made at work">deals <b id="stat-deals">0</b></div>
+    <div class="counter" title="Deals made at work"><img class="sti" src="art/ui/stat/statDeals.webp" alt=""> <b id="stat-deals">0</b></div>
 
       </div>
     </div>
@@ -613,13 +615,13 @@
   // price = start + climb × floor(foodBought / 100). Starts 1 : 4 : 12 : 24, ratios drift to about 1 : 3 : 6.75 : 10 by 10 000 deals.
   const SHOP_ITEMS = [
     { name: 'Cheap noodles', tab: 'food', class: 'food', stack: 16, price: 1,   gain: { energy: 10, health: 1 }, art: 'food', rarity: 'common',
-      desc: 'A steaming bowl of street noodles. Refills energy and patches you up a little. +1$ per 100 food bought.' },
+      desc: 'A steaming bowl of street noodles. Refills energy and patches you up a little. +1\uE100 per 100 food bought.' },
     { name: 'Beef brisket', tab: 'food', class: 'food', stack: 16, price: 4, gain: { energy: 18, health: 2 }, art: 'beefBrisket', rarity: 'common',
-      desc: 'Slow-smoked brisket from a rooftop grill. A proper meal: more energy and a bit more healing. +3$ per 100 food bought.' },
+      desc: 'Slow-smoked brisket from a rooftop grill. A proper meal: more energy and a bit more healing. +3\uE100 per 100 food bought.' },
     { name: 'Dumplings', tab: 'food', class: 'food', stack: 16, price: 12, buyLevel: 4, gain: { energy: 33, health: 4 }, art: 'dumplings', rarity: 'rare',
-      desc: 'A steamer basket of fat dumplings. Keeps you going through a long shift. +6.7$ per 100 food bought.' },
+      desc: 'A steamer basket of fat dumplings. Keeps you going through a long shift. +6.7\uE100 per 100 food bought.' },
     { name: 'NRG Shot', tab: 'food', class: 'food', stack: 16, price: 24, buyLevel: 6, gain: { energy: 50 }, art: 'nrgShot', rarity: 'rare',
-      desc: 'A tiny vial of neon-blue fuel. A huge energy kick, no healing at all. +10$ per 100 food bought.' },
+      desc: 'A tiny vial of neon-blue fuel. A huge energy kick, no healing at all. +10\uE100 per 100 food bought.' },
     { name: 'Smile',   tab: 'patches', class: 'patch', price: 30,  gain: { charisma: 1 }, patch: true, art: 'smilePatch', rarity: 'common',
       desc: 'Cheap social firmware. Every install makes you a little more likeable. +15% price per install.' },
     { name: 'Social',  tab: 'patches', class: 'patch', minLevel: 2, price: 80,  gain: { charisma: 2 }, patch: true, art: 'socialPatch', rarity: 'common',
@@ -1743,7 +1745,9 @@
     heroFull:     'art/hero/heroFull.webp',
     mapFog: 'art/ui/mapFog.webp',   // seamless fog texture for undiscovered zones on the maps
     heroFall: 'art/hero/heroFall.png', heroDefeated: 'art/hero/heroDefeated.png',   // death: 4-frame fall (faces right) + Game over picture
-    statusRooted: 'art/ui/statusRooted.png', statusInjured: 'art/ui/statusInjured.png',   // status effect icons (badge with a coloured border)
+    statusRooted: 'art/ui/statusRooted.png', statusInjured: 'art/ui/statusInjured.png', statusPoison: 'art/ui/statusPoison.webp',
+    buffTopExp: 'art/ui/buffTopExp.webp', buffTopDeals: 'art/ui/buffTopDeals.webp', buffTopKills: 'art/ui/buffTopKills.webp',   // Top 1 leaderboard buffs (gold crown on the badge)
+      // status effect icons (badge with a coloured border)
     heroPunchSide: 'art/hero/heroPunchSide.png', heroPunchDown: 'art/hero/heroPunchDown.png', heroPunchUp: 'art/hero/heroPunchUp.png',   // attack sheets, 4 frames each
     heroSwordSide: 'art/hero/heroSwordSide.png', heroSwordDown: 'art/hero/heroSwordDown.png', heroSwordUp: 'art/hero/heroSwordUp.png',
     heroWalk:     'art/hero/heroWalk.webp',   // 4 walk frames side by side, facing right
@@ -1831,6 +1835,42 @@
   for (const sheet of Object.values(BIG_DECALS)) for (let i = 1; i <= 4; i++) ART_SRC[sheet + i] = `art/world/decals/${sheet}${i}.webp`;
   const ART = Object.fromEntries(Object.entries(ART_SRC).map(([k, src]) => { const im = new Image(); im.src = src; return [k, im]; }));
   const ready = im => im && im.complete && im.naturalWidth > 0;
+  // ---- stat icons inside text. G.* are private-use characters: put them in any string; canvas text (fillText / strokeText /
+  // measureText, so wrapText too) draws each one as its stat picture, about 1.1× the font size (the old symbol until it loads).
+  // DOM text uses iconHTML(). Money goes after the number (50{coin}), the others before or instead of the stat's name.
+  const G = { money: '', energy: '', health: '', mana: '', charisma: '', strength: '', speed: '', deals: '', exp: '' };
+  const GLYPH = { '': ['statMoney', '$'], '': ['statEnergy', '⚡'], '': ['statHealth', '♥'], '': ['statMana', '◆'],
+                  '': ['statCharisma', '✦'], '': ['statStrength', '⚔'], '': ['statSpeed', '»'], '': ['statDeals', '⇄'], '': ['statExp', 'exp'] };
+  for (const [key] of Object.values(GLYPH)) { const im = new Image(); im.src = `art/ui/stat/${key}.webp`; ART[key] = im; ART_SRC[key] = im.src; }
+  const kfmt = n => { const a = Math.abs(n), sg = n < 0 ? '-' : ''; return a < 1000 ? String(n) : a < 1e6 ? sg + (Math.floor(a / 100) / 10).toFixed(1) + 'K' : sg + (Math.floor(a / 1e5) / 10).toFixed(1) + 'M'; };   // 14187 → 14.1K (rounded down)
+  const iconHTML = s => String(s).replace(/[-]/g, ch => `<img class="sti" src="art/ui/stat/${GLYPH[ch][0]}.webp" alt="${GLYPH[ch][1]}">`);
+  (() => {
+    const P = CanvasRenderingContext2D.prototype, fill = P.fillText, stroke = P.strokeText, measure = P.measureText, RE = /[-]/;
+    const fontPx = c => { const m = /(\d+(?:\.\d+)?)px/.exec(c.font); return m ? +m[1] : 16; };
+    const parts = t => t.split(/([-])/).filter(Boolean);
+    const segW = (c, p) => { const g = GLYPH[p]; return !g ? measure.call(c, p).width : ready(ART[g[0]]) ? fontPx(c) * 1.2 : measure.call(c, g[1]).width; };
+    const totalW = (c, t) => parts(t).reduce((w, p) => w + segW(c, p), 0);
+    function draw(c, t, x, y, isStroke) {
+      const al = c.textAlign, w = totalW(c, t), bl = c.textBaseline, s = fontPx(c) * 1.1;
+      let sx = al === 'center' ? x - w / 2 : al === 'right' || al === 'end' ? x - w : x;
+      const iy = bl === 'middle' ? y - s / 2 : bl === 'top' || bl === 'hanging' ? y : bl === 'bottom' || bl === 'ideographic' ? y - s : y - s * 0.85;
+      c.textAlign = 'left';
+      for (const p of parts(t)) {
+        const g = GLYPH[p], cw = segW(c, p);
+        if (!g) (isStroke ? stroke : fill).call(c, p, sx, y);
+        else if (ready(ART[g[0]])) { if (!isStroke) c.drawImage(ART[g[0]], sx + (cw - s) / 2, iy, s, s); }
+        else (isStroke ? stroke : fill).call(c, g[1], sx, y);
+        sx += cw;
+      }
+      c.textAlign = al;
+    }
+    P.fillText = function (t, x, y, ...rest) { t = String(t); if (!RE.test(t)) return fill.call(this, t, x, y, ...rest); draw(this, t, x, y, false); };
+    P.strokeText = function (t, x, y, ...rest) { t = String(t); if (!RE.test(t)) return stroke.call(this, t, x, y, ...rest); draw(this, t, x, y, true); };
+    P.measureText = function (t) { t = String(t); if (!RE.test(t)) return measure.call(this, t);
+      const m = measure.call(this, t.replace(/[-]/g, 'M')), w = totalW(this, t);
+      return { width: w, actualBoundingBoxLeft: 0, actualBoundingBoxRight: w, actualBoundingBoxAscent: m.actualBoundingBoxAscent, actualBoundingBoxDescent: m.actualBoundingBoxDescent,
+               fontBoundingBoxAscent: m.fontBoundingBoxAscent, fontBoundingBoxDescent: m.fontBoundingBoxDescent }; };
+  })();
   // pictures load from the moment the page opens (the start screen doubles as the loading screen); a missing file counts as done
   const artProgress = () => { const all = Object.values(ART); return all.length ? all.filter(im => im.complete).length / all.length : 1; };
 
@@ -1859,7 +1899,7 @@
   };
   const HERO_ATTACK_ANIM_MS = 400;   // 4 frames × 100 ms
 
-  const ICON = { health: '♥', strength: '⚔\uFE0E', mana: '◆', charisma: '✦', money: '$', energy: '⚡\uFE0E' };
+  const ICON = { health: G.health, strength: G.strength, mana: G.mana, charisma: G.charisma, money: G.money, energy: G.energy, speed: G.speed, deals: G.deals };   // stat pictures (see G)
 
   function start(saved) {
     const savedArea = AREA_ALIAS[saved.areaName] || saved.areaName;
@@ -1962,8 +2002,8 @@
     function resetTalents() {
       const cost = TALENT_RESET * hero.level;
       if (!spentPts()) return 'You have no points spent.';
-      if (stats.money < cost) return `A reset costs ${cost}$.`;
-      askConfirm({ title: 'Reset talents?', icon: '↺', text: `All <b>${spentPts()}</b> points come back for <b>${cost}$</b>.`, yes: 'Reset', no: 'Cancel' }).then(ok => {
+      if (stats.money < cost) return `A reset costs ${cost}${G.money}.`;
+      askConfirm({ title: 'Reset talents?', icon: '↺', text: `All <b>${spentPts()}</b> points come back for <b>${cost}${G.money}</b>.`, yes: 'Reset', no: 'Cancel' }).then(ok => {
         if (!ok) return;
         stats.money -= cost; applyTalentChange(() => { Object.assign(talents, newTalents()); });
         ceoCalls = 0; if (ui && ui.kind === 'techversity') ui.msg = 'All points are back. Spend them again.';
@@ -2004,9 +2044,9 @@
       { ev: 'deal', need: 5, task: 'Take 5 deals at TradeCorp.', target: 'work',
         tip: 'Deals are rolled at random. Each one costs energy (⚡) and pays money and exp.' },
       { ev: 'food', need: 2, task: 'Buy 2 food at the ATB-Market.', target: 'shop',
-        tip: 'Energy (⚡) is what deals cost. Your max energy grows with your level and items; food fills it back up.' },
-      { ev: 'money', need: 30, task: 'Take more deals until you have 30$.', target: 'work',
-        tip: 'Charisma (✦) is one of your stats: the more charisma you have, the better the deals you get.' },
+        tip: 'Energy (\uE101) is what deals cost. Your max energy grows with your level and items; food fills it back up.' },
+      { ev: 'money', need: 30, task: 'Take more deals until you have 30\uE100.', target: 'work',
+        tip: 'Charisma (\uE104) is one of your stats: the more charisma you have, the better the deals you get.' },
       { ev: 'smile', task: 'Buy the Smile patch (lvl 1) at the ATB-Market.', target: 'shop',
         tip: 'It is in the Patches tab and gives +1 charisma. More charisma = deals that pay more for the same energy.' },
       { ev: 'rest', task: 'Sleep at HomeDome.', target: 'rest',
@@ -2031,7 +2071,7 @@
     const PIXI_FEED = [
       { id: 'runner', title: 'A runaway robot?!', icon: 'runnerPortrait', text: `Okay so, someone from MutaTech saw a ROBOT racing between the deep forest and the slums, like, back and forth, all day!! It throws parcels at people who get too close. Rumour says it carries a busted courier shell that MutaTech can fix. Be careful out there!` },
       { id: 'sparky', title: 'Meet Sparky!', icon: 'sparkyPortrait', text: `Did you meet Sparky yet?! She's SO cool!! She's the electrician by the east road, just past the noodle bar, and sparks literally come out of her fingers! She needs help getting The Grid's power back on. Go say hi!` },
-      { id: 'credbank-vault', title: 'The CredBank is open!', icon: 'credBank', text: `OMG OMG OMG!! The CredBank is finally OPEN!! It has a super-safe Vault: unlock a bag socket, pop a bag in, and boom, extra storage! Storing stuff is just 1$, taking it back is 2$, and get this... EVERYTHING in the Vault stays even if you, like, totally die!! Go go go, it's right here in the city!` },
+      { id: 'credbank-vault', title: 'The CredBank is open!', icon: 'credBank', text: `OMG OMG OMG!! The CredBank is finally OPEN!! It has a super-safe Vault: unlock a bag socket, pop a bag in, and boom, extra storage! Storing stuff is just 1\uE100, taking it back is 2\uE100, and get this... EVERYTHING in the Vault stays even if you, like, totally die!! Go go go, it's right here in the city!` },
     ];
     const PIXI_NEWS = { id: PIXI_FEED[0].id };   // the newest entry: her '!' until it's been heard
     // window: one row per news (icon, title, text), newest first, then the "Yay, thanks Pixi!" button
@@ -2039,7 +2079,7 @@
     let tutQuiz = saved.tutQuiz ? { ...saved.tutQuiz } : { i: 0, wrong: 0 };   // quiz: next question, wrong answers so far
     const tutReward = () => ({ money: TUT_REWARD.money - TUT_PENALTY.money * tutQuiz.wrong, exp: TUT_REWARD.exp - TUT_PENALTY.exp * tutQuiz.wrong });
     const tutProgress = () => { const st = TUT[tut - 1]; if (!st) return '';
-      return st.ev === 'money' ? ` (${Math.min(stats.money, st.need)}/${st.need}$)` : st.need > 1 ? ` (${tutN}/${st.need})` : ''; };
+      return st.ev === 'money' ? ` (${Math.min(stats.money, st.need)}/${st.need}${G.money})` : st.need > 1 ? ` (${tutN}/${st.need})` : ''; };
     let walkedOnce = false;   // this visit: has the hero taken a step yet? (the walking hint stays until he has)
     let tut = saved.tut ?? 0;
     let hintText = '', hintUntil = 0;   // a short line at the top of the screen (real time)
@@ -2134,30 +2174,30 @@
         inventory.splice(idx, 1); vault.bags[sock] = it.name;
         return `${it.name} put in socket ${sock + 1}: +${def.slots} Vault slots (${vaultSlots()} in all).`;
       }
-      if (!vaultSlots()) return vault.open ? 'Put a bag in a socket first: its slots become your Vault storage.' : 'Unlock a socket first (1$), then put a bag in it.';
-      if (stats.money < VAULT_FEES.store) return `Storing costs ${VAULT_FEES.store}$.`;
+      if (!vaultSlots()) return vault.open ? 'Put a bag in a socket first: its slots become your Vault storage.' : 'Unlock a socket first (1\uE100), then put a bag in it.';
+      if (stats.money < VAULT_FEES.store) return `Storing costs ${VAULT_FEES.store}${G.money}.`;
       const n = it.count || 1, moved = moveItem(inventory, idx, vault.items, vaultSlots(), n);
       if (!moved) return 'Your Vault is full.';
       stats.money -= VAULT_FEES.store; renderStats();
-      return `Stored ${moved > 1 ? moved + ' × ' : ''}${it.name} for ${VAULT_FEES.store}$.${moved < n ? ` ${n - moved} didn't fit.` : ''}`;
+      return `Stored ${moved > 1 ? moved + ' × ' : ''}${it.name} for ${VAULT_FEES.store}${G.money}.${moved < n ? ` ${n - moved} didn't fit.` : ''}`;
     }
     // take n (Infinity = all) of Vault slot idx back into the inventory for 2$
     function vaultWithdraw(idx, n = Infinity) {
       const it = vault.items[idx]; if (!it) return 'This Vault slot is empty.';
-      if (stats.money < VAULT_FEES.withdraw) return `Taking an item out costs ${VAULT_FEES.withdraw}$.`;
+      if (stats.money < VAULT_FEES.withdraw) return `Taking an item out costs ${VAULT_FEES.withdraw}${G.money}.`;
       const want = Math.min(n, it.count || 1), moved = moveItem(vault.items, idx, inventory, invSlots(), want);
       if (!moved) return fullMsg();
       stats.money -= VAULT_FEES.withdraw; renderStats();
-      return `Took out ${moved > 1 ? moved + ' × ' : ''}${it.name} for ${VAULT_FEES.withdraw}$.${moved < want ? ` ${want - moved} didn't fit.` : ''}`;
+      return `Took out ${moved > 1 ? moved + ' × ' : ''}${it.name} for ${VAULT_FEES.withdraw}${G.money}.${moved < want ? ` ${want - moved} didn't fit.` : ''}`;
     }
     // a socket: buy it (the next locked one), take its bag out, or explain
     function vaultSocket(i) {
       if (i >= vault.open) {
         if (i > vault.open) return `Unlock socket ${vault.open + 1} first.`;
         const c = VAULT_SOCKET_COST[i];
-        if (stats.money < c) return `Socket ${i + 1} costs ${c.toLocaleString('en')}$.`;
+        if (stats.money < c) return `Socket ${i + 1} costs ${c.toLocaleString('en')}${G.money}.`;
         stats.money -= c; vault.open++; renderStats();
-        return `Socket ${i + 1} unlocked for ${c.toLocaleString('en')}$. Press Space on a bag in your inventory to put it in.`;
+        return `Socket ${i + 1} unlocked for ${c.toLocaleString('en')}${G.money}. Press Space on a bag in your inventory to put it in.`;
       }
       const b = vault.bags[i];
       if (!b) return 'Empty socket. Press Space on a bag in your inventory to put it here.';
@@ -2233,22 +2273,22 @@
     }
     // a quest giver's window rows: hand in what's done, take what's offered, else ask for work
     function npcQuestRows(g) {
-      const G = GIVERS[g], rows = [], who = g === 'sparky' ? 'Sparky' : 'Rogue';
-      for (const q of rogueReady(g)) { const r = rqDef(q.id), pay = rqPay(r); rows.push({ rq: { r, mode: 'ready' }, left: `hand in: ${q.name}`, right: `${rqTag(r)} · +${pay.exp} exp +${pay.money}$`, act() {
+      const GV = GIVERS[g], rows = [], who = g === 'sparky' ? 'Sparky' : 'Rogue';
+      for (const q of rogueReady(g)) { const r = rqDef(q.id), pay = rqPay(r); rows.push({ rq: { r, mode: 'ready' }, left: `hand in: ${q.name}`, right: `${rqTag(r)} · +${pay.exp}${G.exp} +${pay.money}${G.money}`, act() {
         if (!rqComplete(q)) return 'Not done yet.';
         if (r.take) takeItems(r.take, r.need);   // item quests: she keeps the items (takeItems: see crafting)
         quests.splice(quests.indexOf(q), 1); rogueDone.add(q.id); stats.money += pay.money; gainExp(pay.exp); renderStats(); ui.cursor = 0;
-        float(`+${pay.exp} exp +${pay.money}$`, g === 'sparky' ? '#ffe600' : '#9b5cff', player.x + 0.5, player.y - 1.2);
-        const next = G.list.find(n => n.after === q.id);
-        return `Quest complete: ${q.name}. +${pay.exp} exp, +${pay.money}$.${next ? ` New quest: ${next.name}${hero.level < next.lvl ? ` (at level ${next.lvl})` : ''}.` : ''}`;
+        float(`+${pay.exp}${G.exp} +${pay.money}${G.money}`, g === 'sparky' ? '#ffe600' : '#9b5cff', player.x + 0.5, player.y - 1.2);
+        const next = GV.list.find(n => n.after === q.id);
+        return `Quest complete: ${q.name}. +${pay.exp}${G.exp}, +${pay.money}${G.money}.${next ? ` New quest: ${next.name}${hero.level < next.lvl ? ` (at level ${next.lvl})` : ''}.` : ''}`;
       } }); }
-      for (const r of rogueOffers(g)) rows.push({ rq: { r, mode: 'offer' }, left: `quest: ${r.name}`, right: `${rqTag(r)} · +${rqPay(r).exp} exp +${rqPay(r).money}$`, act() {
+      for (const r of rogueOffers(g)) rows.push({ rq: { r, mode: 'offer' }, left: `quest: ${r.name}`, right: `${rqTag(r)} · +${rqPay(r).exp}${G.exp} +${rqPay(r).money}${G.money}`, act() {
         if (quests.length >= MAX_QUESTS) return `You already have ${MAX_QUESTS} active quests. Cancel one first (Q).`;
         quests.push({ kind: 'rogue', id: r.id, name: r.name, from: who, lvl: r.lvl, rarity: r.rarity }); ui.cursor = 0;
         return `${r.talk} Quest accepted: ${r.name}.`;
       } });
       if (!rows.length) rows.push({ left: 'any work for me?', right: '', act() {
-        const later = G.list.filter(r => !rogueDone.has(r.id) && !quests.some(q => q.kind === 'rogue' && q.id === r.id) && (!r.after || rogueDone.has(r.after))).sort((a, b) => a.lvl - b.lvl)[0];
+        const later = GV.list.filter(r => !rogueDone.has(r.id) && !quests.some(q => q.kind === 'rogue' && q.id === r.id) && (!r.after || rogueDone.has(r.after))).sort((a, b) => a.lvl - b.lvl)[0];
         if (quests.some(q => q.kind === 'rogue' && giverOf(q.id) === g)) return g === 'sparky' ? '"You\'re still on my last job, sparkplug!"' : '"Finish what I gave you first."';
         if (g === 'sparky') return later ? `"Not yet! Come back at level ${later.lvl}, I\'ll have something shocking."` : '"The lights are on and it\'s all thanks to you. Nothing else for now!"';
         return later ? `"Not yet. Come back at level ${later.lvl}."` : '"Nothing right now. Keep hustling."';
@@ -2317,7 +2357,7 @@
         return {
           left: it.patch ? `${it.name}  lvl ${levels[it.name]}` : it.name,
           shopItem: { it, owned: showOwned, have: owned, price: shown(it.name, prices[it.name]) },   // drawn as a big tile (drawShopRow)
-          right: `${bonusText(it)}   ${showOwned ? 'owned' : shown(it.name, prices[it.name]) + '$'}`,
+          right: `${bonusText(it)}   ${showOwned ? 'owned' : shown(it.name, prices[it.name]) + G.money}`,
           act(again) {
             const price = shown(it.name, prices[it.name]);
             if (owned && it.class !== 'equipment' && it.class !== 'bag') return `You already have the ${it.name}.`;
@@ -2369,8 +2409,8 @@
             if (it.gain.charisma) deals = newDeals();
             if (it.class !== 'food') prices[it.name] = raisePrice(price);
             if (it.name === 'Smile') tutEvent('smile');
-            if (it.patch) { levels[it.name]++; return `Installed ${it.name} lvl ${levels[it.name]}. Next: ${prices[it.name]}$.`; }
-            return it.class === 'food' ? `Bought ${it.name}.` : `Bought ${it.name}. Now ${prices[it.name]}$.`;
+            if (it.patch) { levels[it.name]++; return `Installed ${it.name} lvl ${levels[it.name]}. Next: ${prices[it.name]}${G.money}.`; }
+            return it.class === 'food' ? `Bought ${it.name}.` : `Bought ${it.name}. Now ${prices[it.name]}${G.money}.`;
           },
         };
       });
@@ -2458,17 +2498,17 @@
       }
       if (ui.kind === 'techversity') return [
         ...BRANCHES.flatMap((B, bi) => B.talents.map((T, ti) => ({ left: T.name, right: '', act() { return addTalent(bi, ti); } }))),
-        { left: `Reset all talents (${TALENT_RESET * hero.level}$)`, right: '', act() { return resetTalents(); } }];
+        { left: `Reset all talents (${TALENT_RESET * hero.level}${G.money})`, right: '', act() { return resetTalents(); } }];
       if (ui.kind === 'chef') {
         const q = quests.find(q => q.kind === 'delivery' && q.dest === areaName);
         if (!q) return [{ left: 'bye', right: '', act() { ui = null; } }];   // (after a delivery she lingers a few seconds)
         const pay = deliveryPay(q);
-        return [{ left: `hand over the ${q.item}`, right: `+${pay.money}$ +${pay.exp} exp`, act() {
+        return [{ left: `hand over the ${q.item}`, right: `+${pay.money}${G.money} +${pay.exp}${G.exp}`, act() {
           const it = questItemOf(q);
           if (!it) return `You don't have the ${q.item} any more.`;
           if ((it.count || 1) > 1) it.count--; else inventory.splice(inventory.indexOf(it), 1);
           quests.splice(quests.indexOf(q), 1); stats.money += pay.money; gainExp(pay.exp); renderStats();
-          ui = null; float(`+${pay.money}$ +${pay.exp} exp`, '#ffdc00', player.x + 0.5, player.y - 1.2);
+          ui = null; float(`+${pay.money}${G.money} +${pay.exp}${G.exp}`, '#ffdc00', player.x + 0.5, player.y - 1.2);
           showHint(`Delivered! "Still warm. You're a lifesaver, hon."`);
         } }];
       }
@@ -2490,13 +2530,13 @@
           return Q.a.map((ans, k) => ({ left: ans, right: '', act() {
             const ok = k === Q.right; if (!ok) tutQuiz.wrong++;
             tutQuiz.i++; ui.cursor = 0;
-            return ok ? 'Right!' : `Not quite: "${Q.a[Q.right]}". (-${TUT_PENALTY.exp} exp, -${TUT_PENALTY.money}$ from your reward)`;
+            return ok ? 'Right!' : `Not quite: "${Q.a[Q.right]}". (-${TUT_PENALTY.exp}${G.exp}, -${TUT_PENALTY.money}${G.money} from your reward)`;
           } }));
         }
-        if (tut === TUT_READY) { const r = tutReward(); return [{ left: 'complete quest', right: `+${r.money}$ +${r.exp} exp`, act() {
+        if (tut === TUT_READY) { const r = tutReward(); return [{ left: 'complete quest', right: `+${r.money}${G.money} +${r.exp}${G.exp}`, act() {
           tut = TUT_DONE; stats.money += r.money; gainExp(r.exp); renderStats();
-          ui = null; showHint(`Quest complete: Rogue's lessons. +${r.money}$ and +${r.exp} exp.`);
-          float(`+${r.money}$ +${r.exp} exp`, '#9b5cff', player.x + 0.5, player.y - 1.2);
+          ui = null; showHint(`Quest complete: Rogue's lessons. +${r.money}${G.money} and +${r.exp}${G.exp}.`);
+          float(`+${r.money}${G.money} +${r.exp}${G.exp}`, '#9b5cff', player.x + 0.5, player.y - 1.2);
         } }]; }
         return npcQuestRows('rogue');
       }
@@ -2510,9 +2550,9 @@
         const clock = ms => { const s = Math.ceil(ms / 1000); return `${Math.floor(s / 60)}:${String(s % 60).padStart(2, '0')}`; };
         if (wait > 0) return [{ rest: { wait: clock(wait) }, left: 'not tired yet', right: `rest again in ${clock(wait)}`, act() { tutEvent('rest'); return `You rested recently. Come back in ${clock(wait)}.`; } }];
         return [{
-        rest: {}, left: `rest for ${REST.price}$?`, right: Object.entries(restGain()).map(([st, n]) => `+${n} ${ICON[st]}`).join('  '),
+        rest: {}, left: `rest for ${REST.price}${G.money}?`, right: Object.entries(restGain()).map(([st, n]) => `+${n} ${ICON[st]}`).join('  '),
         act() {
-          if (stats.money < REST.price) return `Not enough money to rest (${REST.price}$).${tutAt('rest') ? ' Take a deal at TradeCorp first.' : ''}`;   // tutorial: only a real sleep counts
+          if (stats.money < REST.price) return `Not enough money to rest (${REST.price}${G.money}).${tutAt('rest') ? ' Take a deal at TradeCorp first.' : ''}`;   // tutorial: only a real sleep counts
           const up = Object.entries(restGain()).map(([st, n]) => [st, capped(st, stats[st] + n) - stats[st]]).filter(([, d]) => d > 0);
           if (!up.length && !tutAt('rest')) return 'You are already fully rested.';   // (the tutorial's sleep task lets him sleep anyway)
           tutEvent('rest');
@@ -2568,9 +2608,9 @@
     // at 0 on the 1st) and 'all' (table leaderboard: best totals ever). The window shows the top LB_TOP of each list and, when
     // you're further down, your own place under it. The #1 of each MONTHLY list gets that list's buff while they hold the spot.
     const LB_TOP = 10;
-    const LB_TABS = [{ key: 'exp', name: 'Top Exp', col: 'exp_total', mcol: 'exp', unit: 'exp' }, { key: 'deals', name: 'Top Dealers', col: 'deals', mcol: 'deals', unit: 'deals' },
+    const LB_TABS = [{ key: 'exp', name: 'Top Exp', col: 'exp_total', mcol: 'exp', unit: 'exp' }, { key: 'deals', name: 'Top Dealers', col: 'deals', mcol: 'deals', unit: G.deals },
                      { key: 'kills', name: 'Top Slayers', col: 'kills', mcol: 'kills', unit: 'slain' }];
-    const LB_BUFFS = { exp: { gain: { charisma: 1, strength: 1 }, speed: 0 }, deals: { gain: { strength: 1 }, speed: 0.1 }, kills: { gain: { charisma: 1 }, speed: 0.1 } };
+    const LB_BUFFS = { exp: { gain: { charisma: 1, strength: 1 }, speed: 0 }, deals: { gain: { strength: 1 }, speed: 0.05 }, kills: { gain: { charisma: 1 }, speed: 0.05 } };
     const LB = { period: 'month', rows: { month: { exp: [], deals: [], kills: [] }, all: { exp: [], deals: [], kills: [] } }, me: { month: {}, all: {} },
                  state: { month: 'idle', all: 'idle' }, error: { month: '', all: '' }, at: 0 };
     const londonMonth = (d = new Date()) => { const p = new Intl.DateTimeFormat('en-GB', { timeZone: 'Europe/London', year: 'numeric', month: '2-digit' }).formatToParts(d);
@@ -2584,7 +2624,7 @@
     }
     const lbActive = {};   // buff key → true while applied to stats
     const lbSpeed = () => Object.keys(LB_BUFFS).reduce((t, k) => t + (lbActive[k] ? LB_BUFFS[k].speed : 0), 0);
-    const buffText = k => [...Object.entries(LB_BUFFS[k].gain).map(([st, n]) => `+${n} ${STAT_SHORT[st] || st}`), ...(LB_BUFFS[k].speed ? [`+${LB_BUFFS[k].speed * 100}% SPD`] : [])].join(' ');
+    const buffText = k => [...Object.entries(LB_BUFFS[k].gain).map(([st, n]) => `+${n} ${STAT_SHORT[st] || st}`), ...(LB_BUFFS[k].speed ? [`+${LB_BUFFS[k].speed * 100}% ${G.speed}`] : [])].join(' ');
     const totalExp = () => EXP_NEED.slice(0, hero.level - 1).reduce((a, b) => a + b, 0) + hero.exp;
     function setLbBuff(k, on) {
       if (!!lbActive[k] === on) return;
@@ -2707,7 +2747,7 @@
     // guests can't save; a guest run is parked here when they go to create an account, and picked up after the first login
     const GUEST_RUN = 'littlegame.guestRun';
     const when = t => { const d = new Date(t); return `${d.getDate()} ${d.toLocaleString('en', { month: 'short' })} ${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`; };
-    const summarize = s => { const id = AREA_ALIAS[s.areaName] || s.areaName; return `${s.stats?.money ?? 0}$ · ${AREAS[id] ? areaLabel(id) : 'city'}`; };
+    const summarize = s => { const id = AREA_ALIAS[s.areaName] || s.areaName; return `${s.stats?.money ?? 0}${G.money} · ${AREAS[id] ? areaLabel(id) : 'city'}`; };
     async function listSlots() {   // -> { slots } or { error }
       const slots = {};
       if (!account || !sb) return { slots };   // guest: nothing saved
@@ -2779,8 +2819,8 @@
     const sellable = it => it && !it.quest && SHOP_SELL.classes.includes((itemDef(it.name) || {}).class) && sellUnit(it.name) > 0;
     function sellOpts(idx) {
       const it = inventory[idx], n = it.count || 1, u = sellUnit(it.name);
-      return n > 1 ? [{ label: `Sell 1  +${u}$`, act: 'shopSell', n: 1 }, { label: `Sell all (${n})  +${u * n}$`, act: 'shopSell', n }]
-                   : [{ label: `Sell  +${u}$`, act: 'shopSell', n: 1 }];
+      return n > 1 ? [{ label: `Sell 1  +${u}${G.money}`, act: 'shopSell', n: 1 }, { label: `Sell all (${n})  +${u * n}${G.money}`, act: 'shopSell', n }]
+                   : [{ label: `Sell  +${u}${G.money}`, act: 'shopSell', n: 1 }];
     }
     function shopSell(idx, name, n) {
       const it = inventory[idx]; if (!it || it.name !== name || !sellable(it)) return '';
@@ -2788,7 +2828,7 @@
       if (left > 0) it.count = left; else inventory.splice(idx, 1);
       stats.money += u * n; renderStats();
       if (ui && ui.kind === 'shop') ui.cursor = Math.max(0, Math.min(ui.cursor, rows().length - 1));
-      return `Sold ${n > 1 ? n + ' × ' : ''}${name}: +${u * n}$.`;
+      return `Sold ${n > 1 ? n + ' × ' : ''}${name}: +${u * n}${G.money}.`;
     }
     function resourceRows() {
       const list = SHOP_SELL.buy.map(name => {
@@ -2796,7 +2836,7 @@
         return { left: name, shopItem: { it: def, price, buy: true }, act() {
           if (stats.money < price) return `Not enough money for ${name}.`;
           if (addItem(name, 1)) return fullMsg();
-          stats.money -= price; renderStats(); return `Bought 1 ${name} for ${price}$.`;
+          stats.money -= price; renderStats(); return `Bought 1 ${name} for ${price}${G.money}.`;
         } };
       });
       inventory.forEach((it, idx) => {
@@ -2816,10 +2856,10 @@
       const row = (left, right, act) => ({ left, right, act() { runCheated = true; applyLbBuffs(); const m = act(); renderStats(); return m; } });   // any cheat marks the run
       const give = (name, n) => { const left = addItem(name, n); return left ? `Inventory full: ${n - left} of ${n} ${name} added.` : `Added ${n} ${name}.`; };
       const all = [
-        row('money', '+500$', () => { stats.money += 500; return '+500$.'; }),
+        row('money', '+500\uE100', () => { stats.money += 500; return '+500\uE100.'; }),
         row('refill', 'full ♥ ⚡ ◆', () => { for (const st in CAPS) stats[st] = CAPS[st]; return 'Health, energy and mana refilled.'; }),
         row('mana cap', `+3 (now ${CAPS.mana})`, () => { CAP_BASE.mana += 3; recalcCaps(); stats.mana = CAPS.mana; return `Mana cap ${CAPS.mana}, mana full.`; }),
-        row('exp', '+50', () => { gainExp(50); return `Level ${hero.level}, ${hero.exp}/${expNeed(hero.level)} exp.`; }),
+        row('exp', '+50', () => { gainExp(50); return `Level ${hero.level}, ${hero.exp}/${expNeed(hero.level)}${G.exp}.`; }),
         row('deal types', 'rare call, rare sale, delivery', () => { deals = [['call', true], ['sale', true], ['delivery', false]].map(f => rollDeal(hero.level, stats.charisma, foodCost(FOOD), f)); return 'TradeCorp now shows one of each rare deal.'; }),
         row('promotion ready', 'deals + CHSM for the next one', () => { const pr = PROMOTIONS[promotion]; if (!pr) return 'All promotions earned.'; dealsDone = Math.max(dealsDone, pr.deals); stats.charisma = Math.max(stats.charisma, pr.charisma); deals = newDeals(); return `${pr.name} is ready at TradeCorp (My Boss).`; }),
         row('charisma', '+10 ✦', () => { stats.charisma += 10; deals = newDeals(); return `Charisma ${stats.charisma}.`; }),
@@ -3029,7 +3069,7 @@
       { name: 'Data Clerk',             deals: 200,  charisma: 20,  mult: 0.9 },
       { name: 'Neurodiversity Manager', deals: 500,  charisma: 50,  mult: 0.8 },
       { name: 'AI Overseer',            deals: 1000, charisma: 100, mult: 0.7 },
-    ].map(pr => ({ ...pr, desc: `Deals cost ×${pr.mult} (NRG and $).` }));
+    ].map(pr => ({ ...pr, desc: `Deals cost ×${pr.mult} (${G.energy} and ${G.money}).` }));
     const dealMult = () => promotion ? PROMOTIONS[promotion - 1].mult : 1;
     const dealCost = d => Math.max(1, Math.round((d.type === 'call' ? d.energy : d.price) * dealMult()));   // energy for calls, money for sales
     const promoReady = i => i === promotion && i < PROMOTIONS.length && dealsDone >= PROMOTIONS[i].deals && stats.charisma >= PROMOTIONS[i].charisma;
@@ -3059,9 +3099,9 @@
         let refund = 0;
         if (cost && tal('hustler', 1) && Math.random() < [0.03, 0.06, 0.09, 0.12][tal('hustler', 1) - 1]) { refund = Math.max(1, Math.round(cost * 0.4)); stats.energy = capped('energy', stats.energy + refund); }   // Commission
         ceoCalls = free ? 0 : ceoCalls + 1;
-        d.talentNote = (free ? ' Free call (CEO Mindset)!' : '') + (refund ? ` Commission: +${refund} NRG back.` : '');
+        d.talentNote = (free ? ' Free call (CEO Mindset)!' : '') + (refund ? ` Commission: +${refund} ${G.energy} back.` : '');
       } else if (d.type === 'sale') {
-        if (stats.money < dealCost(d)) return `Not enough money (${dealCost(d)}$).`;
+        if (stats.money < dealCost(d)) return `Not enough money (${dealCost(d)}${G.money}).`;
         const backup = inventory.map(it => ({ ...it }));
         if (addItem(d.item, d.count)) { inventory.length = 0; inventory.push(...backup); return fullMsg(); }
         stats.money -= dealCost(d);
@@ -3076,7 +3116,7 @@
       dealsDone++; lbEarn('deals', 1); gainExp(exp); tutEvent('deal');
       deals = newDeals();
       const note = promoReadyAny() ? ' A promotion is ready (My Boss).' : '';
-      return (d.type === 'call' ? `Call done: -${d.spent} NRG, +${d.paid}$, +${exp} exp.${d.talentNote || ''} New deals.` : d.type === 'sale' ? `Bought ${d.count} ${d.item} for ${dealCost(d)}$. New deals.`
+      return (d.type === 'call' ? `Call done: -${d.spent} ${G.energy}, +${d.paid}${G.money}, +${exp}${G.exp}.${d.talentNote || ''} New deals.` : d.type === 'sale' ? `Bought ${d.count} ${d.item} for ${dealCost(d)}${G.money}. New deals.`
         : `${d.name}: take the ${quests[quests.length - 1].item} to the Netizen Chef in ${areaLabel(quests[quests.length - 1].dest)} (Q). New deals.`) + note;
     }
     // deliveries: food from TradeCorp to the Netizen Chef, who waits at her food cart (slums 2:4 or 6:3) while one is on its way.
@@ -3122,8 +3162,8 @@
     const deliveryPay = q => questPay(deliveryLvl(q), q.rare ? 'rare' : 'common');   // Scheduled = common, Priority = rare
     const clockText = ms => { const t = Math.max(0, Math.ceil(ms / 1000)); return `${Math.floor(t / 60)}:${String(t % 60).padStart(2, '0')}`; };
     const questView = q => q.kind === 'rogue' ? (() => { const r = rqDef(q.id) || { goal: '', need: 1, prog: () => 0, lvl: 1, rarity: 'common' }, n = Math.min(r.need, r.prog()), pay = rqPay(r);
-        return { ...q, lvl: r.lvl, rarity: r.rarity, desc: rqComplete(q) ? `Done! Hand it in to ${GIVERS[giverOf(q.id)].name}. +${pay.exp} exp +${pay.money}$` : `${r.goal}${r.need > 1 ? ` (${n}/${r.need})` : ''} · +${pay.exp} exp +${pay.money}$` }; })()
-      : q.kind !== 'delivery' ? q : { ...q, lvl: deliveryLvl(q), rarity: q.rare ? 'rare' : 'common', desc: `Bring the ${q.item} to the Netizen Chef at her food cart in ${areaLabel(q.dest)}. ${clockText(q.until - gameTime)} left · +${deliveryPay(q).money}$ +${deliveryPay(q).exp} exp` };
+        return { ...q, lvl: r.lvl, rarity: r.rarity, desc: rqComplete(q) ? `Done! Hand it in to ${GIVERS[giverOf(q.id)].name}. +${pay.exp}${G.exp} +${pay.money}${G.money}` : `${r.goal}${r.need > 1 ? ` (${n}/${r.need})` : ''} · +${pay.exp}${G.exp} +${pay.money}${G.money}` }; })()
+      : q.kind !== 'delivery' ? q : { ...q, lvl: deliveryLvl(q), rarity: q.rare ? 'rare' : 'common', desc: `Bring the ${q.item} to the Netizen Chef at her food cart in ${areaLabel(q.dest)}. ${clockText(q.until - gameTime)} left · +${deliveryPay(q).money}${G.money} +${deliveryPay(q).exp}${G.exp}` };
     function checkDeliveries() {   // runs with the game clock: late deliveries fail
       for (let i = quests.length - 1; i >= 0; i--) {
         const q = quests[i];
@@ -3319,7 +3359,7 @@
       const use = it.quest ? null : def.class === 'equipment' ? 'Equip' : def.class === 'food' ? 'Eat' : def.class === 'skill' ? 'Learn' : def.class === 'bag' ? 'Wear' : def.consume ? 'Use' : null;
       if (vaultOpen() && !it.quest) {   // CredBank: store it (a bag can also go into a free socket)
         if (def.class === 'bag' && vaultFreeSocket() >= 0) opts.push({ label: `Put in socket ${vaultFreeSocket() + 1}`, act: 'vaultSocket' });
-        opts.push({ label: `Store  ${VAULT_FEES.store}$`, act: 'vaultStore' });
+        opts.push({ label: `Store  ${VAULT_FEES.store}${G.money}`, act: 'vaultStore' });
       }
       if (use) opts.push({ label: use, act: 'use' });
       if (ui && ui.kind === 'scrap') { const row = scrapRows().find(r => r.idx === idx); if (row && row.right !== "won't buy") opts.push({ label: `Scrap  ${row.right}`, act: 'sell' }); }
@@ -3335,7 +3375,7 @@
     function openVaultMenu(j, x, y) {   // a Vault item (right-click, long press): take 1 or all of it out
       const it = vault.items[j]; if (!it) { itemMenu = null; return; }
       const n = it.count || 1, fee = VAULT_FEES.withdraw;
-      itemMenu = { vaultIdx: j, name: it.name, x, y, cursor: 0, opts: n > 1 ? [{ label: `Take out 1  ${fee}$`, n: 1 }, { label: `Take out all (${n})  ${fee}$`, n }] : [{ label: `Take out  ${fee}$`, n: 1 }] };
+      itemMenu = { vaultIdx: j, name: it.name, x, y, cursor: 0, opts: n > 1 ? [{ label: `Take out 1  ${fee}${G.money}`, n: 1 }, { label: `Take out all (${n})  ${fee}${G.money}`, n }] : [{ label: `Take out  ${fee}${G.money}`, n: 1 }] };
     }
     function openQuestMenu(idx, x, y) {   // right-click (or Space) on a quest: cancel it
       const q = quests[idx]; if (!q) { itemMenu = null; return; }
@@ -3518,6 +3558,7 @@
     function drawStates() {
       if (mobUI() && !phudEl.offsetHeight) return;   // the plate is hidden (e.g. behind a window): so is its buff row
       const list = heroStates(), P = plateBox(), k = P.k, size = STATE_ICON * k, gap = STATE_GAP * k, perRow = statesPerRow(P);
+      let hover = null;
       list.forEach((s, i) => {
         const def = STATES[s.key], x = P.x + (i % perRow) * (size + gap), y = P.y + P.h + 6 * k + Math.floor(i / perRow) * (size + gap), im = ART[def.icon];
         ctx.save();
@@ -3538,7 +3579,42 @@
           ctx.fillStyle = '#fff'; ctx.fillText(s.left >= 10 ? Math.ceil(s.left) + '' : s.left.toFixed(1), x + size - 2 * k, y + size - 3 * k);
         }
         ctx.restore();
+        if (mouseAim.inside && mouseAim.on && !touchOn() && mouseAim.cx >= x && mouseAim.cx <= x + size && mouseAim.cy >= y && mouseAim.cy <= y + size) hover = { s, x, y, size };
       });
+      if (hover) drawStateTip(hover, k);
+    }
+    // what a buff / status does (shown while the mouse is over its icon)
+    function stateInfo(s) {
+      const talentOf = art => { for (const br of BRANCHES) { const i = br.talents.findIndex(t => t.art === art); if (i >= 0) return { t: br.talents[i], r: tal(br.key, i) }; } return null; };
+      const T = k => { const o = talentOf(STATES[k].icon); return o && o.r ? o.t.desc(o.r) : ''; };
+      switch (s.key) {
+        case 'root': return "You're stuck in place and can't move.";
+        case 'slowed': return `You walk ${Math.round(slowAmt * 100)}% slower.`;
+        case 'injured': return `HP at ${Math.round(STATES.injured.healthShare * 100)}% or less: you walk ${Math.round((1 - STATES.injured.speed) * 100)}% slower.`;
+        case 'poison': return `You lose ${Math.round(SPORE.poisonPct * 100)}% of your max HP every second, and your HP doesn't regenerate.`;
+        case 'lb_exp': return `#1 in exp this month: ${buffText('exp')} while you hold the spot.`;
+        case 'lb_deals': return `#1 in deals this month: ${buffText('deals')} while you hold the spot.`;
+        case 'lb_kills': return `#1 in kills this month: ${buffText('kills')} while you hold the spot.`;
+        case 'rezero': return `ReZero Protocol saved you: ${T('rezero')}`;
+        case 'rezeroCd': return `ReZero Protocol is recharging. ${T('rezero')}`;
+        case 'arcane': return `Arcane Violence: ${T('arcane')}`;
+        case 'overclock': return `System Overclock (${s.count || 1} stack${(s.count || 1) > 1 ? 's' : ''}): ${T('overclock')}`;
+        case 'ceo': return `CEO Mindset: your next customer call costs 0${G.energy}.`;
+      }
+      return '';
+    }
+    function drawStateTip({ s, x, y, size }, k) {
+      const def = STATES[s.key], w = 300 * k, pad = 10 * k, title = def.label[0].toUpperCase() + def.label.slice(1);
+      ctx.save(); ctx.font = `${Math.round(14 * k)}px ${MONO}`;
+      const lines = wrapText(stateInfo(s) + (s.left !== undefined ? ` (${s.left >= 10 ? Math.ceil(s.left) : s.left.toFixed(1)} s left)` : ''), w - 2 * pad);
+      const h = pad * 2 + 22 * k + lines.length * 19 * k, tx = Math.max(8, Math.min(canvas.width - w - 8, x)), ty = y + size + 8 * k;
+      ctx.fillStyle = 'rgba(0, 0, 0, 0.9)'; rr(tx, ty, w, h, 8 * k); ctx.fill();
+      ctx.strokeStyle = def.color; ctx.lineWidth = 2; rr(tx + 1, ty + 1, w - 2, h - 2, 7 * k); ctx.stroke();
+      ctx.textAlign = 'left'; ctx.textBaseline = 'top';
+      ctx.fillStyle = def.color; ctx.font = `700 ${Math.round(16 * k)}px ${MONO}`; ctx.fillText(title, tx + pad, ty + pad);
+      ctx.fillStyle = '#e6e6e6'; ctx.font = `${Math.round(14 * k)}px ${MONO}`;
+      lines.forEach((l, i) => ctx.fillText(l, tx + pad, ty + pad + 22 * k + i * 19 * k));
+      ctx.restore();
     }
     let heroNextAttack = 0, heroHurtStart = -1e9, heroAttackStart = -1e9, heroAttackDir = 'side';
     const hasSword = () => equipped.some(it => it.kind === 'sword');
@@ -4762,7 +4838,7 @@
     function gainExp(n) {
       if (!n || hero.level >= MAX_LEVEL) return;
       hero.exp += n; lbEarn('exp', n);
-      float(`+${n} exp`, '#b58cff', player.x + 0.5, player.y - 1.1);
+      float(`+${n}${G.exp}`, '#b58cff', player.x + 0.5, player.y - 1.1);
       let up = 0;
       const before = hero.level;
       while (hero.level < MAX_LEVEL && hero.exp >= expNeed(hero.level)) { hero.exp -= expNeed(hero.level); hero.level++; up++; }
@@ -4933,9 +5009,9 @@
         if (!L.money && !L.items.length) { src.loot = null; ui = null; return; }
         ui.cursor = Math.min(ui.cursor, (L.money ? 1 : 0) + L.items.length - 1);
       };
-      if (L.money) list.push({ left: 'money', item: { name: 'money' }, pic: 'money', right: `${L.money}$`, act() {
+      if (L.money) list.push({ left: 'money', item: { name: 'money' }, pic: 'money', right: `${L.money}${G.money}`, act() {
         const m = L.money; stats.money += m; L.money = 0;
-        taken(); return `Took ${m}$.`;
+        taken(); return `Took ${m}${G.money}.`;
       } });
       for (const it of L.items) list.push({ left: it.name, item: { name: it.name, count: it.count }, pic: it.name, right: `×${it.count}`, act() {
         const left = addItem(it.name, it.count), got = it.count - left;
@@ -4970,7 +5046,7 @@
       const name = heroName || DEFAULT_NAME;
       ui = { kind: 'gameover', cursor: 0, title: `${name} died`,
              lines: [dropped ? `${name}'s loot will stay in the ${areaLabel(pile.zone)} for ${PILE_MS / 60000} minutes.` : `${name} had nothing to drop.`,
-                     ...(keep ? [`The Vault Pack kept ${keep}$ safe.`] : [])] };
+                     ...(keep ? [`The Vault Pack kept ${keep}${G.money} safe.`] : [])] };
       held.clear(); tapped.clear();
     }
     let keptMoney = 0;   // money the Vault Pack saved at the last death, given back on respawn
@@ -4986,7 +5062,7 @@
       const p = piles.find(q => q.zone === areaName && q.x === player.x && q.y === player.y);
       if (!p) return;
       const got = [];
-      if (p.money) { stats.money += p.money; got.push(`+${p.money}$`); p.money = 0; }
+      if (p.money) { stats.money += p.money; got.push(`+${p.money}${G.money}`); p.money = 0; }
       p.bags = p.bags.filter(n => { const sl = freeBagSlot(); if (sl < 0) return true; wearBag(n, sl); got.push(n); return false; });
       const fits = () => inventory.length < invSlots();
       p.gear = p.gear.filter(it => {
@@ -5016,7 +5092,7 @@
     const COMBO_MS = 60;         // short wait so W+D pressed together counts as one diagonal step
     const MOVE_MS = 1000 / 6;    // ms per metre: the hero walks 6 m/s
     let stepMs = MOVE_MS;        // this step's duration: longer while injured
-    const currentStepMs = () => (hasState('injured') ? MOVE_MS / STATES.injured.speed : MOVE_MS) / (1 + lbSpeed() + equipSum('speed')) / (gameTime < slowUntil ? 1 - slowAmt : 1);   // Top-1 buffs: +10% speed each
+    const currentStepMs = () => (hasState('injured') ? MOVE_MS / STATES.injured.speed : MOVE_MS) / (1 + lbSpeed() + equipSum('speed')) / (gameTime < slowUntil ? 1 - slowAmt : 1);   // Top-1 buffs: +5% speed each (Dealer, Slayer)
     let comboTimer = null;
     // glide state: player.x/y is the tile we are on or heading to; from* is where the glide started
     let moving = false, fromX = player.x, fromY = player.y, moveStart = 0;
@@ -5951,7 +6027,7 @@
         ctx.fillStyle = g; ctx.fillRect(cx - TILE, cy - TILE, TILE * 2, TILE * 2);
         const first = p.bags[0] || (p.gear[0] || p.items[0] || {}).name, im = first && ART[(itemDef(first) || {}).art];
         if (im && ready(im)) { const s = TILE * 0.7; ctx.imageSmoothingQuality = 'high'; ctx.drawImage(im, cx - s / 2, cy - s / 2, s, s); }
-        else { ctx.fillStyle = '#ffdc00'; ctx.font = `700 ${Math.round(TILE * 0.45)}px ${MONO}`; ctx.textAlign = 'center'; ctx.textBaseline = 'middle'; ctx.fillText('$', cx, cy); }
+        else { ctx.fillStyle = '#ffdc00'; ctx.font = `700 ${Math.round(TILE * 0.45)}px ${MONO}`; ctx.textAlign = 'center'; ctx.textBaseline = 'middle'; ctx.fillText(G.money, cx, cy); }
         ctx.restore();
       }
     }
@@ -6742,7 +6818,7 @@
     // one recipe: a big slot with the made item and its name on the left; costs (item icons, energy) and the description on the right
     // one ATB-Market item as a big tile, like a MutaTech recipe: picture and name on the left, bonuses and description in the
     // middle, price on the right (gold; red when you can't afford it; "owned" for equipment you already have)
-    const STAT_SHORT = { strength: 'STR', charisma: 'CHSM', mana: 'MANA', energy: 'NRG', health: 'HP' };
+    const STAT_SHORT = { strength: G.strength, charisma: G.charisma, mana: G.mana, energy: G.energy, health: G.health };   // bonus text: the stat's picture instead of its name
     const STAT_COLOR = { health: '#e5484d', strength: '#ff8a3d', mana: '#4ea1ff', energy: '#9dff5c', charisma: '#b58cff' };
     function drawShopRow(r, x, y, w, h, sel) {
       const it = r.it, big = h - 32, sx = x + 16, sy = y + 16, nameX = sx + big + 20, nameW = 250;
@@ -6761,11 +6837,11 @@
       const priceX = x + w - 20, cy = y + h / 2;
       ctx.textAlign = 'right'; ctx.font = '700 34px ' + MONO;
       if (r.sell) {   // what the shop pays per piece
-        ctx.fillStyle = '#9dff5c'; ctx.fillText(`+${r.price}$`, priceX, cy - 10);
+        ctx.fillStyle = '#9dff5c'; ctx.fillText(`+${r.price}${G.money}`, priceX, cy - 10);
         ctx.font = '18px ' + MONO; ctx.fillStyle = '#8a8a8a'; ctx.fillText('each', priceX, cy + 22);
       } else {
         ctx.fillStyle = r.owned ? '#8a8a8a' : stats.money >= r.price && !locked ? '#f5c542' : '#e5484d';
-        ctx.fillText(r.owned ? 'owned' : `${r.price}$`, priceX, cy);
+        ctx.fillText(r.owned ? 'owned' : `${r.price}${G.money}`, priceX, cy);
       }
       // bonuses (coloured by stat), then the description underneath
       const mx = nameX + nameW + 24, mw = priceX - 150 - mx;
@@ -6798,7 +6874,7 @@
       drawParts(Object.keys(REST.share).filter(st => CAPS[st] > 0).map(st => [`${STAT_SHORT[st] || st} ${stats[st]}/${CAPS[st]}`, stats[st] >= CAPS[st] ? '#6b6a63' : '#8a8a8a']), mx, sy + big - 12, 18);
       ctx.textAlign = 'right'; ctx.font = '700 34px ' + MONO;
       ctx.fillStyle = cool ? '#8a8a8a' : stats.money >= REST.price ? '#f5c542' : '#e5484d';
-      ctx.fillText(cool ? r.wait : `${REST.price}$`, priceX, cy);
+      ctx.fillText(cool ? r.wait : `${REST.price}${G.money}`, priceX, cy);
       ctx.restore();
     }
     // ---- TradeCorp drawing ----
@@ -6827,8 +6903,8 @@
       wrapText(sub, midW).slice(0, 2).forEach((l, i) => ctx.fillText(l, midX, sy + 14 + goal.length * 28 + 8 + i * 24));
       // reward + action (right)
       const rx = x + w - 20; ctx.textAlign = 'right';
-      fit(`+${pay.exp} exp`, rightW, 28, '700 '); ctx.fillStyle = '#b58cff'; ctx.fillText(`+${pay.exp} exp`, rx, sy + 16);
-      fit(`+${pay.money}$`, rightW, 28, '700 '); ctx.fillStyle = '#f5c542'; ctx.fillText(`+${pay.money}$`, rx, sy + 50);
+      fit(`+${pay.exp}${G.exp}`, rightW, 28, '700 '); ctx.fillStyle = '#b58cff'; ctx.fillText(`+${pay.exp}${G.exp}`, rx, sy + 16);
+      fit(`+${pay.money}${G.money}`, rightW, 28, '700 '); ctx.fillStyle = '#f5c542'; ctx.fillText(`+${pay.money}${G.money}`, rx, sy + 50);
       const act = done ? 'Hand in' : 'Accept';
       ctx.font = `700 20px ${MONO}`; const bw = Math.min(rightW, ctx.measureText(act).width + 28), bh = 34, by = sy + big - bh + 4;
       ctx.fillStyle = sel ? (done ? '#3ddc84' : '#ffdc00') : 'rgba(255, 255, 255, 0.08)'; rr(rx - bw, by, bw, bh, 8); ctx.fill();
@@ -6872,19 +6948,19 @@
       ctx.fillText(d.type === 'call' ? `${d.rare ? 'rare' : 'common'} call` : d.type === 'sale' ? `${d.rare ? 'rare' : 'common'} sale` : `${d.rare ? 'rare' : 'common'} quest`, nameX, sy + big - 12);
       const mx = nameX + nameW + 24, mw = priceX - 150 - mx;
       ctx.font = '600 24px ' + MONO;
-      const parts = d.type === 'call' ? [[`-${dealCost(d)} NRG`, STAT_COLOR.energy], [`+${d.money}$`, '#f5c542']]
+      const parts = d.type === 'call' ? [[`+${d.money}${G.money}`, '#f5c542']]   // the energy it costs is the price on the right
         : d.type === 'sale' ? [[`${d.count} × ${d.item}`, rarityColor(d.item)]] : [['Delivery quest', '#00e5ff']];
-      parts.push([`+${dealExp(d)} exp`, '#b58cff']);   // exp for taking it (calls: more for a better money-to-energy deal)
+      parts.push([`+${dealExp(d)}${G.exp}`, '#b58cff']);   // exp for taking it (calls: more for a better money-to-energy deal)
       drawParts(parts, mx, sy + 20, 22);
       const text = d.type === 'call' ? d.line : d.type === 'sale' ? `A supplier sells ${d.count} ${d.item} at full price.` : d.desc;
       ctx.font = '19px ' + MONO; ctx.fillStyle = '#cfcfcf';
       wrapText(text, mw).slice(0, 3).forEach((l, i) => ctx.fillText(l, mx, sy + 56 + i * 25));
       ctx.textAlign = 'right'; ctx.font = '700 32px ' + MONO;
-      if (d.type === 'call') { ctx.fillStyle = stats.energy >= dealCost(d) ? '#9dff5c' : '#e5484d'; ctx.fillText(`${dealCost(d)} NRG`, priceX, cy); }
-      else if (d.type === 'sale') { ctx.fillStyle = stats.money >= dealCost(d) ? '#f5c542' : '#e5484d'; ctx.fillText(`${dealCost(d)}$`, priceX, cy); }
+      if (d.type === 'call') { ctx.fillStyle = stats.energy >= dealCost(d) ? '#9dff5c' : '#e5484d'; ctx.fillText(`-${dealCost(d)}${G.energy}`, priceX, cy); }   // taken when you accept
+      else if (d.type === 'sale') { ctx.fillStyle = stats.money >= dealCost(d) ? '#f5c542' : '#e5484d'; ctx.fillText(`${dealCost(d)}${G.money}`, priceX, cy); }
       else if (quests.length >= MAX_QUESTS) { ctx.fillStyle = '#e5484d'; ctx.fillText(`${MAX_QUESTS}/${MAX_QUESTS}`, priceX, cy); }
       else { ctx.fillStyle = '#00e5ff'; ctx.fillText('accept', priceX, cy); }
-      if (dealMult() < 1 && d.type !== 'delivery') { ctx.font = '600 16px ' + MONO; ctx.fillStyle = '#9dff5c'; ctx.fillText(`−${Math.round((1 - dealMult()) * 100)}% promotion`, priceX, cy + 30); }
+      if (dealMult() < 1 && d.type !== 'delivery') { ctx.font = '600 16px ' + MONO; ctx.fillStyle = '#9dff5c'; ctx.fillText(`${Math.round((1 - dealMult()) * 100)}% discount`, priceX, cy + 30); }
     }
     // My Office / Boss: a picture on the left, a small scrolling list on the right
     function drawSideTab(list, x, y, w, h) {
@@ -6902,7 +6978,7 @@
         ctx.fillText(d.name, lx + sz + 24, ry + 24);
         ctx.font = '17px ' + MONO; ctx.fillStyle = '#8a8a8a'; ctx.fillText(d.desc, lx + sz + 24, ry + 52);
         ctx.textAlign = 'right'; ctx.font = '600 20px ' + MONO; ctx.fillStyle = '#f5c542';
-        ctx.fillText(`${d.price}$`, lx + lw - 14, ry + 24);
+        ctx.fillText(`${d.price}${G.money}`, lx + lw - 14, ry + 24);
       });
       if (list[0].side === 'promo' && ui.bossTalk) drawBossTalk(x, y, w, h);
       if (list.length > visible) {   // scroll bar
@@ -7041,7 +7117,7 @@
         ctx.fillText('Recipe coming soon', rx, cy + cs / 2);
         ctx.font = '19px ' + MONO; ctx.fillStyle = '#cfcfcf';
         wrapText(`${def.slots ? def.slots + ' slots. ' : ''}${def.desc || ''}`, x + w - 20 - rx).slice(0, 4).forEach((l, i) => ctx.fillText(l, rx, cy + cs + 26 + i * 24));
-        ctx.textAlign = 'right'; ctx.fillStyle = '#f5c542'; ctx.font = '700 28px ' + MONO; ctx.fillText(`${def.price}$`, x + w - 20, cy + cs / 2);
+        ctx.textAlign = 'right'; ctx.fillStyle = '#f5c542'; ctx.font = '700 28px ' + MONO; ctx.fillText(`${def.price}${G.money}`, x + w - 20, cy + cs / 2);
         return;
       }
       // the costs + energy fit the row: names on one line if they fit, else wrapped to 2 lines, then everything shrinks a little
@@ -7137,7 +7213,7 @@
         ctx.textAlign = 'right';
         ctx.font = '26px ' + MONO;
         ctx.fillStyle = '#8a8a8a';
-        const wallet = `${ICON.energy} ${stats.energy}   ${stats.money}$`, wx = px + pw - 104;   // well left of the ✕ (at pw - 62)
+        const wallet = `${ICON.energy} ${stats.energy}   ${stats.money}${G.money}`, wx = px + pw - 104;   // well left of the ✕ (at pw - 62)
         for (let fs = 26; fs > 14 && ctx.measureText(wallet).width > 340; fs--) ctx.font = fs + 'px ' + MONO;
         ctx.fillText(wallet, wx, py + 56);
       }
@@ -7252,7 +7328,7 @@
       let y = top + 8;
       ctx.fillText('Bag sockets', x0, y + 12);
       ctx.textAlign = 'right'; ctx.font = '18px ' + MONO; ctx.fillStyle = '#8a8a8a';
-      ctx.fillText(`store ${VAULT_FEES.store}$ · take out ${VAULT_FEES.withdraw}$ · kept when you die`, x0 + w, y + 12);
+      ctx.fillText(`store ${VAULT_FEES.store}${G.money} · take out ${VAULT_FEES.withdraw}${G.money} · kept when you die`, x0 + w, y + 12);
       y += 34;
       const ss = 76, sg = 14;
       for (let i = 0; i < 4; i++) {
@@ -7261,7 +7337,7 @@
         if (locked) {   // locked: dimmed, with its price
           ctx.fillStyle = 'rgba(0, 0, 0, 0.6)'; ctx.fillRect(sx + 2, y + 2, ss - 4, ss - 4);
           ctx.textAlign = 'center'; ctx.font = '700 15px ' + MONO; ctx.fillStyle = i === vault.open ? '#f5c542' : '#6a6a6a';
-          ctx.fillText('LOCKED', sx + ss / 2, y + ss / 2 - 11); ctx.fillText(`${VAULT_SOCKET_COST[i].toLocaleString('en')}$`, sx + ss / 2, y + ss / 2 + 11);
+          ctx.fillText('LOCKED', sx + ss / 2, y + ss / 2 - 11); ctx.fillText(`${VAULT_SOCKET_COST[i].toLocaleString('en')}${G.money}`, sx + ss / 2, y + ss / 2 + 11);
         } else if (!b && ready(ART.noBag)) { ctx.save(); ctx.globalAlpha = 0.22; const m = ss * 0.18; ctx.drawImage(ART.noBag, sx + m, y + m, ss - 2 * m, ss - 2 * m); ctx.restore(); }
         rowRects.push({ x: sx, y, w: ss, h: ss, i });
         if (ui.cursor === i) selFrame(sx, y, ss, on);
@@ -7282,7 +7358,7 @@
       for (; s >= 36; s -= 4) { cols = Math.max(1, Math.floor((w + 12) / (s + 12))); rowsN = Math.ceil(n / cols); if (rowsN * (s + 12) - 12 <= availH) break; }
       ui.vcols = cols;
       if (!n) { ctx.fillStyle = '#8a8a8a'; ctx.font = '22px ' + MONO; ctx.textAlign = 'left';
-        wrapText(vault.open ? 'Put a bag in a socket (Space on it in your inventory): its slots become your Vault storage.' : `Unlock socket 1 for ${VAULT_SOCKET_COST[0]}$ to start your Vault.`, w).forEach((l, i) => ctx.fillText(l, x0, gTop + 20 + i * 30)); }
+        wrapText(vault.open ? 'Put a bag in a socket (Space on it in your inventory): its slots become your Vault storage.' : `Unlock socket 1 for ${VAULT_SOCKET_COST[0]}${G.money} to start your Vault.`, w).forEach((l, i) => ctx.fillText(l, x0, gTop + 20 + i * 30)); }
       for (let j = 0; j < n; j++) {
         const sx = x0 + (j % cols) * (s + 12), sy = gTop + Math.floor(j / cols) * (s + 12);
         drawSlot(sx, sy, s, vault.items[j] || null);
@@ -7294,13 +7370,13 @@
       if (c < 0) t = 'A/D switch tab · S back to the sockets';
       else if (c < 4) {
         const b = vault.bags[c];
-        if (c >= vault.open) { t = c === vault.open ? `Socket ${c + 1} · locked · Space: unlock for ${VAULT_SOCKET_COST[c].toLocaleString('en')}$` : `Socket ${c + 1} · locked · unlock socket ${vault.open + 1} first`; col = c === vault.open ? '#f5c542' : '#8a8a8a'; }
+        if (c >= vault.open) { t = c === vault.open ? `Socket ${c + 1} · locked · Space: unlock for ${VAULT_SOCKET_COST[c].toLocaleString('en')}${G.money}` : `Socket ${c + 1} · locked · unlock socket ${vault.open + 1} first`; col = c === vault.open ? '#f5c542' : '#8a8a8a'; }
         else if (b) { t = `${b} · +${bagSlots(b)} Vault slots · Space: take it out (free)`; col = rarityColor(b); }
         else t = `Socket ${c + 1} · empty · Space on a bag in your inventory puts it here`;
       } else {
         const it = vault.items[c - 4];
         if (it) { const def = itemDef(it.name) || {}, k = it.count || 1; col = rarityColor(it.name);
-          t = `${it.name}${k > 1 ? ` ×${k}` : ''} · Space: take out${k > 1 ? ' all' : ''} (${VAULT_FEES.withdraw}$)${k > 1 ? ' · right-click: take out 1' : ''}`; }
+          t = `${it.name}${k > 1 ? ` ×${k}` : ''} · Space: take out${k > 1 ? ' all' : ''} (${VAULT_FEES.withdraw}${G.money})${k > 1 ? ' · right-click: take out 1' : ''}`; }
         else { t = 'empty Vault slot · Space on an inventory item stores it'; col = '#8a8a8a'; }
       }
       ctx.textAlign = 'left'; ctx.font = '20px ' + MONO; ctx.fillStyle = col;
@@ -7413,7 +7489,7 @@
       ctx.fillStyle = sel ? 'rgba(229, 72, 77, 0.18)' : 'rgba(0, 0, 0, 0.5)'; rr(bx, by, bw, 46, 10); ctx.fill();
       ctx.strokeStyle = sel ? '#ffdc00' : 'rgba(229, 72, 77, 0.7)'; ctx.lineWidth = sel ? 3 : 1.5; rr(bx, by, bw, 46, 10); ctx.stroke();
       ctx.textAlign = 'left'; ctx.fillStyle = '#ffb3b5'; ctx.font = `700 ${Math.round(18 * k)}px ${MONO}`;
-      ctx.fillText(`${sel ? '> ' : ''}Reset all talents · ${TALENT_RESET * hero.level}$`, bx + 16, by + 24);
+      ctx.fillText(`${sel ? '> ' : ''}Reset all talents · ${TALENT_RESET * hero.level}${G.money}`, bx + 16, by + 24);
       rowRects.push({ x: bx, y: by, w: bw, h: 46, i: 9 });
       if (ui.msg) { ctx.fillStyle = '#ffdc00'; ctx.font = `600 ${Math.round(17 * k)}px ${MONO}`; ctx.fillText(wrapText(ui.msg, pw - bw - 120)[0], bx + bw + 24, by + 24); }
       ctx.fillStyle = '#8a8a8a'; ctx.font = `${Math.round(15 * k)}px ${MONO}`;
@@ -7780,9 +7856,10 @@
       const frame = ART.slot;
       if (ready(frame)) { ctx.imageSmoothingQuality = 'high'; ctx.drawImage(frame, x, y, size, size); }
       const pic = item && ART[(itemDef(item.name) || {}).art];
-      if (item && item.name === 'money') {   // money has no item art: a big gold $
-        ctx.fillStyle = '#f5c542'; ctx.font = `700 ${Math.round(size * 0.55)}px ` + MONO; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
-        ctx.fillText('$', x + size / 2, y + size / 2 + size * 0.03);
+      if (item && item.name === 'money') {   // money: the coin picture (a big gold $ until it loads)
+        if (ready(ART.statMoney)) { const i = size * 0.18; ctx.imageSmoothingQuality = 'high'; ctx.drawImage(ART.statMoney, x + i, y + i, size - 2 * i, size - 2 * i); }
+        else { ctx.fillStyle = '#f5c542'; ctx.font = `700 ${Math.round(size * 0.55)}px ` + MONO; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+        ctx.fillText('$', x + size / 2, y + size / 2 + size * 0.03); }
       } else if (item && ready(pic)) {   // item picture inside the frame
         const i = size * 0.14;
         ctx.imageSmoothingQuality = 'high';
@@ -7854,7 +7931,7 @@
     const statParts = def => { const all = {}; for (const src of [def.gain || {}, def.capGain || {}]) for (const [st, n] of Object.entries(src)) all[st] = (all[st] || 0) + n;
       return Object.entries(all).sort((a, b) => STAT_ORDER.indexOf(a[0]) - STAT_ORDER.indexOf(b[0])).map(([st, n]) => [`${n > 0 ? '+' : ''}${n} ${STAT_SHORT[st] || st}`, STAT_COLOR[st] || '#fff']); };
     const bonusParts = def => def ? [...(def.slots ? [[`${def.slots} SLOTS`, '#f2f2f2']] : []), ...statParts(def),
-      ...(def.hpRegen ? [[`+${def.hpRegen} HP REG`, STAT_COLOR.health]] : []), ...(def.speed ? [[`+${Math.round(def.speed * 100)}% SPD`, '#00e5ff']] : []),
+      ...(def.hpRegen ? [[`+${def.hpRegen} ${G.health}/min`, STAT_COLOR.health]] : []), ...(def.speed ? [[`+${Math.round(def.speed * 100)}% ${G.speed}`, '#00e5ff']] : []),
       ...(def.hit ? [[`+${def.hit} HIT`, '#cfcfcf']] : []),   // hit points (0.01% each)
       ...(def.attackMs ? [[`${def.attackMs > 0 ? '+' : ''}${secs(def.attackMs)}s ATK SPD`, '#ffe600']] : []),
       ...(def.meleeArea ? [[`+${Math.round((def.meleeArea - 1) * 100)}% AOE`, '#00e5ff']] : [])] : [];
@@ -7862,13 +7939,15 @@
     // draw coloured parts in a row from x (current font); returns the x after the last one
     function drawParts(parts, x, y, gap = 14) { ctx.textAlign = 'left'; for (const [t, c] of parts) { ctx.fillStyle = c; ctx.fillText(t, x, y); x += ctx.measureText(t).width + gap; } return x; }
     // like drawParts, but a part that doesn't fit on the line starts the next line
-    function drawPartsWrapped(parts, x, y, maxW, lineH, gap = 14) {
-      ctx.textAlign = 'left'; let cx = x, cy = y;
+    function drawPartsWrapped(parts, x, y, maxW, lineH, gap = 14, draw = true) {   // returns how many lines it took (draw = false: just count)
+      ctx.textAlign = 'left'; let cx = x, cy = y, n = 1;
       for (const [t, c] of parts) {
         const tw = ctx.measureText(t).width;
-        if (cx > x && cx + tw > x + maxW) { cx = x; cy += lineH; }
-        ctx.fillStyle = c; ctx.fillText(t, cx, cy); cx += tw + gap;
+        if (cx > x && cx + tw > x + maxW) { cx = x; cy += lineH; n++; }
+        if (draw) { ctx.fillStyle = c; ctx.fillText(t, cx, cy); }
+        cx += tw + gap;
       }
+      return n;
     }
     function secs(ms) { return String(+(ms / 1000).toFixed(2)); }   // -140 -> "-0.14", -100 -> "-0.1"
 
@@ -7930,7 +8009,7 @@
         else ctx.fillText(def.class === 'skill' ? 'Space to learn' : def.class === 'resource' ? 'crafting resource' : def.consume ? 'Space to consume: +1 MANA cap' : def.class === 'upgrade' ? 'upgrade material (use comes later)' : '', x + 24, ly + 26);
         const unit = def.class === 'food' ? shown(sel.name, prices[sel.name]) : def.class === 'equipment' || def.class === 'bag' ? def.price : def.value;   // equipment: shop price; resources: value per piece
         ctx.fillStyle = '#f5c542';
-        ctx.fillText(unit === undefined ? 'total price: —' : `total price: ${unit * n}$${n > 1 ? `  (${n} × ${unit}$)` : ''}`, x + 24, ly + 52);
+        ctx.fillText(unit === undefined ? 'total price: —' : `total price: ${unit * n}${G.money}${n > 1 ? `  (${n} × ${unit}${G.money})` : ''}`, x + 24, ly + 52);
       } else { ctx.fillStyle = '#8a8a8a'; const t = pn.cursor < 0 ? 'empty bag slot · Space on a bag in the inventory wears it' : 'empty slot';
         wrapText(t, w - 48).slice(0, 2).forEach((l, i) => ctx.fillText(l, x + 24, ly + i * 26)); }
       ctx.fillStyle = '#8a8a8a'; ctx.font = '16px ' + MONO;
@@ -7938,8 +8017,25 @@
     }
 
     // hero: middle left. Full-body picture, stats, and the equipped slots (W/S choose, Space unequips).
+    // the hero window's stat rows: [label, value, key, unit]
+    const heroStatLines = () => [
+        [`${G.health} HP`, CAPS.health, 'health'], [`${G.strength} STR`, stats.strength, 'strength'],   // max values (current ones are in the HUD)
+        [`${G.mana} MANA`, CAPS.mana, 'mana'], [`${G.charisma} CHSM`, stats.charisma, 'charisma'],
+        [`${G.energy} NRG`, CAPS.energy, 'energy'],
+        ['CRIT', `${(critChance() * 100).toFixed(2)}%`, 'crit'],
+        ['HIT', hitPts(), 'hit'],   // hit points: 0 = 97% vs his own level, each +0.01% (cap 300)
+        ['ATK SPD', `${secs(heroAttackMs())}s`, 'atk'],
+        ['HP REG', Math.round(healthRegen()), 'hregen', '/min'], ['MANA REG', `${Math.round(manaRegen())}/min`, 'mregen'],
+        [`${G.speed} MOVE SPD`, Math.round((1 + lbSpeed() + equipSum('speed')) * 100), 'spd', '%'],
+        ['LVL', `${hero.level}${hero.level < MAX_LEVEL ? `  (${hero.exp}/${expNeed(hero.level)})` : ' (max)'}`, 'level'],
+    ];
     function drawHeroPanel() {
-      const pn = panels.hero, on = focus === 'hero', w = HERO_PANEL.w, h = HERO_PANEL.h;
+      // height grows with the stat rows and the selected item's text, so nothing ever overlaps
+      const pn = panels.hero, on = focus === 'hero', w = HERO_PANEL.w, maxW = w - 48, sel0 = inSlot(pn.cursor), bh = 320;
+      ctx.font = '18px ' + MONO;
+      const descN = pn.msg ? Math.min(3, wrapText(pn.msg, maxW).length) : sel0 ? drawPartsWrapped([[sel0.name, '#fff'], ...bonusParts(itemDef(sel0.name))], 0, 0, maxW, 22, 10, false) : 1;
+      const statsEnd = 64 + 14 + (heroStatLines().length - 1) * 30 + 14, descTop = Math.max(64 + bh, statsEnd) + 26;
+      const h = Math.max(HERO_PANEL.h, descTop + descN * 22 + 40);
       const x = 16, y = Math.max(12, (viewBottom() - h) / 2), top = y + 64;
       panelFrame(x, y, w, h, heroName || DEFAULT_NAME, on);
       winFrames.push({ id: 'hero', x, y, w, h });
@@ -7950,24 +8046,14 @@
           ctx.fillStyle = full ? '#9dff5c' : '#8a8a8a'; const t = `${st.name} set ${n}/${st.items.length}${full ? ' ✓' : ''}`;
           ctx.fillText(t, sx2, y + 34); sx2 -= ctx.measureText(t).width + 16; }
       }
-      const bw = 180, bh = 320;
+      const bw = 180;
       ctx.fillStyle = '#1B2233'; ctx.fillRect(x + 24, top, bw, bh);
       const full = skinned('heroFull');
       if (ready(full)) {   // full-body art, fitted into the box
         const ih = bh - 24, iw = Math.min(bw - 16, ih * full.naturalWidth / full.naturalHeight), ih2 = iw * full.naturalHeight / full.naturalWidth;
         ctx.imageSmoothingQuality = 'high'; ctx.drawImage(full, x + 24 + (bw - iw) / 2, top + (bh - ih2) / 2, iw, ih2);
       }
-      const lines = [
-        ['HP', CAPS.health, 'health'], ['STR', stats.strength, 'strength'],   // max values (current ones are in the HUD)
-        ['MANA', CAPS.mana, 'mana'], ['CHSM', stats.charisma, 'charisma'],
-        ['NRG', CAPS.energy, 'energy'],
-        ['CRIT', `${(critChance() * 100).toFixed(2)}%`, 'crit'],
-        ['HIT', hitPts(), 'hit'],   // hit points: 0 = 97% vs his own level, each +0.01% (cap 300)
-        ['ATK SPD', `${secs(heroAttackMs())}s`, 'atk'],
-        ['HP REG', Math.round(healthRegen()), 'hregen', '/min'], ['MANA REG', `${Math.round(manaRegen())}/min`, 'mregen'],
-        ['MOVE SPD', Math.round((1 + lbSpeed() + equipSum('speed')) * 100), 'spd', '%'],
-        ['LVL', `${hero.level}${hero.level < MAX_LEVEL ? `  (${hero.exp}/${expNeed(hero.level)})` : ' (max)'}`, 'level'],
-      ];
+      const lines = heroStatLines();
       const bonus = {};   // equipment bonus, shown as "base +bonus" with the bonus in green
       for (const st of SETS) if (activeSets.has(st.name)) for (const src of [st.gain || {}, st.capGain || {}]) for (const [k, n] of Object.entries(src)) bonus[k] = (bonus[k] || 0) + n;   // set bonus shows green too
       for (const it of equipped) { const d = itemDef(it.name) || {};
@@ -7994,9 +8080,8 @@
         if (i === pn.cursor) selFrame(sx, sy, size, on);
       }
       ctx.textAlign = 'left'; ctx.font = '18px ' + MONO;
-      const ly = top + bh + 30, sel = inSlot(pn.cursor);
-      const maxW = w - 48;   // everything under the stats wraps inside the panel (2 lines at most)
-      if (pn.msg) { ctx.fillStyle = '#f5c542'; wrapText(pn.msg, maxW).slice(0, 2).forEach((l, i) => ctx.fillText(l, x + 24, ly + i * 22)); }
+      const ly = y + descTop, sel = sel0;   // under the stats and the picture, whichever ends lower; wraps inside the panel
+      if (pn.msg) { ctx.fillStyle = '#f5c542'; wrapText(pn.msg, maxW).slice(0, 3).forEach((l, i) => ctx.fillText(l, x + 24, ly + i * 22)); }
       else if (sel) drawPartsWrapped([[sel.name, rarityColor(sel.name)], ...bonusParts(itemDef(sel.name))], x + 24, ly, maxW, 22, 10);
       else { ctx.fillStyle = '#8a8a8a'; ctx.fillText(`empty ${EQUIP_SLOT_KEYS[pn.cursor]} slot`, x + 24, ly); }
       ctx.fillStyle = '#8a8a8a'; ctx.font = '16px ' + MONO;
@@ -8096,7 +8181,7 @@
     function askConfirm({ title, text, yes = 'OK', no = 'Cancel', icon = '⇄' }) {
       return new Promise(done => {
         const box = $('confirm'), yesB = $('cf-yes'), noB = $('cf-no');
-        $('cf-title').textContent = title; $('cf-text').innerHTML = text; $('cf-icon').textContent = icon;
+        $('cf-title').textContent = title; $('cf-text').innerHTML = iconHTML(text); $('cf-icon').textContent = icon;
         yesB.textContent = yes; noB.textContent = no; noB.hidden = !no;
         box.hidden = false; held.clear(); tapped.clear(); setTimeout(() => yesB.focus(), 0);
         const finish = v => { box.hidden = true; yesB.onclick = noB.onclick = null; removeEventListener('keydown', onKey, true); document.activeElement?.blur(); done(v); };
@@ -8549,8 +8634,9 @@
       $('ph-hp').style.width = pct(stats.health, CAPS.health); $('ph-hpt').textContent = `${stats.health}/${CAPS.health}`;
       $('ph-mana').style.width = pct(stats.mana, CAPS.mana); $('ph-manat').textContent = `${stats.mana}/${CAPS.mana}`;
       const need = expNeed(hero.level); $('ph-xp').style.width = need ? pct(hero.exp, need) : '100%';
-      $('ph-nrg').textContent = stats.energy; $('ph-money').textContent = stats.money;
-      $('ph-deals').textContent = dealsDone;
+      $('ph-nrg').textContent = kfmt(stats.energy); $('ph-money').textContent = kfmt(stats.money);   // 14.1K, 2.3M (rounded down)
+      $('ph-deals').textContent = kfmt(dealsDone);
+      $('ph-money').parentNode.title = `Money: ${stats.money.toLocaleString('en')}`; $('ph-deals').parentNode.title = `Deals made at work: ${dealsDone.toLocaleString('en')}`;
     }
     $('ph-face').style.backgroundImage = `url(${ART_SRC.heroPortrait})`;
     $('t-quest-img').src = ART_SRC.questIcon; $('t-lb-img').src = ART_SRC.trophy; renderBagTile();
