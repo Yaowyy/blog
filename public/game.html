@@ -404,7 +404,7 @@
   // ---- sound --------------------------------------------------------------------
   // Web Audio: the whole track is decoded once and looped sample-exact (no click at the loop point).
   // Music starts only when the player enters the game; browsers also need a key press or tap before any sound.
-  const MUSIC_SRC = 'audio/background_music.m4a';
+  const MUSIC_SRC = 'audio/backgroundMusic.m4a';
   const SETTINGS_KEY = 'littlegame.settings';
   const settings = Object.assign({ music: 2, sfx: 2, touch: 'auto' }, store.get(SETTINGS_KEY) || {});   // new players start at 40% / 40%
   if ((settings.v || 0) < 2) { settings.music = 2; settings.sfx = 2; settings.v = 2; store.set(SETTINGS_KEY, { ...settings }); }   // one-time reset to 40% for everyone (sound update)   // volumes: 0-5 steps of 20%; touch: auto / on / off. Per device
@@ -623,11 +623,11 @@
     { name: 'NRG Shot', tab: 'food', class: 'food', stack: 16, price: 24, buyLevel: 6, gain: { energy: 50 }, art: 'nrgShot', rarity: 'rare',
       desc: 'A tiny vial of neon-blue fuel. A huge energy kick, no healing at all. +10\uE100 per 100 food bought.' },
     { name: 'Smile',   tab: 'patches', class: 'patch', price: 30,  gain: { charisma: 1 }, patch: true, art: 'smilePatch', rarity: 'common',
-      desc: 'Cheap social firmware. Every install makes you a little more likeable. +15% price per install.' },
+      desc: 'Cheap social firmware. Every install makes you a little more likeable. +12% price per install.' },
     { name: 'Social',  tab: 'patches', class: 'patch', minLevel: 2, price: 80,  gain: { charisma: 2 }, patch: true, art: 'socialPatch', rarity: 'common',
-      desc: 'A small-talk module for the street. Twice the charm of Smile. +15% price per install.' },
+      desc: 'A small-talk module for the street. Twice the charm of Smile. +12% price per install.' },
     { name: 'Persona', tab: 'patches', class: 'patch', minLevel: 3, price: 240, gain: { charisma: 3 }, patch: true, art: 'personaPatch', rarity: 'common',
-      desc: 'A premium personality overlay. The biggest charisma boost per install. +15% price per install.' },
+      desc: 'A premium personality overlay. The biggest charisma boost per install. +12% price per install.' },
     // class 'equipment': goes to the inventory, gives its bonus only once equipped (I → A/D → Space). Never stacks (1 per slot).
     // Any number can be bought and carried (buying one you already have asks first); only one per equipment slot is worn.
     { name: 'Banana sword', tab: 'weapons', buyLevel: 2, meleeArea: 1.2, price: 260, gain: { strength: 1, charisma: 1 }, hit: 6, attackMs: -100, class: 'equipment', kind: 'sword', art: 'bananaSword', rarity: 'common',   // attackMs: swings 0.1 s faster
@@ -808,7 +808,10 @@
     deepForest: { name: 'deep forest', floor: 'groundLake' },   // same floor and passages as the forest, more leaves
     wasteland:  { name: 'industrial wasteland', floor: 'groundWasteland' },   // north of the abandoned factory: scrapyards, Scrap Crawlers
     pit:        { name: 'industrial pit', floor: 'groundPit' },
-    grid:       { name: 'grid', floor: 'groundGrid' },   // The Grid (-1:0 .. -2:1): above-ground power district under the city   // 4:-4, the future second boss arena (Scrap Crawlers for now)
+    grid:       { name: 'grid', floor: 'groundGrid' },
+    overgrowth: { name: 'the overgrowth', floor: 'groundOvergrowth' },   // -6:-6: the mutant jungle lair in the deep forest (a future boss arena; trees only)
+    labs:       { name: 'quarantine labs', floor: 'groundLabs' },        // the MutaTech compound south of the slums: 6-8 labs per zone, Toxic Scavs
+    breach:     { name: 'the breach', floor: 'groundBreach' },           // -8:8: the containment breach (a future boss arena; empty for now)   // The Grid (-1:0 .. -2:1): above-ground power district under the city   // 4:-4, the future second boss arena (Scrap Crawlers for now)
   };
   const ZONE_LIST = {
     '0:0': 'city',
@@ -826,9 +829,29 @@
     // The Grid (south of the city) and the southern slums below it, down to the deep forest (added 6 Oct 2026; NEW_ZONES)
     '-1:0': 'grid', '-1:1': 'grid', '-2:0': 'grid', '-2:1': 'grid',
     '-3:0': 'slums', '-3:1': 'slums', '-3:2': 'slums', '-4:2': 'slums', '-5:1': 'slums', '-5:2': 'slums', '-6:2': 'slums', '-7:1': 'slums', '-7:2': 'slums',
+    // expansion 2 (8 Oct 2026; NEW_ZONES_2): the forest and deep forest grow west, the Overgrowth, one more slums zone, the
+    // Quarantine Labs and the Breach
+    '-3:-4': 'forest', '-4:-4': 'forest', '-5:-4': 'forest', '-5:-5': 'forest',
+    '-6:-7': 'deepForest', '-6:-5': 'deepForest', '-7:-7': 'deepForest', '-7:-6': 'deepForest', '-7:-5': 'deepForest', '-7:-4': 'deepForest',
+    '-7:-3': 'deepForest', '-8:-6': 'deepForest', '-8:-3': 'deepForest',
+    '-6:-6': 'overgrowth',
+    '-7:3': 'slums',
+    '-7:5': 'labs', '-8:3': 'labs', '-8:4': 'labs', '-8:5': 'labs', '-8:6': 'labs', '-8:7': 'labs', '-9:4': 'labs', '-9:7': 'labs', '-9:8': 'labs',
+    '-8:8': 'breach',
   };
   // zones added after the world was first rolled out: generated last, so every older zone keeps its exact layout
   const NEW_ZONES = new Set(['-1:0', '-1:1', '-2:0', '-2:1', '-3:0', '-3:1', '-3:2', '-4:2', '-5:1', '-5:2', '-6:2', '-7:1', '-7:2']);
+  // expansion 2: generated after everything else (the older world, NEW_ZONES included, rolls out exactly as before)
+  const NEW_ZONES_2 = new Set(['-3:-4', '-4:-4', '-5:-4', '-5:-5', '-6:-7', '-6:-5', '-7:-7', '-7:-6', '-7:-5', '-7:-4', '-7:-3', '-8:-6', '-8:-3',
+                               '-6:-6', '-7:3', '-7:5', '-8:3', '-8:4', '-8:5', '-8:6', '-8:7', '-9:4', '-9:7', '-9:8', '-8:8']);
+  // trees (forest, deep forest, the Overgrowth; planted at the end of the world roll-out). art: height in tiles (the picture is
+  // sized by it), ax / ay = where the trunk meets the ground, as fractions of the picture (it stands there on its tile), w = trunk
+  // tiles across. forest: trees A-B, deep forest A-B + deep A-B, the Overgrowth all five.
+  // Scav spawns (see SCAV; placed at the end of the world roll-out): per 2 zones of an area, [lvl 1-5, lvl 6-10]; circleR: his patrol circle
+  const SCAV_SPAWN = { skip: ['greaser', 'pit', 'overgrowth', 'breach', 'city', 'grid'], pair: [[1, 2], [1, 3]], odd: [[0, 1], [1, 2]], circleR: 3 };
+  const TREES = { forestPer: 5, deepPer: 6, overgrowth: 40, passage: 5, arena: 8,
+    art: { treeForestA: { h: 4, ax: 0.524, ay: 0.929 }, treeForestB: { h: 3, ax: 0.531, ay: 0.929 }, treeDeepA: { h: 5, ax: 0.523, ay: 0.929 },
+           treeDeepB: { h: 4.5, ax: 0.523, ay: 0.929 }, treeOvergrowth: { h: 6, ax: 0.555, ay: 0.929, w: 2 } } };
   // passages between neighbouring zones: [zone, zone, where along the shared edge (0 = top/left end, 1 = bottom/right end)]
   const PASSAGES = [
     ['0:0', '0:1', 0.83], ['1:1', '0:1', 0.59], ['1:0', '1:1', 0.8], ['1:1', '1:2', 0.2], ['1:2', '1:3', 0.82],
@@ -857,6 +880,15 @@
     ['0:0', '-1:0', 0.17], ['0:1', '-1:1', 0.85], ['-1:0', '-1:1', 0.15], ['-1:0', '-2:0', 0.16], ['-1:1', '-2:1', 0.86], ['-2:0', '-2:1', 0.82],
     ['-2:0', '-3:0', 0.17], ['-2:1', '-3:1', 0.85], ['-3:0', '-3:1', 0.55], ['-3:1', '-3:2', 0.84], ['-3:2', '-4:2', 0.89], ['-4:2', '-5:2', 0.51],
     ['-5:1', '-5:2', 0.49], ['-5:2', '-6:2', 0.88], ['-6:2', '-7:2', 0.49], ['-7:0', '-7:1', 0.15], ['-7:1', '-7:2', 0.52],
+    // expansion 2 (from the user's maps, 8 Oct 2026). Forest west: in from -3:-3; deep forest west: in from -8:-2; the Overgrowth
+    // -6:-6 only from -6:-7
+    ['-3:-4', '-3:-3', 0.83], ['-3:-4', '-4:-4', 0.12], ['-4:-4', '-5:-4', 0.5], ['-5:-5', '-5:-4', 0.53], ['-5:-5', '-6:-5', 0.12],
+    ['-6:-7', '-6:-6', 0.16], ['-6:-7', '-7:-7', 0.1], ['-6:-5', '-7:-5', 0.49], ['-7:-7', '-7:-6', 0.16], ['-7:-6', '-7:-5', 0.71],
+    ['-7:-5', '-7:-4', 0.78], ['-7:-4', '-7:-3', 0.53], ['-7:-6', '-8:-6', 0.47], ['-7:-3', '-8:-3', 0.48], ['-8:-3', '-8:-2', 0.51],
+    // slums -7:3 and the Quarantine Labs (only way in: -7:3 -> -8:3); the Breach -8:8 only from -9:8
+    ['-7:2', '-7:3', 0.51], ['-7:3', '-8:3', 0.49],
+    ['-8:3', '-8:4', 0.51], ['-8:4', '-8:5', 0.56], ['-8:5', '-8:6', 0.51], ['-8:6', '-8:7', 0.51],
+    ['-7:5', '-8:5', 0.49], ['-8:4', '-9:4', 0.51], ['-8:7', '-9:7', 0.49], ['-9:7', '-9:8', 0.83], ['-8:8', '-9:8', 0.49],
   ];
   const coordOf = id => id.split(':').map(Number);
   // zone numbers for levels and exp: negative coordinates count as positive (-3:-3 works like 3:3)
@@ -1264,11 +1296,13 @@
     let seed = 20260929;
     const rnd = () => ((seed = (seed * 1664525 + 1013904223) >>> 0) / 4294967296);
     const shuffle = a => { a = a.slice(); for (let i = a.length - 1; i > 0; i--) { const j = Math.floor(rnd() * (i + 1)); [a[i], a[j]] = [a[j], a[i]]; } return a; };
-    const zonesOf = t => Object.keys(AREAS).filter(id => ZONE_LIST[id] === t && !NEW_ZONES.has(id)).sort();   // the original zones (NEW_ZONES: at the end)
+    const zonesOf = t => Object.keys(AREAS).filter(id => ZONE_LIST[id] === t && !NEW_ZONES.has(id) && !NEW_ZONES_2.has(id)).sort();   // the original zones (NEW_ZONES, NEW_ZONES_2: at the end)
     // the original zones are rolled out exactly as before, i.e. without the passages to the new zones (those are added back
     // at the end, and whatever stands in front of them is cleared)
     const fullExits = {};
-    for (const id in AREAS) if (!NEW_ZONES.has(id) && AREAS[id].exits.some(e => NEW_ZONES.has(e.to))) { fullExits[id] = AREAS[id].exits; AREAS[id].exits = fullExits[id].filter(e => !NEW_ZONES.has(e.to)); }
+    for (const id in AREAS) if (!NEW_ZONES.has(id) && !NEW_ZONES_2.has(id) && AREAS[id].exits.some(e => NEW_ZONES.has(e.to))) { fullExits[id] = AREAS[id].exits; AREAS[id].exits = fullExits[id].filter(e => !NEW_ZONES.has(e.to)); }
+    // ...and every older zone without its passages to expansion 2 (they come back at the very end)
+    for (const id in AREAS) if (!NEW_ZONES_2.has(id)) AREAS[id].exits = AREAS[id].exits.filter(e => !NEW_ZONES_2.has(e.to));
     const lakeT = (A, x, y) => !!(A.lake && A.lake.rows[y] && A.lake.rows[y][x] === '#');
     const bigT = (A, x, y) => !!(A.big && A.big.rows[y] && A.big.rows[y][x] === '#');
     const inFoot = (g, x, y, p) => x >= g.x0 - p && x <= g.x1 + p && y >= g.y0 - p && y <= g.y1 + p;
@@ -1454,7 +1488,7 @@
       const hut = place(id, 'hut', { test: (w, f) => { const y = labYard(A, f); return y.length >= n && farFromFoes(A, y, -1); } });
       if (!hut) continue;
       const g = newGroup();
-      for (const [x, y] of shuffle(labYard(A, foot(hut))).slice(0, n)) addFoe(A, 'scav', x, y, g);
+      for (const [x, y] of shuffle(labYard(A, foot(hut))).slice(0, n)) addFoe(A, 'toxicScav', x, y, g);
     }
     // Sporelings: a group of 2-3 at one in three mushroom patches of each zone (rounded up), on or right next to the patch
     for (const id of [...zonesOf('forest'), ...zonesOf('deepForest')]) {
@@ -1515,7 +1549,7 @@
     // ---- zones added later (NEW_ZONES), after everything above so the older world rolls out exactly as before ----
     // 1) the passages to them come back, and whatever was rolled out in front of them is cleared (3 tiles around)
     for (const id in fullExits) {
-      const A = AREAS[id]; A.exits = fullExits[id];
+      const A = AREAS[id]; A.exits = fullExits[id].filter(e => !NEW_ZONES_2.has(e.to));
       const near = (x, y) => A.exits.some(e => NEW_ZONES.has(e.to) && e.tiles.some(([tx, ty]) => Math.max(Math.abs(tx - x), Math.abs(ty - y)) <= 3));
       const blocks = o => { const f = foot(o); for (let y = f.y0; y <= f.y1; y++) for (let x = f.x0; x <= f.x1; x++) if (near(x, y)) return true; return false; };
       if (id !== '0:0') A.walls = A.walls.filter(o => !blocks(o));   // the city's buildings are hand-placed (its road leads to the passage)
@@ -1523,6 +1557,7 @@
       if (A.extraFoes) A.extraFoes = A.extraFoes.filter(f => !foeTiles(f).some(([x, y]) => near(x, y)));
     }
     const newOf = t => Object.keys(AREAS).filter(id => ZONE_LIST[id] === t && NEW_ZONES.has(id)).sort();
+    const new2Of = t => Object.keys(AREAS).filter(id => ZONE_LIST[id] === t && NEW_ZONES_2.has(id)).sort();
     // 2) southern slums: built like the others (a mixed row in every quadrant, every 8th row the street block, every 3rd row
     //    a ruined billboard), then their Drips by the same rule (4 near the city, +2 for every 2 zones further)
     for (const id of newOf('slums')) {
@@ -1581,6 +1616,145 @@
     const cityNode = makeWall(SCEN.gridNode, 36, 19);
     Object.assign(cityNode, { gridNode: 'city', flip: false, art: 'gridNodeOn', label: 'Grid Node' });
     AREAS['0:0'].walls.push(cityNode);
+    // ---- expansion 2 (NEW_ZONES_2, 8 Oct 2026), after everything above so the older world rolls out exactly as before ----
+    // 1) the passages to them come back, and whatever was rolled out in front of them is cleared (3 tiles around)
+    for (const id in AREAS) {
+      if (NEW_ZONES_2.has(id) || !ZONE_EXITS[id].some(e => NEW_ZONES_2.has(e.to))) continue;
+      const A = AREAS[id]; A.exits = ZONE_EXITS[id];
+      const near = (x, y) => A.exits.some(e => NEW_ZONES_2.has(e.to) && e.tiles.some(([tx, ty]) => Math.max(Math.abs(tx - x), Math.abs(ty - y)) <= 3));
+      const blocks = o => { const f = foot(o); for (let y = f.y0; y <= f.y1; y++) for (let x = f.x0; x <= f.x1; x++) if (near(x, y)) return true; return false; };
+      A.walls = A.walls.filter(o => !blocks(o));
+      if (A.decos) A.decos = A.decos.filter(o => !blocks(o));
+      if (A.extraFoes) A.extraFoes = A.extraFoes.filter(f => !foeTiles(f).some(([x, y]) => near(x, y)));
+    }
+    // 2) slums -7:3: built like the other slums (a mixed row in every quadrant, every 8th row the street block, every 3rd row a
+    //    ruined billboard), then its Drips by the same rule (4 near the city, +2 for every 2 zones further)
+    for (const id of new2Of('slums')) {
+      AREAS[id].walls = [];
+      for (const q of [0, 1, 2, 3]) {
+        rowN++;
+        let row = rowN % 8 === 0 ? placeRow(id, ['street'], q) : null;
+        if (!row) row = mixedRow(id, q, null);
+        if (row && rowN % 3 === 0) billboardBy(id, row);
+      }
+      const A = AREAS[id], ring = zoneLevel(id), n = ring <= 2 ? 4 : 4 + 2 * Math.ceil((ring - 2) / 2);
+      A.drips = 0; A.foes = A.foes.filter(f => f.kind !== 'drip');
+      for (let i = 0, t = 0; i < n && t < 3000; t++) {
+        const x = 2 + Math.floor(rnd() * (COLS - 4)), y = 2 + Math.floor(rnd() * (ROWS - 4));
+        if (!tileOk(A, x, y) || behindTall(id, x, y) || !farFromFoes(A, [[x, y]], -1)) continue;
+        addFoe(A, 'drip', x, y); i++;
+      }
+    }
+    // 3) the new forest and deep forest zones, by the same rules as the older ones: labs (forest: 1 per 2 zones, rounded up;
+    //    deep forest: the zones paired at random, 2 labs per pair), mushroom patches (forest 3, deep forest 8: 2 per quadrant),
+    //    an Overgrown Loader in every third zone, Toxic Scavs at the labs, Sporelings at one in three patches
+    const fz = new2Of('forest'), dz = new2Of('deepForest'), labs2 = {};
+    for (const id of shuffle(fz).slice(0, Math.ceil(fz.length / 2))) labs2[id] = 1;
+    { const d = shuffle(dz);
+      for (let i = 0; i + 1 < d.length; i += 2) { if (rnd() < 0.5) { labs2[d[i]] = 1; labs2[d[i + 1]] = 1; } else { labs2[d[i]] = 2; labs2[d[i + 1]] = 0; } }
+      if (d.length % 2) labs2[d[d.length - 1]] = 1; }
+    for (const id of fz) for (let i = 0; i < 3; i++) place(id, 'mush');
+    for (const id of dz) for (let q = 0; q < 4; q++) for (let k = 0; k < 2; k++) if (!place(id, 'mush', { q })) place(id, 'mush');
+    for (const id of ['-4:-4', '-6:-5', '-7:-6', '-7:-3']) {   // Loaders, near the middle of the zone (the search widens step by step)
+      const A = AREAS[id], cx = Math.floor(COLS / 2), cy = Math.floor(ROWS / 2);
+      done: for (let r = 3; r <= 18; r += 3) for (let t = 0; t < 400; t++) {
+        const x = cx - 1 - r + Math.floor(rnd() * (2 * r + 1)), y = cy - r + Math.floor(rnd() * (2 * r + 1));
+        const tiles = [[0, 0], [1, 0], [0, -1], [1, -1]].map(([dx, dy]) => [x + dx, y + dy]);
+        if (!tiles.every(([tx, ty]) => tileOk(A, tx, ty) && !(A.decos || []).some(o => inFoot(foot(o), tx, ty, 0))) || !farFromFoes(A, tiles, -1)) continue;
+        addFoe(A, 'loader', x, y); break done;
+      }
+    }
+    // a lab (research hut) with its Toxic Scavs in the front yard (scavsAt: by zone level); only where the yard keeps FOE_GAP
+    const addLab = id => {
+      const A = AREAS[id], [lo, hi] = scavsAt(zoneLevel(id)), n = lo + Math.floor(rnd() * (hi - lo + 1));
+      const hut = place(id, 'hut', { test: (w, f) => { const y = labYard(A, f); return y.length >= n && farFromFoes(A, y, -1); } });
+      if (!hut) return false;
+      const g = newGroup();
+      for (const [x, y] of shuffle(labYard(A, foot(hut))).slice(0, n)) addFoe(A, 'toxicScav', x, y, g);
+      return true;
+    };
+    for (const id in labs2) for (let i = 0; i < labs2[id]; i++) addLab(id);
+    for (const id of [...fz, ...dz]) {   // Sporelings: a group of 2-3 at one in three mushroom patches (rounded up)
+      const A = AREAS[id], patches = shuffle((A.decos || []).filter(w => w.art === 'mushroomPatch'));
+      let want = Math.ceil(patches.length / 3);
+      for (const m of patches) {
+        if (!want) break;
+        const f = foot(m), spots = [];
+        for (let y = f.y0 - 1; y <= f.y1 + 1; y++) for (let x = f.x0 - 1; x <= f.x1 + 1; x++) if (tileOk(A, x, y)) spots.push([x, y]);
+        const pick = shuffle(spots).slice(0, 2 + (rnd() < 0.5 ? 1 : 0));
+        if (pick.length < 2 || !farFromFoes(A, pick, -1)) continue;
+        const g = newGroup(); for (const [x, y] of pick) addFoe(A, 'spore', x, y, g); want--;
+      }
+    }
+    // 4) Quarantine Labs: 6-8 labs per zone, each with its Toxic Scavs (same rule as everywhere: by zone level)
+    for (const id of new2Of('labs')) for (let i = 0, n = 6 + Math.floor(rnd() * 3); i < n; i++) addLab(id);
+    // the Overgrowth and the Breach stay empty (future boss arenas); the Overgrowth only gets trees (below)
+
+    // ---- trees (TREES): forest, deep forest and the Overgrowth, old zones and new, planted last ----
+    // Count: forest |bigger coordinate| × 5, deep forest × 6, the Overgrowth 40 (its middle, TREES.arena m around the centre,
+    // stays clear for a boss arena). Never within TREES.passage m of a passage, on or next to a building / mushroom patch /
+    // enemy spawn, in front of a building (2 rows), next to another tree, or where it would cut off any open ground.
+    const TREE_KINDS = { forest: ['treeForestA', 'treeForestB'], deepForest: ['treeForestA', 'treeForestB', 'treeDeepA', 'treeDeepB'],
+                         overgrowth: ['treeForestA', 'treeForestB', 'treeDeepA', 'treeDeepB', 'treeOvergrowth'] };
+    const runnerEnds = { '-7:-1': [[23, 14]] };   // the Dispatch Runner's route starts here (see RUNNER.route)
+    for (const type of ['forest', 'deepForest', 'overgrowth']) for (const id of Object.keys(AREAS).filter(k => ZONE_LIST[k] === type).sort()) {
+      const A = AREAS[id], n = type === 'overgrowth' ? TREES.overgrowth : zoneLevel(id) * (type === 'forest' ? TREES.forestPer : TREES.deepPer);
+      const no = new Uint8Array(COLS * ROWS), solid = new Uint8Array(COLS * ROWS);   // no: no tree here; solid: can't be walked
+      const mark = (arr, x, y) => { if (x >= 0 && y >= 0 && x < COLS && y < ROWS) arr[y * COLS + x] = 1; };
+      for (let y = 0; y < ROWS; y++) for (let x = 0; x < COLS; x++) {
+        if (lakeT(A, x, y) || bigT(A, x, y) || (A.coils || []).some(c => c.x - 1 === x && c.y - 1 === y)) { mark(no, x, y); mark(solid, x, y); }
+        if (x < 1 || y < 1 || x > COLS - 2 || y > ROWS - 2) mark(no, x, y);   // not on the outermost tile ring
+        if (A.exits.some(e => e.tiles.some(([tx, ty]) => Math.hypot(tx - x, ty - y) < TREES.passage))) mark(no, x, y);
+        if (type === 'overgrowth' && Math.hypot(x + 0.5 - COLS / 2, y + 0.5 - ROWS / 2) < TREES.arena) mark(no, x, y);
+      }
+      for (const o of [...A.walls, ...(A.decos || [])]) {
+        const f = foot(o);
+        for (let y = f.y0 - 1; y <= f.y1 + 3; y++) for (let x = f.x0 - 1; x <= f.x1 + 1; x++) mark(no, x, y);   // a ring, 2 more rows in front
+        if (A.walls.includes(o)) for (let y = f.y0; y <= f.y1; y++) for (let x = f.x0; x <= f.x1; x++) mark(solid, x, y);
+      }
+      for (const f of [...(A.extraFoes || []), ...A.foes]) for (const [fx, fy] of f.kind ? foeTiles(f) : []) for (let y = fy - 1; y <= fy + 1; y++) for (let x = fx - 1; x <= fx + 1; x++) mark(no, x, y);
+      for (const [x, y] of runnerEnds[id] || []) for (let yy = y - 1; yy <= y + 1; yy++) for (let xx = x - 1; xx <= x + 1; xx++) mark(no, xx, yy);
+      // open ground reachable from the first passage (4 directions); a tree may not lower it by more than its own tiles
+      const start = A.exits[0].tiles[0];
+      const reach = () => {
+        const seen = new Uint8Array(COLS * ROWS), st = [start[1] * COLS + start[0]]; seen[st[0]] = 1; let c = 0;
+        while (st.length) { const i = st.pop(), x = i % COLS, y = (i - x) / COLS; c++;
+          for (const [nx, ny] of [[x + 1, y], [x - 1, y], [x, y + 1], [x, y - 1]]) { if (nx < 0 || ny < 0 || nx >= COLS || ny >= ROWS) continue; const j = ny * COLS + nx; if (!seen[j] && !solid[j]) { seen[j] = 1; st.push(j); } } }
+        return c;
+      };
+      let open = reach();
+      for (let k = 0, t = 0; k < n && t < 6000; t++) {
+        const art = TREE_KINDS[type][Math.floor(rnd() * TREE_KINDS[type].length)], d = TREES.art[art], w = d.w || 1;
+        const x0 = 1 + Math.floor(rnd() * (COLS - 1 - w)), y = 1 + Math.floor(rnd() * (ROWS - 2));
+        const cells = []; for (let i = 0; i < w; i++) cells.push([x0 + i, y]);
+        if (cells.some(([x, yy]) => no[yy * COLS + x])) continue;
+        for (const [x, yy] of cells) solid[yy * COLS + x] = 1;
+        const now = reach();
+        if (now < open - w) { for (const [x, yy] of cells) solid[yy * COLS + x] = 0; continue; }   // it would cut something off
+        open = now;
+        for (const [x, yy] of cells) for (let ny = yy - 1; ny <= yy + 1; ny++) for (let nx = x - 1; nx <= x + 1; nx++) mark(no, nx, ny);   // keep the next tree off its neighbours
+        A.walls.push({ w, h: 1, x: x0 + 1 + Math.floor(w / 2) - (w % 2 ? 0 : 1), y: y + 1, art, artH: d.h, ax: d.ax, ay: d.ay, ht: d.h, artW: d.trunk || w,
+                       flip: rnd() < 0.5, scenery: art, tree: true, color: '#3a2f22' });
+        k++;
+      }
+    }
+    // Scavs (placed last so nothing above moves). Every area type except SCAV_SPAWN.skip, split into its level 1-5 and 6-10 zones:
+    // the zones are paired at random and each pair gets SCAV_SPAWN.pair[band] Scavs, each in one of its two zones at random; a
+    // leftover zone gets SCAV_SPAWN.odd[band]. A Scav needs open ground around him (most of his 3 m patrol circle free) and keeps
+    // FOE_GAP from other enemy groups.
+    { const S = SCAV_SPAWN, roll = ([lo, hi]) => lo + Math.floor(rnd() * (hi - lo + 1));
+      const circleFree = (A, x, y) => { let n = 0; for (let k = 0; k < 16; k++) { const a = k / 16 * Math.PI * 2, tx = Math.floor(x + 0.5 + Math.cos(a) * SCAV_SPAWN.circleR), ty = Math.floor(y + 0.5 + Math.sin(a) * SCAV_SPAWN.circleR);
+        if (tx >= 1 && ty >= 1 && tx <= COLS - 2 && ty <= ROWS - 2 && !A.walls.some(o => inFoot(foot(o), tx, ty, 0)) && !lakeT(A, tx, ty) && !bigT(A, tx, ty)) n++; } return n >= 12; };
+      const putScav = id => { const A = AREAS[id];
+        for (let t = 0; t < 4000; t++) { const x = 4 + Math.floor(rnd() * (COLS - 8)), y = 4 + Math.floor(rnd() * (ROWS - 8));
+          if (tileOk(A, x, y) && farFromFoes(A, [[x, y]], -1) && circleFree(A, x, y)) { addFoe(A, 'scav', x, y); return true; } }
+        return false; };
+      const types = [...new Set(Object.values(ZONE_LIST))].filter(t => !S.skip.includes(t)).sort();
+      for (const type of types) for (const band of [0, 1]) {
+        const zs = shuffle(Object.keys(AREAS).filter(id => ZONE_LIST[id] === type && (band ? zoneLevel(id) >= 6 && zoneLevel(id) <= 10 : zoneLevel(id) >= 1 && zoneLevel(id) <= 5)).sort());
+        for (let i = 0; i + 1 < zs.length; i += 2) for (let k = roll(S.pair[band]); k > 0; k--) putScav(zs[i + (rnd() < 0.5 ? 0 : 1)]);
+        if (zs.length % 2) for (let k = roll(S.odd[band]); k > 0; k--) putScav(zs[zs.length - 1]);
+      } }
   }
   const footCX = w => { const f = foot(w); return (f.x0 + f.x1 + 1) / 2; };   // footprint centre, in tiles
   const START = { x: 21, y: 11 };   // 0-based: just below HomeDome
@@ -1589,12 +1763,12 @@
   // Drip: half human, half oil slime. Every slums zone has 1 (2 where a map coordinate is 3 or more).
   // All Drips in the world are spawned when a game starts and keep their state when the hero leaves a zone
   // (living ones go back home and forget him). When the hero comes within `aggro` tiles (diagonals count as 1) he locks on:
-  // chases at 1 tile per second until the hero leaves the zone, attacks once per second when next to him, and only then
+  // chases at 1 tile per second until the hero is DRIP.leash m away or leaves the zone (then walks home), attacks once per second when next to him, and only then
   // starts restoring mana (spawns with 0 of 3, +1 per 4 s). At 3 mana he casts Magic Tar at the hero (same spell as the hero's).
   // Beaten: his puddle can be looted for 30 s (face it, Space), then fades out over 2 s and is gone with any loot left.
   // He comes back 60–90 s after dying. All timers run on game time, which stops while a window is open.
   // Damage: a share of the hero's max HP at his level (see npcDamage): melee ×0.10–0.12 per hit, Magic Tar ×0.08 per tick.
-  const DRIP = { name: 'Drip', exp: 2, hp: 10, atkMult: [0.10, 0.12], tarMult: 0.08, mana: 3, manaRegenMs: 4000, aggro: 4, stepMs: 1000 / 2, attackMs: 1000,
+  const DRIP = { name: 'Drip', exp: 2, hp: 10, leash: 12, atkMult: [0.10, 0.12], tarMult: 0.08, mana: 3, manaRegenMs: 4000, aggro: 4, stepMs: 1000 / 2, attackMs: 1000,
                  windupMs: 400, castMs: 300, spell: 'Magic tar', respawnMs: [60000, 90000], lootMs: 30000, fadeMs: 2000,
                  loot: { money: [4, 8], tar: [0, 1], magicTarChance: 0.03 },   // rolled when he dies, taken with Space
                  spawns: [[{ x: 11, y: 7 }], [{ x: 8, y: 5 }, { x: 14, y: 9 }]] };   // spawn tiles (from 1) for 1 and for 2 Drips
@@ -1627,7 +1801,7 @@
   // `keep` tiles from the hero (backs off when he comes closer). Every `sprayEveryMs` he aims (aimMs) and sprays a cone of
   // toxic mist at where the hero stood: up to `sprayRange` tiles, `sprayHalfAngle` radians each side; the hero takes
   // damage on each tick while he stays in it (step out of the cone to dodge). Doesn't melee. Same loot/fade/respawn timing as Drip.
-  const SCAV = { name: 'Toxic Scav', exp: 4, hp: 26, aggro: 5, keep: 3, strafe: 0.6, circleSpeed: 1, stepMs: 1000 / 1.5, sprayRange: 3.5, sprayHalfAngle: 0.5,
+  const TOXIC_SCAV = { name: 'Toxic Scav', exp: 4, hp: 26, leash: 12, aggro: 5, keep: 3, strafe: 0.6, circleSpeed: 1, stepMs: 1000 / 1.5, sprayRange: 3.5, sprayHalfAngle: 0.5,
                  sprayEveryMs: 2500, aimMs: 280, sprayMs: 1400, sprayTicks: [220, 690, 1180], sprayMult: 0.16,   // aim 0.28 s, spray 1.4 s with damage checks at 0.22 / 0.69 / 1.18 s into it, next aim 2.5 s after this one started; damage per hit: 16% of a same-level hero's max HP (npcDamage)
                  respawnMs: [90000, 120000], lootMs: 30000, fadeMs: 2000,
                  loot: { money: [10, 18], tar: [0, 1], mutagenChance: 0.15 } };
@@ -1637,7 +1811,7 @@
   // level), 40% chance to slow the hero by 20% for 3 s. After the ram it stays low for 0.6 s: only then can melee reach it
   // (spells always can). Cooldown 1.8 s. Gives up when the hero is 10+ tiles away and flies home.
   // When a hit leaves it at 10% of max HP or less (once per life) it cloaks (2% visible, can't be targeted), flies 3 tiles away and repairs 30% of max HP over 3 s.
-  const DRONE = { name: 'Mav-1K', exp: [3, 4], hp: 14, aggro: 3, leash: 10, stepMs: 1000 / 3, ramMult: 0.15, windupMs: 250, lowMs: 700, cooldownMs: 1800,
+  const DRONE = { name: 'Mav-1K', exp: [3, 4], hp: 14, aggro: 3, leash: 15, stepMs: 1000 / 3, ramMult: 0.15, windupMs: 250, lowMs: 700, cooldownMs: 1800,
                   slowChance: 0.4, slow: 0.2, slowMs: 3000, dashLen: 1.5, dashMs: 200, cloakPct: 0.1, cloakMs: 3000, cloakAlpha: 0.02, fleeDist: 3, repairPct: 0.3,
                   respawnMs: [40000, 100000], lootMs: 30000, fadeMs: 2000, loot: { money: [4, 10], aiChipChance: 0.15 } };
   // Sporeling (deep forest): a small mushroom mutant hiding as a glowing mushroom, in groups of 2-3 around every mushroom patch.
@@ -1671,7 +1845,7 @@
   //   land: ×0.3 to the hero if he stands in one; Drips in one start burning.
   // Gives up when the hero is `leash`+ tiles from her home: walks home healing 100% of max HP per 30 s, back to stage 1 when full.
   // Her Drips give no exp or loot. Comes back 10 minutes after she dies.
-  const QUEEN = { name: 'Pump Queen', size: 2, aggro: 5, leash: 14, dmgLevel: 4, dmgScale: 0.8, stepMs: [1000, 1000 / 1.5], headY: 2.9,
+  const QUEEN = { name: 'Pump Queen', size: 2, aggro: 5, leash: 15, dmgLevel: 4, dmgScale: 0.8, stepMs: [1000, 1000 / 1.5], headY: 2.9,
                   slapWindupMs: 450, slapEveryMs: 1500, slapMult: [0.15, 0.18],
                   sprayEveryMs: 6000, sprayWarnMs: 600, sprayMs: 700, sprayRange: 4.5, sprayHalfAngle: 0.45, sprayMult: 0.05, sprayTicks: 3, slow: 0.4, slowMs: 3000,
                   summonEveryMs: [17000, 12000], summonN: [2, 1], summonMax: [4, 3], firstSummonMs: 7000, summonLevel: 2,
@@ -1703,14 +1877,28 @@
                    route: [['-7:-1', [23, 14], [45, 14]], ['-7:0', [1, 14], [45, 3]], ['-7:1', [1, 3], [45, 14]], ['-7:2', [1, 14], [23, 14]]],
                    respawnMs: [300000, 300000], lootMs: 30000, fadeMs: 2000,
                    loot: { money: [15, 25], copper: [1, 3], aiChipChance: 0.2, shellChance: 0.1 } };
-  const ENEMY = { drip: DRIP, scav: SCAV, drone: DRONE, spore: SPORE, loader: LOADER, queen: QUEEN, crawler: CRAWLER, runner: RUNNER };
+  // Scav: an outcast who left the city and lives off junk (the Toxic Scavs were Scavs before they raided the labs). Spots the hero
+  // within `aggro` m, walks stepMs, swings his rebar club (windupMs wind-up, one swing per attackMs, ×atkMult of a same-level hero's
+  // max HP), gives up `leash`+ m away. Greedy: only while NOT fighting, the nearest loot within greedR m — a beaten enemy's loot, or
+  // pileShare of the gold in the hero's death pile (once per pile, never items) — he sprints to (sprintSpeed m/s), grabs it in grabMs
+  // (can't be stopped) and keeps it in his own drop; then runs away from the hero (fleeSpeed m/s for fleeMs) and walks back to his
+  // spawn spot. Hit at any time: he fights. Own loot: money + commonItem / rareItem chance of one random common / rare resource,
+  // upgrade, food or bag (SCAV_POOL).
+  // Idle he walks a circle of circleR m around his spawn spot at patrolSpeed m/s: walkMs walking, then pauseMs standing, again and
+  // again (around buildings and trees; never through a passage). Chasing and walking home: stepMs (3 m/s).
+  const SCAV = { name: 'Scav', exp: 3, hp: 12, aggro: 5, leash: 12, stepMs: 1000 / 3, patrolSpeed: 2, circleR: SCAV_SPAWN.circleR, walkMs: 5000, pauseMs: 5000, sprintSpeed: 6, greedR: 15, grabMs: 300, fleeSpeed: 5, fleeMs: 3000,
+                 pileShare: 0.2, windupMs: 200, attackMs: 1600, atkMult: [0.14, 0.17], giveUpMs: 8000,
+                 respawnMs: [120000, 150000], lootMs: 30000, fadeMs: 2000, loot: { money: [6, 12], commonItem: 0.2, rareItem: 0.02 } };
+  const SCAV_POOL = { common: [], rare: [] };   // what can be in his backpack: common / rare resources, upgrades, food and bags
+  for (const it of [...SHOP_ITEMS, ...LOOT_ITEMS]) { const r = it.rarity || 'common'; if (['resource', 'upgrade', 'food', 'bag'].includes(it.class) && SCAV_POOL[r] && !SCAV_POOL[r].includes(it.name)) SCAV_POOL[r].push(it.name); }
+  const ENEMY = { drip: DRIP, scav: SCAV, toxicScav: TOXIC_SCAV, drone: DRONE, spore: SPORE, loader: LOADER, queen: QUEEN, crawler: CRAWLER, runner: RUNNER };
   // enemy max health = round(the hero's max HP at the enemy's level × the enemy's hpMult). Every new enemy gets its own hpMult.
   // Drip ×1: 10 / 12 / 14 / 17 / 21 at lvl 1-5 · Mav-1K ×0.8: 8 / 10 / 11 / 14 / 17 · Toxic Scav ×1.8: 18 / 22 / 25 / 31 / 38
-  CRAWLER.hpMult = 0.6; RUNNER.hpMult = 1.4; DRIP.hpMult = 1; DRONE.hpMult = 0.8; SCAV.hpMult = 1.8; SPORE.hpMult = 0.7; LOADER.hpMult = 3; QUEEN.hpMult = 122 / 12;   // Pump Queen: 122 HP at level 2
+  CRAWLER.hpMult = 0.6; RUNNER.hpMult = 1.4; SCAV.hpMult = 1.2; DRIP.hpMult = 1; DRONE.hpMult = 0.8; TOXIC_SCAV.hpMult = 1.8; SPORE.hpMult = 0.7; LOADER.hpMult = 3; QUEEN.hpMult = 122 / 12;   // Pump Queen: 122 HP at level 2
   const enemyMaxHp = (kind, zoneId) => Math.max(1, Math.round(heroHealthCap(10, zoneLevel(zoneId)) * (ENEMY[kind].hpMult ?? 1)));
   const ET = d => ENEMY[d.kind || 'drip'];   // an enemy's type (rules)
   // Scav sheets are cut to the hero's scale (277 px tall ≈ HERO_H tiles): ax = feet centre, foot = px from the cell bottom to the soles
-  const SCAV_ART = { walk: { frames: 4, cellW: 238, cellH: 287, ax: 132.5, foot: 0 },   // walk cycle, 4 frames per tile stepped
+  const TOXIC_SCAV_ART = { walk: { frames: 4, cellW: 238, cellH: 287, ax: 132.5, foot: 0 },   // walk cycle, 4 frames per tile stepped
                      idle: { frames: 1, cellW: 215, cellH: 288, ax: 119.6, foot: 10.4 },
                      attack: { frames: 4, cellW: 296, cellH: 288, ax: 182.5, foot: 9.3, nozzle: [-87.5, -157] },   // 0 aim, 1 spray, 2 big spray, 3 recoil
                      hurt: { frames: 2, cellW: 297, cellH: 322, ax: 126.4, foot: 58.6 } };   // 0 hurt, 1 defeated
@@ -1722,6 +1910,11 @@
   const CRAWLER_ART = { idle: { frames: 1, cellW: 174, cellH: 142, ax: 87, foot: 4 }, hidden: { frames: 1, cellW: 180, cellH: 106, ax: 90, foot: 4 },
                         emerge: { frames: 4, cellW: 181, cellH: 190, ax: 90, foot: 4 }, walk: { frames: 4, cellW: 183, cellH: 150, ax: 91, foot: 9 },
                         pounce: { frames: 4, cellW: 191, cellH: 182, ax: 95, foot: 9 }, hurt: { frames: 2, cellW: 180, cellH: 134, ax: 90, foot: 8 } };   // 0 crouch, 1-2 airborne, 3 landing
+  const SCAV_ART = {   // cells in one row, 128 px per tile; ax = his legs' centre, foot = px from the cell bottom to the soles; art faces left
+    idle: { frames: 4, cellW: 188, cellH: 241, ax: 98, foot: 4 }, walk: { frames: 4, cellW: 186, cellH: 228, ax: 99, foot: 5 },
+    sprint: { frames: 4, cellW: 186, cellH: 223, ax: 99, foot: 5 }, grab: { frames: 4, cellW: 200, cellH: 251, ax: 108, foot: 4 },
+    swing: { frames: 4, cellW: 202, cellH: 288, ax: 102, foot: 13 },   // 0 wind-up, 1 swing, 2 impact, 3 follow-through
+    hurt: { frames: 2, cellW: 287, cellH: 252, ax: 144, foot: 7 } };   // 0 hurt, 1 defeated
   const RUNNER_ART = {   // cells in one row, 128 px per tile; ax = wheels centre, foot = px from the cell bottom to the ground; art faces left
     idle:   { frames: 1, cellW: 302, cellH: 270, ax: 151, foot: 2 },
     roll:   { frames: 4, cellW: 217, cellH: 251, ax: 108, foot: 3 },   // rolling bob
@@ -1741,11 +1934,11 @@
   // burning blob (idle2 / walk2 / slap2 / ignite2); hurt: 0 hurt pump, 1 hurt blob, 2 collapsing, 3 dead (oil slick + broken pump)
   const QUEEN_ART = { idle1: {frames: 1, cellW: 410, cellH: 377, ax: 227.4, foot: 3}, walk1: {frames: 4, cellW: 459, cellH: 402, ax: 228.3, foot: 3}, slap1: {frames: 4, cellW: 497, cellH: 450, ax: 249.5, foot: 3}, spray1: {frames: 4, cellW: 477, cellH: 377, ax: 286.6, foot: 3}, roar: {frames: 4, cellW: 428, cellH: 380, ax: 206.4, foot: 3}, idle2: {frames: 1, cellW: 413, cellH: 416, ax: 208.1, foot: 3}, walk2: {frames: 4, cellW: 543, cellH: 463, ax: 316.8, foot: 3}, slap2: {frames: 4, cellW: 515, cellH: 452, ax: 280.1, foot: 3}, ignite2: {frames: 4, cellW: 471, cellH: 416, ax: 257.0, foot: 3}, hurt: {frames: 4, cellW: 440, cellH: 401, ax: 218.5, foot: 3} };
   const ART_SRC = {
-    queenIdle1: 'art/enemies/pumpQueen/queenIdle1.webp', queenWalk1: 'art/enemies/pumpQueen/queenWalk1.webp', queenSlap1: 'art/enemies/pumpQueen/queenSlap1.webp',
-    queenSpray1: 'art/enemies/pumpQueen/queenSpray1.webp', queenRoar: 'art/enemies/pumpQueen/queenRoar.webp', queenIdle2: 'art/enemies/pumpQueen/queenIdle2.webp',
-    queenWalk2: 'art/enemies/pumpQueen/queenWalk2.webp', queenSlap2: 'art/enemies/pumpQueen/queenSlap2.webp', queenIgnite2: 'art/enemies/pumpQueen/queenIgnite2.webp',
-    queenHurt: 'art/enemies/pumpQueen/queenHurt.webp', queenPortrait: 'art/enemies/pumpQueen/queenPortrait.webp', magicNozzle: 'art/items/skills/magicNozzle.webp',
-    droneFly: 'art/enemies/drone/droneFly.webp', droneAttack: 'art/enemies/drone/droneAttack.webp', droneHurt: 'art/enemies/drone/droneHurt.webp', dronePortrait: 'art/enemies/drone/dronePortrait.webp', statusSlowed: 'art/ui/statusSlowed.webp',   // Mav-1K sheets: 4 cells 300 × 300, faces left
+    queenIdle1: 'art/enemies/pumpQueen/pumpQueenIdle1.webp', queenWalk1: 'art/enemies/pumpQueen/pumpQueenWalk1.webp', queenSlap1: 'art/enemies/pumpQueen/pumpQueenSlap1.webp',
+    queenSpray1: 'art/enemies/pumpQueen/pumpQueenSpray1.webp', queenRoar: 'art/enemies/pumpQueen/pumpQueenRoar.webp', queenIdle2: 'art/enemies/pumpQueen/pumpQueenIdle2.webp',
+    queenWalk2: 'art/enemies/pumpQueen/pumpQueenWalk2.webp', queenSlap2: 'art/enemies/pumpQueen/pumpQueenSlap2.webp', queenIgnite2: 'art/enemies/pumpQueen/pumpQueenIgnite2.webp',
+    queenHurt: 'art/enemies/pumpQueen/pumpQueenHurt.webp', queenPortrait: 'art/enemies/pumpQueen/pumpQueenPortrait.webp', magicNozzle: 'art/items/skills/magicNozzle.webp',
+    droneFly: 'art/enemies/mav1k/mav1kFly.webp', droneAttack: 'art/enemies/mav1k/mav1kAttack.webp', droneHurt: 'art/enemies/mav1k/mav1kHurt.webp', dronePortrait: 'art/enemies/mav1k/mav1kPortrait.webp', statusSlowed: 'art/ui/statusSlowed.webp',   // Mav-1K sheets: 4 cells 300 × 300, faces left
     trophy: "data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Cpath d='M18 12H9v5a10 10 0 0 0 10 10M46 12h9v5a10 10 0 0 1-10 10' fill='none' stroke='%23FFE600' stroke-width='4'/%3E%3Cpath d='M18 7h28v14a14 14 0 0 1-28 0z' fill='%23FFE600' stroke='%2310131C' stroke-width='3'/%3E%3Cpath d='M26 13v8' stroke='%23fff8a0' stroke-width='3' stroke-linecap='round'/%3E%3Crect x='28' y='34' width='8' height='9' fill='%23FFE600' stroke='%2310131C' stroke-width='2'/%3E%3Crect x='18' y='43' width='28' height='9' rx='2' fill='%2300E5FF' stroke='%2310131C' stroke-width='3'/%3E%3C/svg%3E",   // leaderboard button (drawn, no file)
     heroSprite:   'art/hero/heroSprite.webp',
     heroFull:     'art/hero/heroFull.webp',
@@ -1759,10 +1952,10 @@
     heroWalk:     'art/hero/heroWalk.webp',   // 4 walk frames side by side, facing right
     heroWalkDown: 'art/hero/heroWalkDown.webp',   // 4 walk frames facing the viewer
     heroWalkUp:   'art/hero/heroWalkUp.webp',   // 4 walk frames seen from behind
-    shop:         'art/buildings/shop.png',   // shop building (mirrored: awning on the right)
-    work:         'art/buildings/work.png',   // work building, 3 x 2 tile footprint
-    invIcon:      'art/items/bags/invIcon.png',   // BackBag picture (the bag tile in the bar)
-    noBag: 'art/ui/noBag.png', bagX: 'art/items/bags/bagX.png', streetBlock: 'art/buildings/streetBlock.webp',   // street block: slums 6:3
+    shop:         'art/buildings/atbMarket.png',   // shop building (mirrored: awning on the right)
+    work:         'art/buildings/tradeCorp.png',   // work building, 3 x 2 tile footprint
+    invIcon:      'art/items/bags/backBag.png',   // BackBag picture (the bag tile in the bar)
+    noBag: 'art/ui/noBag.png', bagX: 'art/items/bags/backBagX.png', streetBlock: 'art/buildings/streetBlock.webp',   // street block: slums 6:3
       // empty bag tile (crossed-out bag) and BackBag X
     officePC: 'art/ui/officePC.webp', boss: 'art/ui/boss.webp', questIcon: 'art/ui/questIcon.webp', dealCall: 'art/ui/dealCall.webp', dealDelivery: 'art/ui/dealDelivery.webp',   // TradeCorp + quests (drawn placeholders until the art exists)
     slot:         'art/ui/slot.webp',   // slot frame: inventory, equipment, abilities, inventory button
@@ -1782,37 +1975,41 @@
     forestTL: 'art/world/big/forestTL.webp', forestTR: 'art/world/big/forestTR.webp', forestBL: 'art/world/big/forestBL.webp', forestBR: 'art/world/big/forestBR.webp',   // big forest grove quarters (see BIG)
     factoryTL: 'art/world/big/factoryTL.webp', factoryTR: 'art/world/big/factoryTR.webp', factoryBL: 'art/world/big/factoryBL.webp', factoryBR: 'art/world/big/factoryBR.webp',   // big factory quarters
     lakeTL: 'art/world/big/lakeTL.webp', lakeTR: 'art/world/big/lakeTR.webp', lakeBL: 'art/world/big/lakeBL.webp', lakeBR: 'art/world/big/lakeBR.webp',   // toxic lake quarters (see LAKE)
-    decals:       'art/world/ground/decals9.png',   // 9 floor details, 3 x 3 cells
+    decals:       'art/world/ground/decalsStreet.png',   // 9 floor details, 3 x 3 cells
     wallStraight: 'art/world/walls/wallStraight.webp',   // city border wall with razor wire, horizontal, joins left/right
     wallBroken:   'art/world/walls/wallBroken.webp',     // same wall, middle demolished and plugged with razor wire
     wallCorner:   'art/world/walls/wallCorner.webp',     // corner pillar with a camera, arms to the left and bottom
     wallEnd:      'art/world/walls/wallEnd.webp',        // wall broken off on the right (next to the city exit)
-    tar:          'art/world/passages/tar.png',
-    passageForestB: 'art/world/passages/passageForestB.png', passageSlums: 'art/world/passages/passageSlums.png',
+    tar:          'art/world/passages/passageTar.png',
+    passageForestB: 'art/world/passages/passageForestB.png', passageSlums: 'art/world/passages/passageSlums.png', passageLabs: 'art/world/passages/passageLabs.png',
+    groundOvergrowth: 'art/world/ground/groundOvergrowth.jpg', groundLabs: 'art/world/ground/groundLabs.jpg', groundBreach: 'art/world/ground/groundBreach.jpg',
+    decalsLab: 'art/world/ground/decalsLab.png',   // 9 lab floor details, 3 x 3 cells (DECALS with sheet: 'decalsLab')
+    treeForestA: 'art/world/trees/treeForestA.webp', treeForestB: 'art/world/trees/treeForestB.webp', treeDeepA: 'art/world/trees/treeDeepA.webp',
+    treeDeepB: 'art/world/trees/treeDeepB.webp', treeOvergrowth: 'art/world/trees/treeOvergrowth.webp',
     passageForest: 'art/world/passages/passageForest.png', passageLake: 'art/world/passages/passageLake.png', passageFactory: 'art/world/passages/passageFactory.png',   // passage pictures (straight right edge on the map edge)   // tar puddle flowing in from the right edge (mirrored for the left edge)
-    homedome:     'art/buildings/homedome.png',   // HomeDome apartments, front view (faces down)
+    homedome:     'art/buildings/homeDome.png',   // HomeDome apartments, front view (faces down)
     noodleBar:    'art/buildings/noodleBar.png',   // CaaCaanTeng noodle bar, front view, closed
-    charging:     'art/buildings/charging.png',   // hover-car charging station, front view
-    food: 'art/items/food/food.png',   // noodle bowl item icon
+    charging:     'art/buildings/chargingStation.png',   // hover-car charging station, front view
+    food: 'art/items/food/cheapNoodles.png',   // noodle bowl item icon
     dripIdle: 'art/enemies/drip/dripIdle.png',
-    dripWalk: 'art/enemies/drip/dripWalk.png', scavWalk: 'art/enemies/scav/scavWalk.png',   // enemy walk cycles, 4 frames each, face left   // Drip, idle / combat stance, faces left
+    dripWalk: 'art/enemies/drip/dripWalk.png', toxicScavWalk: 'art/enemies/toxicScav/toxicScavWalk.png',   // enemy walk cycles, 4 frames each, face left   // Drip, idle / combat stance, faces left
     dripAttack: 'art/enemies/drip/dripAttack.png',   // Drip attack, 4 equal cells, faces left
     dripHurt: 'art/enemies/drip/dripHurt.png',   // Drip hurt + defeated, 2 equal cells
     dripPortrait: 'art/enemies/drip/dripPortrait.png',   // Drip portrait 256x256
     smilePatch: 'art/items/patches/smilePatch.png',   // smile patch item icon
     socialPatch: 'art/items/patches/socialPatch.png',   // social patch item icon
     personaPatch: 'art/items/patches/personaPatch.png',   // persona patch item icon
-    tart: 'art/items/loot/tart.png',   // tart resource icon
-    magicTart: 'art/items/loot/magicTart.png',   // magic tart item + spell icon
+    tart: 'art/items/loot/tar.png',   // tart resource icon
+    magicTart: 'art/items/skills/magicTar.png',   // magic tart item + spell icon
     scrapDealer: 'art/buildings/scrapDealer.png',   // slums scrap dealer building, front turned slightly left
     scrap: 'art/items/loot/scrap.png',
-    scavIdle: 'art/enemies/scav/scavIdle.png', scavAttack: 'art/enemies/scav/scavAttack.png', scavHurt: 'art/enemies/scav/scavHurt.png',   // Toxic Scav sheets (face left)
+    toxicScavIdle: 'art/enemies/toxicScav/toxicScavIdle.png', toxicScavAttack: 'art/enemies/toxicScav/toxicScavAttack.png', toxicScavHurt: 'art/enemies/toxicScav/toxicScavHurt.png',   // Toxic Scav sheets (face left)
     sporelingIdle: 'art/enemies/sporeling/sporelingIdle.webp', sporelingPopup: 'art/enemies/sporeling/sporelingPopup.webp', sporelingWalk: 'art/enemies/sporeling/sporelingWalk.webp',
-    sporelingAttack: 'art/enemies/sporeling/sporelingAttack.webp', sporelingHurt: 'art/enemies/sporeling/sporelingHurt.webp', sporelingPortrait: 'art/enemies/sporeling/sporelingPortrait.webp', sporeCloud: 'art/enemies/sporeling/sporeCloud.webp',
-    loaderIdle: 'art/enemies/loader/loaderIdle.webp', loaderWalk: 'art/enemies/loader/loaderWalk.webp', loaderWhip: 'art/enemies/loader/loaderWhip.webp', loaderSlam: 'art/enemies/loader/loaderSlam.webp',
-    loaderHurt: 'art/enemies/loader/loaderHurt.webp', loaderPortrait: 'art/enemies/loader/loaderPortrait.webp', sporeSac: 'art/items/loot/sporeSac.webp', copperWire: 'art/items/loot/copperWire.webp', neonMoss: 'art/items/loot/neonMoss.webp', sludgeCrystal: 'art/items/loot/sludgeCrystal.webp', glowcapTruffle: 'art/items/loot/glowcapTruffle.webp',
+    sporelingAttack: 'art/enemies/sporeling/sporelingAttack.webp', sporelingHurt: 'art/enemies/sporeling/sporelingHurt.webp', sporelingPortrait: 'art/enemies/sporeling/sporelingPortrait.webp', sporeCloud: 'art/enemies/sporeling/sporelingCloud.webp',
+    loaderIdle: 'art/enemies/overgrownLoader/overgrownLoaderIdle.webp', loaderWalk: 'art/enemies/overgrownLoader/overgrownLoaderWalk.webp', loaderWhip: 'art/enemies/overgrownLoader/overgrownLoaderWhip.webp', loaderSlam: 'art/enemies/overgrownLoader/overgrownLoaderSlam.webp',
+    loaderHurt: 'art/enemies/overgrownLoader/overgrownLoaderHurt.webp', loaderPortrait: 'art/enemies/overgrownLoader/overgrownLoaderPortrait.webp', sporeSac: 'art/items/loot/sporeSac.webp', copperWire: 'art/items/loot/copperWire.webp', neonMoss: 'art/items/loot/neonMoss.webp', sludgeCrystal: 'art/items/loot/sludgeCrystal.webp', glowcapTruffle: 'art/items/loot/glowcapTruffle.webp',
     copperWireNode: 'art/world/harvest/copperWireNode.webp', neonMossNode: 'art/world/harvest/neonMossNode.webp', sludgeCrystalNode: 'art/world/harvest/sludgeCrystalNode.webp', glowcapNode: 'art/world/harvest/glowcapNode.webp', loaderCore: 'art/items/loot/loaderCore.webp',
-    scavPortrait: 'art/enemies/scav/scavPortrait.png', scavSpray: 'art/enemies/scav/scavSpray.png',   // portrait, toxic spray cone (points left, nozzle at the right end)
+    toxicScavPortrait: 'art/enemies/toxicScav/toxicScavPortrait.png', toxicScavSpray: 'art/enemies/toxicScav/toxicScavSpray.png',   // portrait, toxic spray cone (points left, nozzle at the right end)
     mutagen: 'art/items/loot/mutagen.png', tarOrb: 'art/items/loot/tarOrb.png', aiChip: 'art/items/loot/aiChip.png',   // item icons
     // city buildings (loaded, placed once the layout is drawn)
     metroStation: 'art/buildings/metroStation.png', credBank: 'art/buildings/credBank.png', ripperdoc: 'art/buildings/ripperdoc.png', ruinTradeCorp: 'art/buildings/ruinTradeCorp.png', ruinBillboardL: 'art/buildings/ruinBillboardL.png', ruinBillboard: 'art/buildings/ruinBillboard.png', ruinMetro: 'art/buildings/ruinMetro.png', ruinCredBank: 'art/buildings/ruinCredBank.png', ruinRipperdoc: 'art/buildings/ruinRipperdoc.png', block5: 'art/buildings/block5.png', block7: 'art/buildings/block7.png', block6Abandoned: 'art/buildings/block6Abandoned.png', block3: 'art/buildings/block3.png', block3Ruin: 'art/buildings/block3Ruin.png', block3Abandoned: 'art/buildings/block3Abandoned.png',
@@ -1821,23 +2018,26 @@
     block4Capsule: 'art/buildings/block4Capsule.png', block5Corp: 'art/buildings/block5Corp.png', block6Market: 'art/buildings/block6Market.png',
     ruinCapsule: 'art/buildings/ruinCapsule.png', ruinCorp: 'art/buildings/ruinCorp.png', ruinMarketTower: 'art/buildings/ruinMarketTower.png',
     talentPainCorrection: 'art/ui/talents/talentPainCorrection.webp', talentVampTech: 'art/ui/talents/talentVampTech.webp', talentReZero: 'art/ui/talents/talentReZero.webp', talentSideHustle: 'art/ui/talents/talentSideHustle.webp', talentCommission: 'art/ui/talents/talentCommission.webp', talentCeoMindset: 'art/ui/talents/talentCeoMindset.webp', talentQuickHands: 'art/ui/talents/talentQuickHands.webp', talentArcaneViolence: 'art/ui/talents/talentArcaneViolence.webp', talentSystemOverclock: 'art/ui/talents/talentSystemOverclock.webp',   // talent icons
-    npcRogue: 'art/npc/rogue.webp', npcSparky: 'art/npc/sparky.webp', npcSparkyHand: 'art/npc/sparkyHand.webp', sparkyPortrait: 'art/npc/sparkyPortrait.webp', npcPixi: 'art/npc/pixi.webp', npcPixiCheer: 'art/npc/pixiCheer.webp', pixiPortrait: 'art/npc/pixiPortrait.webp', npcChef: 'art/npc/netizenChef.webp', roguePortrait: 'art/npc/roguePortrait.webp', startScreen: 'art/ui/startScreen.webp', techVersity: 'art/buildings/techVersity.webp',   // quest giver in the city, standing, facing the viewer
-    spellTech: 'art/buildings/spellTech.png',   // MutaTech crafting station (3 x 2), turned slightly like the shop
+    npcRogue: 'art/npc/rogue/rogue.webp', npcSparky: 'art/npc/sparky/sparky.webp', npcSparkyHand: 'art/npc/sparky/sparkyHand.webp', sparkyPortrait: 'art/npc/sparky/sparkyPortrait.webp', npcPixi: 'art/npc/pixi/pixi.webp', npcPixiCheer: 'art/npc/pixi/pixiCheer.webp', pixiPortrait: 'art/npc/pixi/pixiPortrait.webp', npcChef: 'art/npc/netizenChef/netizenChef.webp', roguePortrait: 'art/npc/rogue/roguePortrait.webp', startScreen: 'art/ui/startScreen.webp', techVersity: 'art/buildings/techVersity.webp',   // quest giver in the city, standing, facing the viewer
+    spellTech: 'art/buildings/mutaTech.png',   // MutaTech crafting station (3 x 2), turned slightly like the shop
     ruinApartment: 'art/buildings/ruinApartment.png', ruinMarket: 'art/buildings/ruinMarket.png', ruinNoodleBar: 'art/buildings/ruinNoodleBar.png',
     holoBillboard: 'art/buildings/holoBillboard.webp', shackStack: 'art/buildings/shackStack.webp', foodCart: 'art/buildings/foodCart.webp', burntBus: 'art/buildings/burntBus.webp',
     gasStation: 'art/buildings/gasStation.webp', researchHut: 'art/buildings/researchHut.webp', pumpStation: 'art/buildings/pumpStation.webp', mushroomPatch: 'art/world/big/mushroomPatch.webp',
     fallenSatellite: 'art/buildings/fallenSatellite.webp', containerStack: 'art/buildings/containerStack.webp',   // scenery (decorative)
    // destroyed buildings (decorative)   // scrap resource icon
     heroPortrait: 'art/hero/heroPortrait.webp',
-    crawlerIdle: 'art/enemies/crawler/crawlerIdle.webp', crawlerHidden: 'art/enemies/crawler/crawlerHidden.webp', crawlerEmerge: 'art/enemies/crawler/crawlerEmerge.webp',
-    crawlerWalk: 'art/enemies/crawler/crawlerWalk.webp', crawlerPounce: 'art/enemies/crawler/crawlerPounce.webp', crawlerHurt: 'art/enemies/crawler/crawlerHurt.webp',
-    crawlerPortrait: 'art/enemies/crawler/crawlerPortrait.webp',
-    runnerIdle: 'art/enemies/runner/runnerIdle.webp', runnerRoll: 'art/enemies/runner/runnerRoll.webp', runnerToss: 'art/enemies/runner/runnerToss.webp', runnerDash: 'art/enemies/runner/runnerDash.webp',
-    runnerHurt: 'art/enemies/runner/runnerHurt.webp', runnerParcel: 'art/enemies/runner/runnerParcel.webp', runnerPortrait: 'art/enemies/runner/runnerPortrait.webp', damagedCourierShell: 'art/items/bags/damagedCourierShell.webp',
+    crawlerIdle: 'art/enemies/scrapCrawler/scrapCrawlerIdle.webp', crawlerHidden: 'art/enemies/scrapCrawler/scrapCrawlerHidden.webp', crawlerEmerge: 'art/enemies/scrapCrawler/scrapCrawlerEmerge.webp',
+    crawlerWalk: 'art/enemies/scrapCrawler/scrapCrawlerWalk.webp', crawlerPounce: 'art/enemies/scrapCrawler/scrapCrawlerPounce.webp', crawlerHurt: 'art/enemies/scrapCrawler/scrapCrawlerHurt.webp',
+    crawlerPortrait: 'art/enemies/scrapCrawler/scrapCrawlerPortrait.webp',
+    runnerIdle: 'art/enemies/dispatchRunner/dispatchRunnerIdle.webp', runnerRoll: 'art/enemies/dispatchRunner/dispatchRunnerRoll.webp', runnerToss: 'art/enemies/dispatchRunner/dispatchRunnerToss.webp', runnerDash: 'art/enemies/dispatchRunner/dispatchRunnerDash.webp',
+    scavIdle: 'art/enemies/scav/scavIdle.webp', scavWalk: 'art/enemies/scav/scavWalk.webp', scavSprint: 'art/enemies/scav/scavSprint.webp', scavGrab: 'art/enemies/scav/scavGrab.webp',
+    scavSwing: 'art/enemies/scav/scavSwing.webp', scavHurt: 'art/enemies/scav/scavHurt.webp', scavPortrait: 'art/enemies/scav/scavPortrait.webp',   // Scav (faces left)
+    runnerHurt: 'art/enemies/dispatchRunner/dispatchRunnerHurt.webp', runnerParcel: 'art/enemies/dispatchRunner/dispatchRunnerParcel.webp', runnerPortrait: 'art/enemies/dispatchRunner/dispatchRunnerPortrait.webp', damagedCourierShell: 'art/items/bags/damagedCourierShell.webp',
   };
   // big 2 x 3 floor decals: 4 per zone type (BIG_DECALS), art/world/decals/<sheet>1-4.webp
   const BIG_DECALS = { city: 'cityBig', slums: 'slumsBig', greaser: 'greaserBig', factoryIn: 'factoryInBig', factory: 'factoryBig',
-                       wasteland: 'wastelandBig', pit: 'pitBig', grid: 'gridBig', lake: 'lakeBig', forest: 'forestBig', deepForest: 'deepForestBig' };
+                       wasteland: 'wastelandBig', pit: 'pitBig', grid: 'gridBig', lake: 'lakeBig', forest: 'forestBig', deepForest: 'deepForestBig',
+                       overgrowth: 'overgrowthBig', labs: 'labsBig', breach: 'breachBig' };
   for (const sheet of Object.values(BIG_DECALS)) for (let i = 1; i <= 4; i++) ART_SRC[sheet + i] = `art/world/decals/${sheet}${i}.webp`;
   const ART = Object.fromEntries(Object.entries(ART_SRC).map(([k, src]) => { const im = new Image(); im.src = src; return [k, im]; }));
   const ready = im => im && im.complete && im.naturalWidth > 0;
@@ -1911,6 +2111,8 @@
     const savedArea = AREA_ALIAS[saved.areaName] || saved.areaName;
     if (savedArea && AREAS[savedArea]) { areaName = savedArea; WALLS = AREAS[areaName].walls; }
     const player = { x: saved.x ?? START.x, y: saved.y ?? START.y };
+    if (!free(player.x, player.y)) done: for (let r = 1; r < COLS; r++) for (let dy = -r; dy <= r; dy++) for (let dx = -r; dx <= r; dx++)   // saved on a tile that is blocked now (e.g. a tree planted since): the nearest open one
+      if (Math.max(Math.abs(dx), Math.abs(dy)) === r && free(player.x + dx, player.y + dy) && !exitAt(player.x + dx, player.y + dy)) { player.x += dx; player.y += dy; break done; }
     if (!free(player.x, player.y)) { player.x = START.x; player.y = START.y; }   // e.g. a building moved onto him
     // facing direction: right by default, then whichever movement button was pressed last
     const facing = { x: saved.fx ?? 1, y: saved.fy ?? 0 };
@@ -3684,7 +3886,7 @@
       const out = {};
       for (const id in zoneDrips) out[id] = zoneDrips[id].filter(d => !d.summoned && !d.runner).map(d => d.dead
         ? { dead: true, x: d.x, y: d.y, since: gameTime - d.deadAt, respawnIn: Math.max(0, d.respawnAt - gameTime), loot: d.loot || null }
-        : { hp: d.hp, kind: d.kind, max: d.maxHp });
+        : { hp: d.hp, kind: d.kind, max: d.maxHp, carry: d.carry || undefined });
       return out;
     }
     function loadEnemies(saved) {
@@ -3693,7 +3895,7 @@
         const d = zoneDrips[id] && zoneDrips[id][i];
         if (!d) return;
         if (e.kind && e.kind !== d.kind) return;   // a different enemy lives in this slot now: keep the fresh one
-        if (!e.dead) { if (e.max === d.maxHp) d.hp = Math.max(1, Math.min(d.maxHp, e.hp ?? d.maxHp)); return; }   // max health changed (rebalance): full health
+        if (!e.dead) { if (e.max === d.maxHp) d.hp = Math.max(1, Math.min(d.maxHp, e.hp ?? d.maxHp)); if (e.carry) d.carry = { money: e.carry.money || 0, items: renameItems(e.carry.items || []) }; return; }   // max health changed (rebalance): full health
         Object.assign(d, { dead: true, hp: 0, x: e.x, y: e.y, fromX: e.x, fromY: e.y, aggro: false,
                            deadAt: gameTime - e.since, respawnAt: gameTime + e.respawnIn, loot: e.loot ? { ...e.loot, items: renameItems(e.loot.items) } : null });
       });
@@ -3703,7 +3905,7 @@
       const list = zoneDrips[id] || [];
       for (let i = list.length - 1; i >= 0; i--) if (list[i].summoned) list.splice(i, 1);   // the Pump Queen's Drips melt away
       list.forEach((d, i) => { if (d.runner) { d.aggro = false; d.act = null; d.dash = null; return; }   // the Runner keeps its place on its route
-        if (!d.dead) { const n = makeDrip(d.spawn, id, d.kind); n.hp = d.kind === 'queen' ? n.maxHp : d.hp; n.regenT = d.regenT; list[i] = n; } });   // the Queen resets fully
+        if (!d.dead) { const n = makeDrip(d.spawn, id, d.kind); n.hp = d.kind === 'queen' ? n.maxHp : d.hp; n.regenT = d.regenT; n.carry = d.carry || null; list[i] = n; } });   // the Queen resets fully
       for (let i = queenFx.length - 1; i >= 0; i--) if (queenFx[i].zone !== id) queenFx.splice(i, 1);
       for (let i = fireTiles.length - 1; i >= 0; i--) if (fireTiles[i].zone !== id) fireTiles.splice(i, 1);
       drips = list; drip = null;
@@ -3775,7 +3977,7 @@
       if (fly) { if (c.x < 0.6 || c.y < 0.6 || c.x > COLS - 0.6 || c.y > ROWS - 0.6) return true; }
       else if (circleHitsTiles(c.x, c.y, r - 0.02)) return true;
       for (const o of drips) {
-        if (o === d || o.dead || isFlyer(o) !== fly || ignore.has(o)) continue;
+        if (o === d || o.dead || isFlyer(o) !== fly || ignore.has(o) || d.runner || o.runner) continue;   // the Dispatch Runner rolls through other enemies (and they through it)
         const oc = foeGC(o), rr = r + foeGr(o);
         if ((c.x - oc.x) ** 2 + (c.y - oc.y) ** 2 < rr * rr) return true;
       }
@@ -3891,7 +4093,7 @@
     function separateFoes() {   // circles that ended up overlapping (crowds, leaps, pushes) ease apart; big and hidden ones hold their ground
       for (let i = 0; i < drips.length; i++) for (let j = i + 1; j < drips.length; j++) {
         const a = drips[i], b = drips[j];
-        if (a.dead || b.dead || isFlyer(a) !== isFlyer(b) || a.leap || b.leap) continue;
+        if (a.dead || b.dead || isFlyer(a) !== isFlyer(b) || a.leap || b.leap || a.runner || b.runner) continue;
         const ca = foeGC(a), cb = foeGC(b), rr = foeGr(a) + foeGr(b), dx = cb.x - ca.x, dy = cb.y - ca.y, L = Math.hypot(dx, dy);
         if (L >= rr) continue;
         const ux = L > 1e-3 ? dx / L : 1, uy = L > 1e-3 ? dy / L : 0, push = Math.min(0.06, (rr - L) / 2);
@@ -3941,6 +4143,7 @@
         if (drip.dead) return;
         if (--drip.dot.left <= 0) drip.dot = null; else drip.dot.next += sp.tickMs;
       }
+      if (drip.kind === 'toxicScav') { updateToxicScav(dt); return; }
       if (drip.kind === 'scav') { updateScav(dt); return; }
       if (drip.kind === 'drone') { updateDrone(dt); return; }
       if (drip.kind === 'spore') { updateSpore(dt); return; }
@@ -3949,7 +4152,9 @@
       if (drip.kind === 'loader') { updateLoader(dt); return; }
       if (drip.kind === 'queen') { updateQueen(dt); return; }
       const d = drip;
-      if (!d.aggro && feetGap(d) <= DRIP.aggro && stats.health > 0) { d.aggro = true; d.manaT = t; }
+      if (!d.aggro && feetGap(d) <= DRIP.aggro && stats.health > 0) { d.aggro = true; d.returning = false; d.manaT = t; }
+      if (d.aggro && (feetGap(d) > DRIP.leash || stats.health <= 0)) { d.aggro = false; d.returning = true; d.cast = null; d.hitAt = 0; }   // gives up
+      if (d.returning) { if (goHome(d, dt)) d.returning = false; return; }   // walks home, then patrols again
       if (!d.aggro) { patrolMove(d, dt); return; }
       // locked on: mana comes back (+1 per 4 s); full mana → a short cast, then Magic Tar at where the hero stood
       if (d.mana >= DRIP.mana) d.manaT = t;
@@ -3984,17 +4189,91 @@
     // A blocked tile (wall, exit, another enemy, the hero) turns him around.
     function patrolStep(d) { patrolMove(d, 0.016); }   // (old name)
 
-    // Toxic Scav: keeps his distance and sprays a cone of toxic mist (see SCAV)
+    // Toxic Scav: keeps his distance and sprays a cone of toxic mist (see TOXIC_SCAV)
     const inSpray = (d, s) => ovalPts().some(p => {   // is any part of the hero's oval inside this spray's cone?
       const dx = p.x - (d.x + 0.5), dy = p.y - (d.y + 0.5), len = Math.hypot(dx, dy);
-      if (len > SCAV.sprayRange) return false;
+      if (len > TOXIC_SCAV.sprayRange) return false;
       if (len < 0.9) return true;   // point blank
       let da = Math.atan2(dy, dx) - s.angle; da = Math.atan2(Math.sin(da), Math.cos(da));
-      return Math.abs(da) <= SCAV.sprayHalfAngle;
+      return Math.abs(da) <= TOXIC_SCAV.sprayHalfAngle;
     });
+    // ---- Scav (see SCAV) ----
+    const lootLeft = g => g.o ? !!(g.o.dead && g.o.loot && (g.o.loot.money || g.o.loot.items.length)) : piles.includes(g.p) && !g.p.scavved && g.p.money > 0;
+    function scavLootNear(d) {   // the nearest loot within greedR m: a beaten enemy's loot, or a death pile with gold no Scav has touched
+      const c = foeGC(d); let best = null, bd = SCAV.greedR;
+      for (const o of drips) if (o !== d && !(d.skip && d.skip.has(o))) { const g = { o }; if (!lootLeft(g)) continue; const gc = foeGC(o), L = Math.hypot(gc.x - c.x, gc.y - c.y); if (L < bd) { bd = L; best = { o, x: gc.x, y: gc.y }; } }
+      for (const p of piles) if (p.zone === areaName && !(d.skip && d.skip.has(p))) { const g = { p }; if (!lootLeft(g)) continue; const L = Math.hypot(p.x + 0.5 - c.x, p.y + 0.5 - c.y); if (L < bd) { bd = L; best = { p, x: p.x + 0.5, y: p.y + 0.5 }; } }
+      return best;
+    }
+    function scavTake(d, g) {   // the loot goes into his backpack (his own drop)
+      const c = d.carry || (d.carry = { money: 0, items: [] });
+      const add = (name, n) => { const it = c.items.find(i => i.name === name); if (it) it.count += n; else c.items.push({ name, count: n }); };
+      if (g.o) {
+        const L = g.o.loot; c.money += L.money || 0; for (const it of L.items) add(it.name, it.count || 1);
+        g.o.loot = null; if (lootTarget === g.o) lootTarget = null;
+      } else {
+        const m = Math.floor(g.p.money * SCAV.pileShare); g.p.money -= m; c.money += m; g.p.scavved = true;
+        if (!g.p.money && !g.p.bags.length && !g.p.gear.length && !g.p.items.length) piles.splice(piles.indexOf(g.p), 1);
+      }
+      float('mine!', '#ffdc00', d.x + 0.5, d.y - 1.9);
+    }
     function updateScav(dt) {
-      const S = SCAV, t = gameTime, d = drip, c = foeGC(d), f = heroFeet(), far = Math.hypot(f.x - c.x, f.y - c.y);
-      if (!d.aggro && feetGap(d) <= S.aggro && stats.health > 0) { d.aggro = true; d.nextSpray = t + 800; }
+      const S = SCAV, d = drip, t = gameTime, gap = feetGap(d), c = foeGC(d);
+      if (d.grab) {   // grabbing: can't be stopped
+        if (t < d.grab.start + S.grabMs) return;
+        const g = d.grab.g; d.grab = null; d.greed = null;
+        if (lootLeft(g)) scavTake(d, g);
+        if (!d.aggro) d.fleeUntil = t + S.fleeMs;   // off with it (unless he was hit meanwhile: then he fights)
+        return;
+      }
+      if (d.aggro) {   // fighting: loot can wait
+        d.greed = null; d.fleeUntil = 0;
+        if (gap > S.leash || stats.health <= 0) { d.aggro = false; d.returning = true; d.hitAt = 0; return; }   // gives up
+        faceHero(d);
+        if (d.hitAt && t >= d.hitAt) { d.hitAt = 0; if (meleeReaches(d) && stats.health > 0) hurtHero(npcDamage(S.atkMult[0] + Math.random() * (S.atkMult[1] - S.atkMult[0])), '#e5484d'); }
+        const reach = meleeReaches(d);
+        if (reach && t >= d.nextAttack && !d.hitAt) { d.attackStart = t; d.hitAt = t + S.windupMs; d.nextAttack = t + S.attackMs; }
+        if (reach || foeHeld(d) || d.hitAt || t - d.attackStart < 800) return;   // swinging, stuck in tar, or finishing the swing
+        const g = heroGoal(d); foeSeek(d, g.x, g.y, dt); return;
+      }
+      if (t < (d.fleeUntil || 0)) {   // running off with the loot, away from the hero
+        const f = heroFeet(), dx = c.x - f.x, dy = c.y - f.y, L = Math.hypot(dx, dy) || 1;
+        foeSeek(d, d.x + dx / L * 3, d.y + dy / L * 3, dt, S.fleeSpeed); return;
+      }
+      if (d.fleeUntil) { d.fleeUntil = 0; d.returning = true; }
+      if (d.greed) {   // sprinting for loot: still there? close enough to grab?
+        const g = d.greed;
+        if (!lootLeft(g)) { d.greed = null; d.returning = true; return; }   // someone was faster: back home
+        if (Math.hypot(g.x - c.x, g.y - c.y) < 0.7) { d.grab = { g, start: t }; d.lookX = g.x < c.x ? -1 : 1; return; }
+        if (t - g.since > S.giveUpMs) { (d.skip = d.skip || new Set()).add(g.o || g.p); d.greed = null; d.returning = true; return; }   // can't get there
+        foeSeek(d, g.x - 0.5, g.y - 0.5, dt, S.sprintSpeed); return;
+      }
+      const g = scavLootNear(d);
+      if (g) { d.greed = { ...g, since: t }; d.returning = false; return; }
+      if (gap <= S.aggro && stats.health > 0) { d.aggro = true; d.returning = false; return; }
+      if (d.returning) { if (goHome(d, dt)) { d.returning = false; d.circ = null; } return; }
+      scavCircle(d, dt);
+    }
+    function scavCircle(d, dt) {   // idle: around the circle (circleR m) about his spawn spot, walkMs walking / pauseMs standing
+      const S = SCAV, t = gameTime, h = foeGC(d, d.home.x, d.home.y), c = foeGC(d);
+      if (!d.circ) d.circ = { dir: Math.random() < 0.5 ? -1 : 1, walkUntil: t + S.walkMs, pauseUntil: 0, stuck: 0 };
+      const C = d.circ;
+      if (t < C.pauseUntil) return;   // standing
+      if (C.pauseUntil && t >= C.pauseUntil) { C.pauseUntil = 0; C.walkUntil = t + S.walkMs; }
+      if (t >= C.walkUntil) { C.pauseUntil = t + S.pauseMs; return; }
+      const R = S.circleR, ok = a => { const x = h.x + Math.cos(a) * R, y = h.y + Math.sin(a) * R; return !foeSolidTile(Math.floor(x), Math.floor(y)); };
+      let a = Math.atan2(c.y - h.y, c.x - h.x) + C.dir * 0.3;   // aim ~1 m ahead along the circle (from where he is now)
+      for (let k = 0; k < 20 && !ok(a); k++) a += C.dir * 0.3;   // that bit of the circle is blocked: aim further along
+      const gx = h.x + Math.cos(a) * R - (c.x - d.x), gy = h.y + Math.sin(a) * R - (c.y - d.y);   // ground point -> his anchor
+      if (foeSeek(d, gx, gy, dt, S.patrolSpeed) > 0.001) C.stuck = 0;
+      else if (!C.stuck) C.stuck = t;
+      else if (t - C.stuck > 1500) { C.dir = -C.dir; C.stuck = 0; }   // walked into something: the other way round
+    }
+    function updateToxicScav(dt) {
+      const S = TOXIC_SCAV, t = gameTime, d = drip, c = foeGC(d), f = heroFeet(), far = Math.hypot(f.x - c.x, f.y - c.y);
+      if (!d.aggro && feetGap(d) <= S.aggro && stats.health > 0) { d.aggro = true; d.returning = false; d.nextSpray = t + 800; }
+      if (d.aggro && !d.spray && (feetGap(d) > S.leash || stats.health <= 0)) { d.aggro = false; d.returning = true; }   // gives up
+      if (d.returning) { if (goHome(d, dt)) d.returning = false; return; }   // walks home, then patrols again
       if (!d.aggro) { patrolMove(d, dt); return; }
       if (d.spray) {   // aiming / spraying: stands still, damage ticks while the hero is in the cone
         const s = d.spray;
@@ -4195,7 +4474,12 @@
       d.pi = best;
       if (d.pi === end && bd < 0.35) { const was = d.zone; runnerCross(d); return d.zone !== was; }
       const gi = d.dir > 0 ? Math.min(end, d.pi + 4) : Math.max(end, d.pi - 4);
-      foeSeek(d, pts[gi][0], pts[gi][1], dt, speed);
+      if (foeSeek(d, pts[gi][0], pts[gi][1], dt, speed) > 0.002) { d.stuckAt = 0; return false; }
+      if (!d.stuckAt) d.stuckAt = gameTime;
+      else if (gameTime - d.stuckAt > 400) {   // caught on a building or tree corner: glide straight on to the next node of its route
+        const ni = Math.max(0, Math.min(pts.length - 1, d.pi + d.dir)), nx = pts[ni][0] - d.x, ny = pts[ni][1] - d.y, L = Math.hypot(nx, ny);
+        if (L > 0.01) { const st = Math.min(L, speed * dt); d.x += nx / L * st; d.y += ny / L * st; d.walkDist = (d.walkDist || 0) + st; d.movedAt = gameTime; if (Math.abs(nx) > 0.05) d.lookX = nx > 0 ? 1 : -1; }
+      }
       return false;
     }
     function runnerEscape(d) {   // fled far enough: gone with its loot, a new one starts later
@@ -4838,9 +5122,16 @@
         if (L.copper) { const n = rand(L.copper[0], L.copper[1]); if (n) items.push({ name: 'Copper Wire', count: n }); }   // Dispatch Runner
         if (L.shellChance && Math.random() < L.shellChance) items.push({ name: 'Damaged Courier Shell', count: 1 });
         if (L.queenRare) items.push({ name: Math.random() < (L.queenTarShare ?? 0.5) ? 'Magic tar' : 'Magic Nozzle', count: 1 });   // Pump Queen: one spell, Magic tar 75% / Magic Nozzle 25%
+        if (L.commonItem && SCAV_POOL.common.length && Math.random() < L.commonItem) items.push({ name: pick(SCAV_POOL.common), count: 1 });   // Scav: his backpack
+        if (L.rareItem && SCAV_POOL.rare.length && Math.random() < L.rareItem) items.push({ name: pick(SCAV_POOL.rare), count: 1 });
         const zm = L.zoneMoney ? zoneCoords(areaName).reduce((a, b) => a + b, 0) : 0;   // Loader: + |x| + |y| of its zone
         drip.loot = { money: rand(L.money[0] + zm, L.money[1] + zm), items };
-        gainExp(T.exp && drip.kind === 'queen' ? Math.round(T.exp * levelDmgFactor(npcLevel() - hero.level)) : killExp(drip, levelDmgFactor(npcLevel() - hero.level)));
+        if (drip.carry) {   // a Scav's stolen goods come back with him
+          drip.loot.money += drip.carry.money;
+          for (const it of drip.carry.items) { const o = items.find(i => i.name === it.name); if (o) o.count += it.count; else items.push({ ...it }); }
+          drip.carry = null;
+        }
+        gainExp(T.exp && (drip.kind === 'queen' || drip.kind === 'scav') ? Math.round(T.exp * levelDmgFactor(npcLevel() - hero.level)) : killExp(drip, levelDmgFactor(npcLevel() - hero.level)));
         const vt = tal('chrome', 1);   // VampTech
         if (vt && stats.health > 0) { const n = Math.round(CAPS.health * [0.08, 0.12, 0.16, 0.20][vt - 1]); const was = stats.health; stats.health = capped('health', stats.health + n); if (stats.health > was) float(`+${stats.health - was} HP`, '#e5484d', player.x + 0.5, player.y - 1.4); renderStats(); }   // round(his max HP × 0.4 × level factor)
         if (target === drip) retarget();   // next closest enemy, or no target
@@ -5181,6 +5472,7 @@
     // w / h: body width / height in m; lift: m from the soles up to the body's bottom; gr: ground circle radius in m.
     const FOE_BOX = {
       drip:    { w: 0.8, h: 1.45, lift: 0, gr: 0.4 },
+      toxicScav:    { w: 0.85, h: 1.7, lift: 0, gr: 0.3 },
       scav:    { w: 0.85, h: 1.7, lift: 0, gr: 0.3 },
       spore:   { w: 0.8, h: 1.1, lift: 0, gr: 0.35 },
       crawler: { w: 1.25, h: 0.85, lift: 0, gr: 0.45 },
@@ -5499,9 +5791,10 @@
       forestSmall: { art: 'passageForestB', along: 2, depth: 1 },  // stepping stones
       lake: { art: 'passageLake', along: 2, depth: 2 }, factory: { art: 'passageFactory', along: 2, depth: 1 },
       slums: { art: 'passageSlums', along: 2, depth: 2 },
+      labs: { art: 'passageLabs', along: 2, depth: 1 },   // the decontamination airlock
     };
-    const PASSAGE_GROUP = id => ({ forest: 'forest', deepForest: 'forest', lake: 'lake', factory: 'factory', wasteland: 'factory', pit: 'factory', slums: 'slums', greaser: 'slums' })[ZONE_LIST[id]] || null;
-    const PASSAGE_OVERRIDE = { '-1:-2|-2:-2': 'forest', '1:-1|0:-1': 'lake' };   // mixed passages drawn with one kind on both sides
+    const PASSAGE_GROUP = id => ({ forest: 'forest', deepForest: 'forest', lake: 'lake', factory: 'factory', wasteland: 'factory', pit: 'factory', slums: 'slums', greaser: 'slums', overgrowth: 'forest', labs: 'labs', breach: 'labs' })[ZONE_LIST[id]] || null;
+    const PASSAGE_OVERRIDE = { '-1:-2|-2:-2': 'forest', '1:-1|0:-1': 'lake', '-7:3|-8:3': 'labs' };   // mixed passages drawn with one kind on both sides
     // Chosen once per passage (both sides use the same picture), fixed seed per passage:
     // forest: the long trail or the stepping stones at random, but stepping stones wherever the long trail would overlap
     // another passage's picture in either zone; slums (incl. greaser): the street piece or the tar puddle at random.
@@ -5569,7 +5862,7 @@
     // weight = how often; size = fraction of a tile; turn: 'free' (any quarter turn + mirror), 'quarter', 'half',
     // 'mirror' (left/right only, e.g. puddles keep vertical reflections), 'none'; alpha = how strongly it shows.
     const DECALS = [   // weight 0 = not used
-      { name: 'crack',       weight: 3,   size: 0.95, turn: 'free' },     // the sheet's cells in order (3 x 3, decals9.png)
+      { name: 'crack',       weight: 3,   size: 0.95, turn: 'free' },     // the sheet's cells in order (3 x 3, decalsStreet.png)
       { name: 'crack web',   weight: 3,   size: 0.8,  turn: 'free' },
       { name: 'manhole',     weight: 1,   size: 0.72, turn: 'free' },
       { name: 'puddle cyan', weight: 1.5, size: 0.85, turn: 'mirror' },
@@ -5578,7 +5871,18 @@
       { name: 'litter',      weight: 2,   size: 0.75, turn: 'free' },
       { name: 'graffiti',    weight: 0.5, size: 0.75, turn: 'none', alpha: 0.75 },
       { name: 'leaves',      weight: 2,   size: 0.8,  turn: 'free' },
+      // the lab sheet (decalsLab.png, 3 x 3): cell = its place on that sheet
+      { name: 'test tube',   size: 0.85, turn: 'free', sheet: 'decalsLab', cell: 0 },
+      { name: 'petri dish',  size: 0.8,  turn: 'free', sheet: 'decalsLab', cell: 1 },
+      { name: 'syringe',     size: 0.8,  turn: 'free', sheet: 'decalsLab', cell: 2 },
+      { name: 'pills',       size: 0.8,  turn: 'free', sheet: 'decalsLab', cell: 3 },
+      { name: 'clipboard',   size: 0.85, turn: 'free', sheet: 'decalsLab', cell: 4 },
+      { name: 'mask glove',  size: 0.8,  turn: 'free', sheet: 'decalsLab', cell: 5 },
+      { name: 'mutagen',     size: 0.85, turn: 'free', sheet: 'decalsLab', cell: 6 },
+      { name: 'acid pit',    size: 0.85, turn: 'free', sheet: 'decalsLab', cell: 7 },
+      { name: 'sludge',      size: 0.85, turn: 'free', sheet: 'decalsLab', cell: 8 },
     ];
+    const LAB_DECALS = ['test tube', 'petri dish', 'syringe', 'pills', 'clipboard', 'mask glove', 'mutagen', 'acid pit', 'sludge'];
     // ---- ground decals: density per zone type, laid out by quadrants ----
     // The zone is cut into 4 quadrants. Density D puts 2·D large decals (2 x 3, the zone type's 4 pieces) and 10·D small ones
     // (1 tile, the decals9 sheet) into every quadrant: 8·D large per zone, each of the 4 pieces used exactly 2·D times (every
@@ -5588,11 +5892,12 @@
     // left in its quadrant goes to the nearest quadrant that has room; only when the whole zone is full is it skipped.
     // Never on buildings, walls / wire, roads, lake water or big map pieces; large ones keep 2 tiles from a passage,
     // small ones stay off passage tiles. The layout is fixed per zone (seeded) and the same every visit.
-    const DECAL_DENSITY = { grid: 2, city: 2, slums: 3, greaser: 4, lake: 2, factoryIn: 2, factory: 2, wasteland: 3, pit: 2, forest: 3, deepForest: 4 };   // defaults
+    const DECAL_DENSITY = { grid: 2, city: 2, slums: 3, greaser: 4, lake: 2, factoryIn: 2, factory: 2, wasteland: 3, pit: 2, forest: 3, deepForest: 4,
+                            overgrowth: 3, labs: 3, breach: 3 };   // defaults
     const DECAL_STEP = { big: 2, small: 10 };   // per density step, per zone quarter
     const DECAL_EDGE = [0.85, 0.95];   // near the zone edge decals are less likely: × this on the outermost tile row, the next one (then × 1)
     const DECAL_SPREAD = { any: 2.5, edge: 5 };   // small decals: how strongly they keep away from any other decal and from the zone border
-    const DECAL_TYPES_ORDER = ['city', 'grid', 'slums', 'greaser', 'lake', 'factoryIn', 'factory', 'wasteland', 'pit', 'forest', 'deepForest'];
+    const DECAL_TYPES_ORDER = ['city', 'grid', 'slums', 'greaser', 'lake', 'factoryIn', 'factory', 'wasteland', 'pit', 'forest', 'deepForest', 'overgrowth', 'labs', 'breach'];
     const decalDensity = type => Math.max(1, Math.min(5, (settings.decalDensity || {})[type] ?? DECAL_DENSITY[type] ?? 0));   // menu › settings › video › decal density
     function stepDensity(type, d, wrap = true) {
       let n = decalDensity(type) + d;
@@ -5602,10 +5907,11 @@
     }
     const SMALL_DECALS_BY_TYPE = {
       city: ['crack', 'crack web', 'manhole', 'puddle cyan', 'puddle pink', 'oil stain', 'litter', 'graffiti'],
-      slums: DECALS.map(d => d.name), greaser: DECALS.map(d => d.name),
+      slums: DECALS.filter(d => !d.sheet).map(d => d.name), greaser: DECALS.filter(d => !d.sheet).map(d => d.name),
       wasteland: ['crack', 'crack web', 'oil stain', 'litter', 'puddle cyan', 'puddle pink'], pit: ['crack', 'crack web', 'oil stain', 'litter', 'puddle cyan', 'puddle pink'],
       factoryIn: ['crack', 'crack web', 'oil stain', 'manhole'], factory: ['crack', 'crack web', 'oil stain', 'manhole'],
-      lake: ['leaves', 'oil stain', 'puddle cyan', 'puddle pink'], forest: ['leaves', 'crack'], deepForest: ['leaves', 'crack'],
+      lake: ['leaves', 'oil stain', 'puddle cyan', 'puddle pink', 'syringe', 'pills', 'mutagen', 'sludge'], forest: ['leaves', 'crack'], deepForest: ['leaves', 'crack'],
+      overgrowth: ['leaves'], labs: LAB_DECALS, breach: LAB_DECALS,
       grid: ['crack', 'crack web', 'manhole', 'oil stain', 'puddle cyan', 'litter'],
     };
     const decalPlans = {};   // zone id -> { big: [...], small: [...] } (worked out once per zone)
@@ -5760,14 +6066,14 @@
         gx.drawImage(ART[sh + p.piece], -TILE, -1.5 * TILE, 2 * TILE, 3 * TILE); gx.restore();
       }
     }
-    function placeDecals(gx) {   // the plan's small decals (3 x 3 sheet)
-      const sheet = ART.decals; if (!ready(sheet)) return;
-      const cell = sheet.naturalWidth / 3;
+    function placeDecals(gx) {   // the plan's small decals (3 x 3 sheets: decals9, decalsLab)
       for (const p of decalPlan().small) {
-        const d = DECALS[p.i], sz = d.size * TILE;
+        const d = DECALS[p.i], sz = d.size * TILE, sheet = ART[d.sheet || 'decals'], c = d.sheet ? d.cell : p.i;
+        if (!ready(sheet)) continue;
+        const cell = sheet.naturalWidth / 3;
         gx.save(); gx.globalAlpha = d.alpha ?? 0.9; if (d.blend) gx.globalCompositeOperation = d.blend;
         gx.translate((p.x + 0.5 + p.jx) * TILE, (p.y + 0.5 + p.jy) * TILE); gx.rotate(p.rot * Math.PI / 2); gx.scale(p.fx, 1);
-        gx.drawImage(sheet, (p.i % 3) * cell, Math.floor(p.i / 3) * cell, cell, cell, -sz / 2, -sz / 2, sz, sz);
+        gx.drawImage(sheet, (c % 3) * cell, Math.floor(c / 3) * cell, cell, cell, -sz / 2, -sz / 2, sz, sz);
         gx.restore();
       }
     }
@@ -5880,8 +6186,9 @@
       for (const it of items) {
         if (!it.wall) { it.draw(); if (it.body) behind.push(it.body); continue; }
         const w = it.wall, f = foot(w), a = artSize(w);
-        const x0 = a ? footCX(w) * TILE - a.dw / 2 : f.x0 * TILE, x1 = a ? x0 + a.dw : (f.x1 + 1) * TILE;
-        const y1 = (f.y1 + 1) * TILE, y0 = a ? y1 - a.dh : f.y0 * TILE;
+        const p = a && artXY(w, a);
+        const x0 = a ? p.x : f.x0 * TILE, x1 = a ? x0 + a.dw : (f.x1 + 1) * TILE;
+        const y0 = a ? p.y : f.y0 * TILE, y1 = a ? p.y + a.dh : (f.y1 + 1) * TILE;
         if (fadeTo(w, behind.length > 0 && hits(x0, x1, y0, y1, behind)) < 1) { ctx.save(); ctx.globalAlpha = w.fade; drawWall(w); ctx.restore(); } else drawWall(w);
       }
       {   // big corner pieces (factory, grove): the front columns fade together
@@ -5986,7 +6293,14 @@
       if (w.artH) { const dh = w.artH * TILE; return { im, dw: dh * im.naturalWidth / im.naturalHeight, dh }; }   // people: sized by height
       const dw = (w.artW || w.w || 1) * TILE; return { im, dw, dh: dw * im.naturalHeight / im.naturalWidth };
     }
-    function wallTop(w) { const a = artSize(w), f = foot(w); return a ? (f.y1 + 1) * TILE - a.dh : w.artH ? (f.y1 + 1) * TILE - w.artH * TILE : f.y0 * TILE; }
+    // top-left of a wall's picture: bottom-centre on the footprint, or (trees: ax / ay) the trunk's foot on its tile, a little above
+    // the tile's bottom edge (mirrored pictures mirror the anchor too)
+    function artXY(w, a) {
+      const f = foot(w);
+      if (w.ax == null) return { x: footCX(w) * TILE - a.dw / 2, y: (f.y1 + 1) * TILE - a.dh };
+      return { x: footCX(w) * TILE - a.dw * (w.flip ? 1 - w.ax : w.ax), y: (f.y1 + 0.8) * TILE - a.dh * w.ay };
+    }
+    function wallTop(w) { const a = artSize(w), f = foot(w); return a ? artXY(w, a).y : w.artH ? (f.y1 + 1) * TILE - w.artH * TILE : f.y0 * TILE; }
     // neon outline around a picture's silhouette: a ring just outside it plus a soft glow. Built once per picture/size/colour.
     const outlineCache = new Map();
     const OUTLINE_PAD = 14;
@@ -6051,7 +6365,7 @@
       const f = foot(w), a = artSize(w);
       if (a) {
         ctx.imageSmoothingQuality = 'high';
-        const x = footCX(w) * TILE - a.dw / 2, y = (f.y1 + 1) * TILE - a.dh;
+        const { x, y } = artXY(w, a);
         if (w.flip) { ctx.save(); ctx.translate(x + a.dw, y); ctx.scale(-1, 1); ctx.drawImage(a.im, 0, 0, a.dw, a.dh); ctx.restore(); }
         else ctx.drawImage(a.im, x, y, a.dw, a.dh);
         if (w === facedBuilding()) {   // interactable: yellow neon outline
@@ -6113,15 +6427,15 @@
       ctx.restore();
     }
     // walk frame (0-3) while the enemy is gliding to the next tile, else -1
-    const WALK_FRAMES_PER_M = { drip: 3.2 };   // walk-cycle frames per metre walked (default 4); Drip 20% slower so his ooze doesn't look frantic at 2 m/s
+    const WALK_FRAMES_PER_M = { drip: 3.2, scav: 2 };   // walk-cycle frames per metre walked (default 4); Drip 20% slower so his ooze doesn't look frantic at 2 m/s; Scav 2 like the hero (167 ms a frame walking, 83 ms sprinting)
     const walkFrame = t => t - (drip.movedAt ?? -1e9) < 120 ? Math.floor((drip.walkDist || 0) * (WALK_FRAMES_PER_M[drip.kind || 'drip'] ?? 4)) % 4 : -1;
-    function drawScavBody(cx, feet, t) {
-      const s = drip.spray, A = SCAV_ART, neon = dripNeon();
-      if (s && ready(ART.scavAttack)) {
+    function drawToxicScavBody(cx, feet, t) {
+      const s = drip.spray, A = TOXIC_SCAV_ART, neon = dripNeon();
+      if (s && ready(ART.toxicScavAttack)) {
         const f = t < s.sprayAt ? 0 : t > s.end - 250 ? 3 : 1;
-        drawScavCell(ART.scavAttack, A.attack, f, cx, feet, neon);
-        if (t >= s.sprayAt && t < s.end && ready(ART.scavSpray)) {   // the mist cone, from the nozzle toward where he aimed
-          const k = HERO_H * TILE / 280, im = ART.scavSpray, L = SCAV.sprayRange * TILE, H = L * im.naturalHeight / im.naturalWidth;
+        drawScavCell(ART.toxicScavAttack, A.attack, f, cx, feet, neon);
+        if (t >= s.sprayAt && t < s.end && ready(ART.toxicScavSpray)) {   // the mist cone, from the nozzle toward where he aimed
+          const k = HERO_H * TILE / 280, im = ART.toxicScavSpray, L = TOXIC_SCAV.sprayRange * TILE, H = L * im.naturalHeight / im.naturalWidth;
           const nx = cx + A.attack.nozzle[0] * k * (drip.lookX > 0 ? -1 : 1), ny = feet + A.attack.nozzle[1] * k;
           const grow = Math.min(1, (t - s.sprayAt) / 250), fade = Math.min(1, (s.end - t) / 250);
           ctx.save(); ctx.globalAlpha = 0.85 * fade; ctx.translate(nx, ny); ctx.rotate(s.angle + Math.PI);
@@ -6129,9 +6443,9 @@
           ctx.drawImage(im, -L, -H * 0.555, L, H);
           ctx.restore();
         }
-      } else if (t - drip.hurtStart < 300 && ready(ART.scavHurt)) drawScavCell(ART.scavHurt, A.hurt, 0, cx, feet, neon);
-      else if (walkFrame(t) >= 0 && ready(ART.scavWalk)) drawScavCell(ART.scavWalk, A.walk, walkFrame(t), cx, feet, neon);
-      else if (ready(ART.scavIdle)) drawScavCell(ART.scavIdle, A.idle, 0, cx, feet, neon);
+      } else if (t - drip.hurtStart < 300 && ready(ART.toxicScavHurt)) drawScavCell(ART.toxicScavHurt, A.hurt, 0, cx, feet, neon);
+      else if (walkFrame(t) >= 0 && ready(ART.toxicScavWalk)) drawScavCell(ART.toxicScavWalk, A.walk, walkFrame(t), cx, feet, neon);
+      else if (ready(ART.toxicScavIdle)) drawScavCell(ART.toxicScavIdle, A.idle, 0, cx, feet, neon);
       else { ctx.fillStyle = '#E3B521'; ctx.fillRect(cx - 30, feet - 110, 60, 110); }
     }
     const FOE_K = TILE / FOE_PX;
@@ -6161,6 +6475,17 @@
       else if (walkFrame(t) >= 0) ok = cell('crawlerWalk', 'walk', walkFrame(t));
       else ok = cell('crawlerIdle', 'idle', 0);
       if (!ok) { ctx.fillStyle = '#8a4a24'; ctx.beginPath(); ctx.ellipse(cx, feet - 34, 40, 26, 0, 0, Math.PI * 2); ctx.fill(); ctx.fillStyle = '#ff3b3b'; ctx.beginPath(); ctx.arc(cx - 14, feet - 38, 7, 0, Math.PI * 2); ctx.fill(); }
+    }
+    function drawScavBody(cx, feet, t) {
+      const A = SCAV_ART, S = SCAV, d = drip, neon = dripNeon(), atk = t - d.attackStart;
+      const cell = (key, name, f) => ready(ART[key]) && (drawScavCell(ART[key], A[name], f, cx, feet, neon, FOE_K), true);
+      let ok;
+      if (d.grab) ok = cell('scavGrab', 'grab', Math.min(3, Math.floor((t - d.grab.start) / (S.grabMs / 4))));   // crouch, grab, stuff it in, happy
+      else if (atk < 800) ok = cell('scavSwing', 'swing', atk < S.windupMs / 2 ? 0 : atk < S.windupMs ? 1 : atk < S.windupMs + 150 ? 2 : 3);
+      else if (t - d.hurtStart < 300) ok = cell('scavHurt', 'hurt', 0);
+      else if (walkFrame(t) >= 0) ok = (d.greed || t < (d.fleeUntil || 0)) ? cell('scavSprint', 'sprint', walkFrame(t)) : cell('scavWalk', 'walk', walkFrame(t));
+      else ok = cell('scavIdle', 'idle', Math.floor(t / 450) % 4);
+      if (!ok) { ctx.fillStyle = '#6b5a3a'; ctx.fillRect(cx - 26, feet - 150, 52, 140); ctx.fillStyle = '#2f6fdb'; ctx.fillRect(cx - 4, feet - 160, 40, 80); }
     }
     function drawRunnerBody(cx, feet, t) {
       const A = RUNNER_ART, R = RUNNER, neon = dripNeon(), a = drip.act, D = drip.dash;
@@ -6478,18 +6803,19 @@
       }
     }
     function drawDrip(d) {
-      const t = gameTime, cx = (d.x + (foeSize(drip) === 2 ? 1 : 0.5)) * TILE, feet = (d.y + 1) * TILE - 2, T = ET(drip), scav = drip.kind === 'scav';
+      const t = gameTime, cx = (d.x + (foeSize(drip) === 2 ? 1 : 0.5)) * TILE, feet = (d.y + 1) * TILE - 2, T = ET(drip), toxic = drip.kind === 'toxicScav';
       if (drip.dead) {
         const since = t - drip.deadAt, lootMs = drip.summoned ? SUMMON_FADE_MS - 1000 : T.lootMs, fadeMs = drip.summoned ? 1000 : T.fadeMs;
         if (since >= lootMs + fadeMs || drip.absorbed) return;   // body gone (or swallowed by the Pump Queen)
         ctx.save(); if (since > lootMs) ctx.globalAlpha = 1 - (since - lootMs) / fadeMs;   // fade-out
         const lootNeon = drip.loot && lootable() === drip && !anyOpen() ? NEON.building : null;
         if (drip.kind === 'drone') drawDroneWreck(cx, feet, lootNeon);
-        else if (scav) { if (ready(ART.scavHurt)) drawScavCell(ART.scavHurt, SCAV_ART.hurt, 1, cx, feet, lootNeon); }
+        else if (toxic) { if (ready(ART.toxicScavHurt)) drawScavCell(ART.toxicScavHurt, TOXIC_SCAV_ART.hurt, 1, cx, feet, lootNeon); }
         else if (drip.kind === 'spore') { if (ready(ART.sporelingHurt)) drawScavCell(ART.sporelingHurt, SPORE_ART.hurt, 1, cx, feet, lootNeon, FOE_K); }
         else if (drip.kind === 'crawler') { if (ready(ART.crawlerHurt)) drawScavCell(ART.crawlerHurt, CRAWLER_ART.hurt, 1, cx, feet, lootNeon, FOE_K); }
         else if (drip.kind === 'loader') { if (ready(ART.loaderHurt)) drawScavCell(ART.loaderHurt, LOADER_ART.hurt, 1, cx, feet, lootNeon, FOE_K); }
         else if (drip.kind === 'runner') { if (ready(ART.runnerHurt)) drawScavCell(ART.runnerHurt, RUNNER_ART.hurt, 1, cx, feet, lootNeon, FOE_K); }
+        else if (drip.kind === 'scav') { if (ready(ART.scavHurt)) drawScavCell(ART.scavHurt, SCAV_ART.hurt, 1, cx, feet, lootNeon, FOE_K); }
         else if (drip.kind === 'queen') drawQueenDead(cx, feet, lootNeon);
         else if (ready(ART.dripHurt)) drawDripCell(ART.dripHurt, DRIP_ART.hurt, 1, cx, feet, 1, lootNeon);
         if (drip.loot) {   // loot waiting: a pulsing gold glint over the puddle, "loot" when faced
@@ -6507,10 +6833,11 @@
         return;
       }
       const sinceAtk = t - drip.attackStart, sinceHurt = t - drip.hurtStart;
-      if (scav) drawScavBody(cx, feet, t);
+      if (toxic) drawToxicScavBody(cx, feet, t);
       else if (drip.kind === 'spore') { drawSporeBody(cx, feet, t); if (drip.hidden) return; }   // disguised: no bar, no rings
       else if (drip.kind === 'crawler') { drawCrawlerBody(cx, feet, t); if (drip.hidden) return; }
       else if (drip.kind === 'runner') drawRunnerBody(cx, feet, t);
+      else if (drip.kind === 'scav') drawScavBody(cx, feet, t);
       else if (drip.kind === 'loader') drawLoaderBody(cx, feet, t);
       else if (drip.kind === 'queen') drawQueenBody(cx, feet, t);
       else if (sinceAtk < 700 && ready(ART.dripAttack)) drawDripCell(ART.dripAttack, DRIP_ART.attack, Math.min(3, Math.floor(sinceAtk / 175)), cx, feet, 1, dripNeon());
@@ -6530,7 +6857,7 @@
         ctx.beginPath(); ctx.ellipse(cx, feet - 8, 46, 16, 0, 0, Math.PI * 2); ctx.stroke(); ctx.restore();
       }
       // health bar over his head
-      const bw = drip.kind === 'queen' ? 130 : drip.kind === 'loader' ? 110 : 64, bx = cx - bw / 2, by = feet - (scav ? HERO_H : drip.kind === 'spore' ? 1.15 : drip.kind === 'crawler' ? 1.05 : drip.kind === 'runner' ? 2.05 : drip.kind === 'loader' ? 2.75 : drip.kind === 'queen' ? (drip.stage === 2 ? 3.25 : 2.95) : DRIP_BODY) * TILE - 18;
+      const bw = drip.kind === 'queen' ? 130 : drip.kind === 'loader' ? 110 : 64, bx = cx - bw / 2, by = feet - (toxic || drip.kind === 'scav' ? HERO_H : drip.kind === 'spore' ? 1.15 : drip.kind === 'crawler' ? 1.05 : drip.kind === 'runner' ? 2.05 : drip.kind === 'loader' ? 2.75 : drip.kind === 'queen' ? (drip.stage === 2 ? 3.25 : 2.95) : DRIP_BODY) * TILE - 18;
       ctx.fillStyle = 'rgba(0, 0, 0, 0.7)'; ctx.fillRect(bx - 2, by - 2, bw + 4, 12);
       ctx.fillStyle = '#e5484d'; ctx.fillRect(bx, by, bw * drip.hp / drip.maxHp, 8);
     }
@@ -6665,7 +6992,7 @@
       const w = 340, h = 80, x = (canvas.width - w) / 2, y = phoneView && canvas.height > canvas.width ? phudBottom() + 12 : 12;
       ctx.fillStyle = 'rgba(0, 0, 0, 0.75)'; rr(x, y, w, h, 12); ctx.fill();
       ctx.strokeStyle = 'rgba(255, 43, 214, 0.6)'; ctx.lineWidth = 2; rr(x + 1, y + 1, w - 2, h - 2, 11); ctx.stroke();
-      const T = ET(drip), pic = ART[({ scav: 'scavPortrait', drone: 'dronePortrait', spore: 'sporelingPortrait', crawler: 'crawlerPortrait', loader: 'loaderPortrait', queen: 'queenPortrait', runner: 'runnerPortrait' })[drip.kind] || 'dripPortrait'];
+      const T = ET(drip), pic = ART[({ scav: 'scavPortrait', toxicScav: 'toxicScavPortrait', drone: 'dronePortrait', spore: 'sporelingPortrait', crawler: 'crawlerPortrait', loader: 'loaderPortrait', queen: 'queenPortrait', runner: 'runnerPortrait' })[drip.kind] || 'dripPortrait'];
       if (ready(pic)) { ctx.imageSmoothingQuality = 'high'; ctx.drawImage(pic, x + 8, y + 8, 64, 64); }
       else if (drip.kind === 'drone') { ctx.fillStyle = '#1B2233'; ctx.fillRect(x + 8, y + 8, 64, 64); drawDroneBody(x + 40, y + 44, 0, gameTime, !!drip.hitAt, -1); }
       else if (drip.kind === 'queen') {   // placeholder portrait: the pump's display face / the blob's eyes
@@ -6701,6 +7028,7 @@
         else if (drip.kind === 'crawler') { ctx.fillStyle = '#ff8a5c'; ctx.fillText(drip.act ? 'POUNCE!' : drip.hitAt ? 'biting!' : 'pack hunter · pounce', tx, y + 63); }
         else if (drip.kind === 'queen') { const a = drip.act; ctx.fillStyle = '#ff9a2e'; ctx.fillText(a ? ({ roar: 'IGNITION!', slap: 'hose slap!', spray: 'fuel spray!', ignite: 'pump & ignite!' })[a.kind] : drip.stage === 2 ? 'stage 2 · ignition' : 'stage 1 · the pump', tx, y + 63); }
         else if (drip.kind === 'runner') { const a = drip.act; ctx.fillStyle = '#c99bff'; ctx.fillText(drip.fleeing ? 'fleeing!' : a ? (a.kind === 'toss' ? 'parcel toss!' : 'express dash!') : drip.dash ? 'express dash!' : 'courier · toss · dash', tx, y + 63); }
+        else if (drip.kind === 'scav') { ctx.fillStyle = '#ffdc00'; ctx.fillText(drip.grab ? 'grabbing!' : drip.greed ? 'loot!' : gameTime < (drip.fleeUntil || 0) ? 'running off!' : drip.hitAt ? 'swinging!' : 'rebar swing · greedy', tx, y + 63); }
         else if (drip.kind === 'loader') { ctx.fillStyle = '#9dff5c'; ctx.fillText(drip.act ? (drip.act.kind === 'whip' ? 'vine whip!' : 'ground slam!') : 'whip · slam', tx, y + 63); }
         else { ctx.fillStyle = '#7fff3a'; ctx.fillText(drip.spray ? 'spraying!' : 'toxic spray', tx, y + 63); }
       }
@@ -7615,7 +7943,7 @@
     // Zone cells keep the zone's 21:13 shape. Undiscovered zones are fog (a drawn placeholder until fog art exists).
     const MAP_BOUNDS = (() => { const c = Object.keys(ZONE_LIST).map(coordOf);
       return { aMin: Math.min(...c.map(v => v[0])), aMax: Math.max(...c.map(v => v[0])), bMin: Math.min(...c.map(v => v[1])), bMax: Math.max(...c.map(v => v[1])) }; })();
-    const ZONE_COLORS = { grid: '#1d4a6b', wasteland: '#7a3a1c', pit: '#4a2010', city: '#8a93a6', slums: '#58617a', greaser: '#7a6d3e', lake: '#2f8a45', factoryIn: '#6a5a4a', factory: '#57493c', forest: '#4f7a3a', deepForest: '#2f5a26' };
+    const ZONE_COLORS = { grid: '#1d4a6b', wasteland: '#7a3a1c', pit: '#4a2010', city: '#8a93a6', slums: '#58617a', greaser: '#7a6d3e', lake: '#2f8a45', factoryIn: '#6a5a4a', factory: '#57493c', forest: '#4f7a3a', deepForest: '#2f5a26', overgrowth: '#3f8a1e', labs: '#6a2a6e', breach: '#3a1d4a' };
     const fogCache = new Map();
     function fogTile(w, h) {   // soft grey clouds, same pattern every time for a given size
       const key = `${w}x${h}`;
