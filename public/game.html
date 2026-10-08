@@ -144,7 +144,7 @@
   :is(html.phone, html.fill) .phud { display: flex; position: absolute; z-index: 3; gap: 8px; align-items: flex-start;
                      left: calc(env(safe-area-inset-left, 0px) + 8px); top: calc(env(safe-area-inset-top, 0px) + 8px);
                      padding: 6px 8px 6px 6px; background: rgba(5, 7, 12, 0.72); border: 1px solid rgba(255, 255, 255, 0.18); border-radius: 10px;
-                     font: 600 11px/1.2 ui-monospace, "SF Mono", Menlo, Consolas, monospace; color: #fff; pointer-events: none; }
+                     font: 600 11px/1.2 ui-monospace, "SF Mono", Menlo, Consolas, monospace; color: #fff; pointer-events: auto; cursor: pointer; touch-action: none; -webkit-tap-highlight-color: transparent; }   /* the whole plate opens the Hero window */
   :is(html.phone, html.fill) .phud.away { display: none; }   /* a window or panel is open */
   .ph-face.tut-glow { box-shadow: 0 0 0 3px #ffdc00, 0 0 16px 5px rgba(255, 220, 0, 0.8); animation: tutGlow 0.9s ease-in-out infinite alternate; }
   @keyframes tutGlow { from { box-shadow: 0 0 0 2px #ffdc00, 0 0 6px 2px rgba(255, 220, 0, 0.5); } to { box-shadow: 0 0 0 4px #ffdc00, 0 0 20px 6px rgba(255, 220, 0, 0.9); } }
@@ -274,8 +274,8 @@
 
 <div id="stage"><canvas id="c" width="1680" height="1040" aria-label="Game grid, 21 by 13 tiles"></canvas>
   <!-- phone HUD (phone view only): hero face (tap = hero panel), HP / mana / XP bars, energy and money -->
-  <div class="phud" id="phud">
-    <button type="button" class="ph-face" id="ph-face" data-code="KeyH" aria-label="Hero (H)"></button>
+  <div class="phud" id="phud" data-code="KeyH" title="Hero (H)">
+    <button type="button" class="ph-face" id="ph-face" aria-label="Hero (H)" tabindex="-1"></button>
     <div class="ph-bars">
       <div class="ph-top"><b id="ph-name">Guest</b><span id="ph-lvl">lvl 1</span></div>
       <div class="ph-bar hp"><i id="ph-hp"></i><span id="ph-hpt"></span></div>
@@ -666,7 +666,7 @@
     // forest enemies' loot (sold at the ATB-Market for now; MutaTech recipes later)
     { name: 'Spore Sac',  class: 'resource', stack: 64, gain: {}, value: 5, rarity: 'common', art: 'sporeSac', desc: 'A soft sac of glowing spores from a Sporeling.' },
     // harvested: hold Space (hold A on phones) for 5 s on a glowing pile in the world (see HARVEST)
-    { name: 'Damaged Courier Shell', class: 'resource', stack: 4, gain: {}, value: 450, rarity: 'rare', art: 'damagedCourierShell', desc: 'A dented courier pack, its armoured hatch jammed shut. MutaTech could fix this.' },   // Dispatch Runner loot (10%)
+    { name: 'Damaged Courier Shell', class: 'resource', stack: 4, gain: {}, value: 450, rarity: 'mythical', art: 'damagedCourierShell', desc: 'A dented courier pack, its armoured hatch jammed shut. MutaTech could fix this.' },   // Dispatch Runner loot (10%)
     { name: 'Copper Wire', class: 'resource', stack: 64, gain: {}, value: 3, rarity: 'common', art: 'copperWire', desc: 'Old copper cable pulled out of a slum junction box.' },
     { name: 'Neon Moss', class: 'resource', stack: 64, gain: {}, value: 4, rarity: 'common', art: 'neonMoss', desc: 'Glowing moss scraped off fallen logs and rusty wrecks in the forests.' },
     { name: 'Sludge Crystal', class: 'resource', stack: 64, gain: {}, value: 6, rarity: 'common', art: 'sludgeCrystal', desc: 'A toxic crystal grown out of the lakeshore sludge. Still warm.' },
@@ -764,10 +764,15 @@
   const CALL_LINES = ['A client wants their contract checked.', 'Someone needs a loan explained. Slowly.', 'A shop owner is angry about a late order.',
                       'A tourist is lost and wants directions.', 'A gang boss wants to renegotiate. Politely.', 'A robot keeps calling to sell you insurance.'];
   const RARE_CALL_LINES = ['A corporate VIP asks for you by name.', 'A rich collector wants a private deal.'];
-  const SALE_POOL = { common: ['Tar', 'Cheap noodles'], rare: ['MutaGen', 'AI chip', 'Tar Orb', 'Scrap'] };
+  // sale offers: every common / rare resource, upgrade and food item (no equipment, spells, bags, patches or mythical items).
+  // A batch worth about SALE.budgetPerLevel × level coins at full price (at least 1, at most a full stack), sold SALE.discount
+  // cheaper (plus the promotion's discount); exp: 1 per SALE.coinsPerExp coins paid (at least 1).
+  const SALE = { budgetPerLevel: 20, discount: 0.05, coinsPerExp: 20, classes: ['resource', 'upgrade', 'food'] };
+  const SALE_POOL = { common: [], rare: [] };
+  for (const it of [...SHOP_ITEMS, ...LOOT_ITEMS]) { const r = it.rarity || 'common'; if (SALE.classes.includes(it.class) && SALE_POOL[r] && !SALE_POOL[r].includes(it.name)) SALE_POOL[r].push(it.name); }
   const MAX_QUESTS = 5;   // active quests at the same time (deliveries + the Rogue's quests; her tutorial doesn't count)
   const pick = a => a[Math.floor(Math.random() * a.length)];
-  function rollDeal(lvl, cha, foodPrice, force = null) {   // force: [type, rare] (cheat menu)
+  function rollDeal(lvl, cha, foodPrice, force = null, unitOf = null) {   // force: [type, rare] (cheat menu); unitOf(name): full price of 1 (food: today's shop price)
     let r = Math.random(), roll = DEAL_CHANCES[0];
     for (const c of DEAL_CHANCES) { if (r < c[2]) { roll = c; break; } r -= c[2]; }
     const [type, rare] = force || roll;
@@ -776,9 +781,10 @@
       return { type, rare, energy: rand(lvl, lvl + cha), money: Math.round(lvl * W + Math.random() * cha * W), line: pick(rare ? RARE_CALL_LINES : CALL_LINES) };
     }
     if (type === 'sale') {
-      const item = pick(rare ? SALE_POOL.rare : SALE_POOL.common), count = item === 'Tar Orb' ? 1 : Math.min(32, lvl);
-      const unit = item === 'Cheap noodles' ? Math.ceil(foodPrice - 1e-9) : ((LOOT_ITEMS.find(it => it.name === item) || {}).value || 1);
-      return { type, rare, item, count, price: unit * count };
+      const item = pick(rare ? SALE_POOL.rare : SALE_POOL.common), def = [...SHOP_ITEMS, ...LOOT_ITEMS].find(it => it.name === item) || {};
+      const unit = Math.max(1, unitOf ? unitOf(item) : item === 'Cheap noodles' ? Math.ceil(foodPrice - 1e-9) : (def.value ?? def.price ?? 1));
+      const count = Math.max(1, Math.min(def.stack || 1, Math.floor(lvl * SALE.budgetPerLevel / unit)));
+      return { type, rare, item, count, price: unit * count };   // full price; dealCost takes the discount off
     }
     return { type, rare, name: rare ? 'Priority delivery' : 'Scheduled delivery',
              desc: rare ? 'An urgent, well-paid package for a client across town. Details coming soon.' : 'A parcel has to reach a client somewhere in the city. Details coming soon.' };
@@ -1910,7 +1916,8 @@
     const facing = { x: saved.fx ?? 1, y: saved.fy ?? 0 };
     const stats = { ...START_STATS, ...(saved.stats || {}) };
     for (const st in CAPS) stats[st] = capped(st, stats[st]);   // older saves may be over the current caps
-    const newDeals = () => [0, 1, 2].map(() => rollDeal(hero.level, stats.charisma, foodCost(FOOD)));
+    const saleUnit = name => { const d = itemDef(name) || {}; return d.class === 'food' ? Math.ceil(foodCost(name) - 1e-9) : (d.value ?? d.price ?? 1); };   // full price of 1 piece in a sale
+    const newDeals = () => [0, 1, 2].map(() => rollDeal(hero.level, stats.charisma, foodCost(FOOD), null, saleUnit));
     let deals = null;   // rolled below, once prices exist (older saves' deals are replaced)
     let dealsDone = saved.dealsDone ?? 0;   // how many work deals the hero has taken this run
     let foodBought = saved.foodBought ?? 0;   // pieces of food bought in the shop (all kinds): drives food prices
@@ -2051,7 +2058,7 @@
         tip: 'It is in the Patches tab and gives +1 charisma. More charisma = deals that pay more for the same energy.' },
       { ev: 'rest', task: 'Sleep at HomeDome.', target: 'rest',
         tip: 'Sleeping saves your game (you can also save any time from the Menu) and brings back health and energy.' },
-      { ev: 'hero', task: 'Open your Hero window: press H or click your hero.', target: null,
+      { ev: 'hero', task: 'Open your Hero window: press H or click your hero plate (top left).', target: null,
         tip: 'It shows your stats: health, energy, mana, strength and charisma. They grow as you level up.' },
       { ev: 'talk', task: 'Go back to the Rogue and talk to her.', target: 'rogue',
         tip: 'She wants to see what you learned.' },
@@ -2416,7 +2423,7 @@
       });
       if (ui.kind === 'work') {
         const tab = WINDOW_TABS.work[tabOf()].key;
-        if (tab === 'office') return OFFICE_UPGRADES.map(u => ({ side: 'upgrade', data: u, left: u.name, right: '', act() { return 'Office upgrades come later.'; } }));
+        if (tab === 'office') return officeSockets().map((u, i) => ({ side: 'upgrade', data: u, left: u.name, right: '', act() { return u.open ? `Socket ${i + 1} is open. Chips to plug in come later.` : `Socket ${i + 1} opens with the ${PROMOTIONS[u.need - 1].name} promotion (My Boss).`; } }));
         if (tab === 'boss') return PROMOTIONS.map((pr, i) => ({ side: 'promo', data: pr, idx: i, left: pr.name, right: '', act() { return earnPromotion(i); } }));
         return deals.map(d => ({ deal: d, left: '', right: '', act() { return takeDeal(d); } }));
       }
@@ -2585,7 +2592,7 @@
     }
     function newGame() {
       Object.assign(talents, newTalents()); ceoCalls = 0;
-      clearLbBuffs(); Object.assign(stats, START_STATS); dealsDone = 0; foodBought = 0; promotion = 0; kills = 0; dripKills = 0; queenKills = 0; weaponBought = false; rogueDone.clear(); gridPowered.clear(); powering = null; runCheated = false; Object.assign(prices, startPrices()); deals = newDeals();
+      clearLbBuffs(); Object.assign(stats, START_STATS); dealsDone = 0; foodBought = 0; promotion = 0; kills = 0; dripKills = 0; queenKills = 0; weaponBought = false; rogueDone.clear(); gridPowered.clear(); powering = null; runCheated = false; Object.assign(prices, startPrices());
       discovered.clear();
       quests.length = 0;
       areaName = '0:0'; spawnAllDrips();
@@ -2593,6 +2600,7 @@
       inventory.length = 0; equipped.length = 0; activeSets.clear(); skills.length = 0; restReadyAt = 0; bags[0] = DEFAULT_BAG; bags[1] = null; loadVault(null); pixiSeen = null; piles.length = 0; tut = 0; tutN = 0; tutQuiz = { i: 0, wrong: 0 }; Object.assign(levels, startLevels());
       rootedUntil = 0; slowUntil = 0; poisonUntil = 0; floaters.length = 0; Object.assign(CAP_BASE, BASE_CAPS); hero.level = 1; hero.exp = 0; recalcCaps();
       ui = null; closePanels(); applyLbBuffs();
+      deals = newDeals();   // last: rolled for the new level-1 hero (his level, charisma and food price), not the old run's
     }
     // start screen: only when a brand-new run begins (a new game, or a first login with no save), never after dying
     // after the start screen: go on straight away if every picture and decal layout is ready, else the loading screen shows
@@ -2860,7 +2868,7 @@
         row('refill', 'full ♥ ⚡ ◆', () => { for (const st in CAPS) stats[st] = CAPS[st]; return 'Health, energy and mana refilled.'; }),
         row('mana cap', `+3 (now ${CAPS.mana})`, () => { CAP_BASE.mana += 3; recalcCaps(); stats.mana = CAPS.mana; return `Mana cap ${CAPS.mana}, mana full.`; }),
         row('exp', '+50', () => { gainExp(50); return `Level ${hero.level}, ${hero.exp}/${expNeed(hero.level)}${G.exp}.`; }),
-        row('deal types', 'rare call, rare sale, delivery', () => { deals = [['call', true], ['sale', true], ['delivery', false]].map(f => rollDeal(hero.level, stats.charisma, foodCost(FOOD), f)); return 'TradeCorp now shows one of each rare deal.'; }),
+        row('deal types', 'rare call, rare sale, delivery', () => { deals = [['call', true], ['sale', true], ['delivery', false]].map(f => rollDeal(hero.level, stats.charisma, foodCost(FOOD), f, saleUnit)); return 'TradeCorp now shows one of each rare deal.'; }),
         row('promotion ready', 'deals + CHSM for the next one', () => { const pr = PROMOTIONS[promotion]; if (!pr) return 'All promotions earned.'; dealsDone = Math.max(dealsDone, pr.deals); stats.charisma = Math.max(stats.charisma, pr.charisma); deals = newDeals(); return `${pr.name} is ready at TradeCorp (My Boss).`; }),
         row('charisma', '+10 ✦', () => { stats.charisma += 10; deals = newDeals(); return `Charisma ${stats.charisma}.`; }),
         row('strength', '+5 ⚔', () => { stats.strength += 5; return `Strength ${stats.strength}.`; }),
@@ -3012,8 +3020,9 @@
       ['joystick', 'walk · in windows: choose'],
       ['A', 'attack · open · pick up · confirm'],
       ['1 2 3', 'cast your spells'],
-      ['tap the hero', 'hero stats and equipment (not in combat)'],
-      ['top buttons', 'bag, quests, top, map, menu'],
+      ['tap your hero plate (top left)', 'hero stats and equipment'],
+      ['tap the minimap', 'world map'],
+      ['top buttons', 'bag, quests, top, menu'],
       ['hold an item / quest', 'throw away / cancel'],
       ['✕', 'close a window'],
     ];
@@ -3025,9 +3034,9 @@
       ['Space', 'open / select / loot / harvest what is next to you, otherwise attack'],
       ['Esc', 'back to the previous window / close'],
       ['Esc (nothing open)', 'menu'],
-      ['H', 'hero (left)'],
+      ['H (or click your hero plate)', 'hero stats and equipment'],
       ['I', 'inventory (bottom right)'],
-      ['M', 'world map (drag or W A S D to move, wheel to zoom, Space to centre)'],
+      ['M (or click the minimap)', 'world map (drag or W A S D to move, wheel to zoom, Space to centre)'],
       ['H / I (both open)', 'switch focus'],
       ['W / S (hero)', 'choose equipped item'],
       ['Space (hero)', 'unequip'],
@@ -3062,16 +3071,22 @@
       if (ui.kind === 'work' && WINDOW_TABS.work[ui.tab].key === 'boss' && promoReadyAny()) { ui.bossTalk = true; ui.cursor = promotion; }   // the boss has something to say
     }
     // My Office upgrades and Boss promotions: placeholders for now (icon, name, description, price / deals needed)
-    const OFFICE_UPGRADES = [1, 2, 3, 4, 5].map(n => ({ name: `Upgrade ${n}`, desc: 'Empty upgrade slot. Coming soon.', price: '—' }));
+    // My Office: 5 chip sockets in the office PC. Socket 1 is open from the start; promotions open the rest:
+    // Data Clerk → socket 2, Neurodiversity Manager → socket 3, AI Overseer → sockets 4 and 5. No chips exist yet (empty sockets).
+    const OFFICE_SOCKET_PROMO = [0, 1, 2, 3, 3];   // promotions needed for each socket (0 = open from the start)
+    const socketOpen = i => promotion >= OFFICE_SOCKET_PROMO[i];
+    const officeSockets = () => OFFICE_SOCKET_PROMO.map((need, i) => ({ name: `Socket ${i + 1}`, open: socketOpen(i), need,
+      desc: socketOpen(i) ? 'Empty. Chips come later.' : `Locked: needs ${PROMOTIONS[need - 1].name} (My Boss).` }));
     // promotions at the Boss: earned in order; each needs deals made and charisma, and lowers what deals cost (energy for calls, money for sales).
     // The highest one earned counts (they don't stack).
     const PROMOTIONS = [
       { name: 'Data Clerk',             deals: 200,  charisma: 20,  mult: 0.9 },
       { name: 'Neurodiversity Manager', deals: 500,  charisma: 50,  mult: 0.8 },
       { name: 'AI Overseer',            deals: 1000, charisma: 100, mult: 0.7 },
-    ].map(pr => ({ ...pr, desc: `Deals cost ×${pr.mult} (${G.energy} and ${G.money}).` }));
+    ].map((pr, i) => ({ ...pr, desc: `Deals ×${pr.mult} (${G.energy} ${G.money}). Opens socket${i === 2 ? 's 4–5' : ' ' + (i + 2)}.` }));
     const dealMult = () => promotion ? PROMOTIONS[promotion - 1].mult : 1;
-    const dealCost = d => Math.max(1, Math.round((d.type === 'call' ? d.energy : d.price) * dealMult()));   // energy for calls, money for sales
+    const saleDiscount = () => SALE.discount + (1 - dealMult());   // 5%, +10 / 20 / 30% with a promotion
+    const dealCost = d => Math.max(1, Math.round(d.type === 'call' ? d.energy * dealMult() : d.price * (1 - saleDiscount())));   // energy for calls, money for sales
     const promoReady = i => i === promotion && i < PROMOTIONS.length && dealsDone >= PROMOTIONS[i].deals && stats.charisma >= PROMOTIONS[i].charisma;
     const promoReadyAny = () => promoReady(promotion);
     function earnPromotion(i) {
@@ -3080,7 +3095,7 @@
       if (i > promotion) return `Earn ${PROMOTIONS[promotion].name} first.`;
       if (!promoReady(i)) return `${pr.name} needs ${pr.deals} deals (you: ${dealsDone}) and ${pr.charisma} CHSM (you: ${stats.charisma}).`;
       promotion = i + 1; ui.cursor = Math.min(promotion, PROMOTIONS.length - 1);
-      return `Promoted to ${pr.name}! Deals now cost ×${pr.mult}.`;
+      return `Promoted to ${pr.name}! Deals now cost ×${pr.mult}. My Office: socket${i === 2 ? 's 4 and 5' : ' ' + (i + 2)} opened.`;
     }
     // what the boss says when the My Boss tab opens with a promotion ready
     const bossLine = () => { const pr = PROMOTIONS[promotion];
@@ -3088,7 +3103,7 @@
     // take a deal: calls cost energy and pay money, sales cost money and give items, deliveries add a quest. Then all 3 reroll.
     // exp for a deal: 1 + one more for every full 5 of (money earned − energy spent), at least 1.
     // Calls: profit 0-4 → 1 exp, 5-9 → 2, 10-14 → 3 … Sales and deliveries earn no money here: 1 exp.
-    const dealExp = d => d.type === 'call' ? Math.max(1, Math.floor((d.money - dealCost(d)) / 5) + 1) : LEVEL_EXP.work;
+    const dealExp = d => d.type === 'call' ? Math.max(1, Math.floor((d.money - dealCost(d)) / 5) + 1) : d.type === 'sale' ? Math.max(1, Math.floor(dealCost(d) / SALE.coinsPerExp)) : LEVEL_EXP.work;
     function takeDeal(d) {
       const exp = dealExp(d);   // before anything changes (the cost can depend on the promotion)
       if (d.type === 'call') {
@@ -3489,7 +3504,7 @@
       if (tut === TUT_READY || TUT[tut - 1].ev === 'talk') return faced && faced.opens === 'rogue' ? (touch ? 'Tap A to talk to the Rogue.' : 'Press Space to talk to the Rogue.')
         : 'Walk back to the Rogue (the purple arrow) and face her.';
       const step = TUT[tut - 1];
-      if (step.ev === 'hero') return touch ? 'Tap your hero to open the Hero window.' : 'Press H to open the Hero window.';
+      if (step.ev === 'hero') return touch ? 'Tap your hero plate (top left) to open the Hero window.' : 'Press H or click your hero plate (top left) to open the Hero window.';
       if (faced && faced.opens === step.target) return touch ? 'Tap A to go in.' : 'Press Space to go in.';
       return 'Walk to the purple arrow and face the door.';
     }
@@ -6952,15 +6967,15 @@
         : d.type === 'sale' ? [[`${d.count} × ${d.item}`, rarityColor(d.item)]] : [['Delivery quest', '#00e5ff']];
       parts.push([`+${dealExp(d)}${G.exp}`, '#b58cff']);   // exp for taking it (calls: more for a better money-to-energy deal)
       drawParts(parts, mx, sy + 20, 22);
-      const text = d.type === 'call' ? d.line : d.type === 'sale' ? `A supplier sells ${d.count} ${d.item} at full price.` : d.desc;
+      const text = d.type === 'call' ? d.line : d.type === 'sale' ? `A supplier sells ${d.count} ${d.item} with a ${Math.round(saleDiscount() * 100)}% discount.` : d.desc;
       ctx.font = '19px ' + MONO; ctx.fillStyle = '#cfcfcf';
       wrapText(text, mw).slice(0, 3).forEach((l, i) => ctx.fillText(l, mx, sy + 56 + i * 25));
       ctx.textAlign = 'right'; ctx.font = '700 32px ' + MONO;
       if (d.type === 'call') { ctx.fillStyle = stats.energy >= dealCost(d) ? '#9dff5c' : '#e5484d'; ctx.fillText(`-${dealCost(d)}${G.energy}`, priceX, cy); }   // taken when you accept
-      else if (d.type === 'sale') { ctx.fillStyle = stats.money >= dealCost(d) ? '#f5c542' : '#e5484d'; ctx.fillText(`${dealCost(d)}${G.money}`, priceX, cy); }
+      else if (d.type === 'sale') { ctx.fillStyle = stats.money >= dealCost(d) ? '#f5c542' : '#e5484d'; ctx.fillText(`-${dealCost(d)}${G.money}`, priceX, cy); }   // paid when you accept
       else if (quests.length >= MAX_QUESTS) { ctx.fillStyle = '#e5484d'; ctx.fillText(`${MAX_QUESTS}/${MAX_QUESTS}`, priceX, cy); }
       else { ctx.fillStyle = '#00e5ff'; ctx.fillText('accept', priceX, cy); }
-      if (dealMult() < 1 && d.type !== 'delivery') { ctx.font = '600 16px ' + MONO; ctx.fillStyle = '#9dff5c'; ctx.fillText(`${Math.round((1 - dealMult()) * 100)}% discount`, priceX, cy + 30); }
+      if (dealMult() < 1 && d.type === 'call') { ctx.font = '600 16px ' + MONO; ctx.fillStyle = '#9dff5c'; ctx.fillText(`${Math.round((1 - dealMult()) * 100)}% discount`, priceX, cy + 30); }   // sales say their discount in their text
     }
     // My Office / Boss: a picture on the left, a small scrolling list on the right
     function drawSideTab(list, x, y, w, h) {
@@ -6973,12 +6988,13 @@
         rowRects.push({ x: lx, y: ry, w: lw, h: rowH - 8, i });
         ctx.fillStyle = sel ? 'rgba(255, 220, 0, 0.12)' : 'rgba(255, 255, 255, 0.03)'; ctx.fillRect(lx, ry, lw, rowH - 8);
         if (r.side === 'promo') { drawPromoRow(r.idx, d, lx, ry, lw, rowH - 8, sel); return; }
-        glyphSlot(lx + 10, ry + 8, sz, null, '⚙', '#6a6a6a');
-        ctx.textAlign = 'left'; ctx.textBaseline = 'middle'; ctx.fillStyle = sel ? '#fff' : '#cfcfcf'; ctx.font = (sel ? '700 ' : '600 ') + '22px ' + MONO;
+        glyphSlot(lx + 10, ry + 8, sz, null, d.open ? '+' : '🔒', d.open ? '#00e5ff' : '#6a6a6a');   // an office socket: open (empty) or locked
+        ctx.textAlign = 'left'; ctx.textBaseline = 'middle'; ctx.fillStyle = !d.open ? '#6a6a6a' : sel ? '#fff' : '#cfcfcf'; ctx.font = (sel ? '700 ' : '600 ') + '22px ' + MONO;
         ctx.fillText(d.name, lx + sz + 24, ry + 24);
-        ctx.font = '17px ' + MONO; ctx.fillStyle = '#8a8a8a'; ctx.fillText(d.desc, lx + sz + 24, ry + 52);
-        ctx.textAlign = 'right'; ctx.font = '600 20px ' + MONO; ctx.fillStyle = '#f5c542';
-        ctx.fillText(`${d.price}${G.money}`, lx + lw - 14, ry + 24);
+        ctx.font = '17px ' + MONO; ctx.fillStyle = d.open ? '#8a8a8a' : '#e5484d';
+        wrapText(d.desc, lw - sz - 40).slice(0, 2).forEach((l, j) => ctx.fillText(l, lx + sz + 24, ry + 52 + j * 20));
+        ctx.textAlign = 'right'; ctx.font = '600 18px ' + MONO; ctx.fillStyle = d.open ? '#9dff5c' : '#6a6a6a';
+        ctx.fillText(d.open ? 'open' : 'locked', lx + lw - 14, ry + 24);
       });
       if (list[0].side === 'promo' && ui.bossTalk) drawBossTalk(x, y, w, h);
       if (list.length > visible) {   // scroll bar
@@ -6994,7 +7010,10 @@
       const tx = x + sz + 24;
       ctx.textAlign = 'left'; ctx.textBaseline = 'middle'; ctx.fillStyle = done ? '#9dff5c' : ready ? '#ffe600' : sel ? '#fff' : '#cfcfcf';
       ctx.font = (sel ? '700 ' : '600 ') + '21px ' + MONO; ctx.fillText(pr.name, tx, y + 22);
-      ctx.font = '17px ' + MONO; ctx.fillStyle = '#8a8a8a'; ctx.fillText(pr.desc, tx, y + 50);
+      ctx.fillStyle = '#8a8a8a';
+      { let fs = 17; ctx.font = fs + 'px ' + MONO; const room = x + w - 14 - tx;   // shrink the line until it fits the row
+        while (fs > 11 && ctx.measureText(pr.desc).width > room) { fs--; ctx.font = fs + 'px ' + MONO; }
+        ctx.fillText(pr.desc, tx, y + 50); }
       ctx.font = '600 17px ' + MONO;
       drawParts([[`${Math.min(dealsDone, pr.deals)}/${pr.deals} deals`, done || dealsDone >= pr.deals ? '#9dff5c' : '#e5484d'],
                  [`${Math.min(stats.charisma, pr.charisma)}/${pr.charisma} CHSM`, done || stats.charisma >= pr.charisma ? '#9dff5c' : '#e5484d']], tx, y + 76, 18);
@@ -7028,19 +7047,25 @@
       const im = ART.officePC;
       if (ready(im)) {   // the art has its own 5 chip sockets (OFFICE_SOCKETS: their centres as fractions of the picture, for drawing chips later)
         const s = Math.min(w / im.naturalWidth, (h - 16) / im.naturalHeight);
-        ctx.drawImage(im, x + (w - im.naturalWidth * s) / 2, y + 8, im.naturalWidth * s, im.naturalHeight * s);
+        const ox = x + (w - im.naturalWidth * s) / 2, oy = y + 8, pw = im.naturalWidth * s, ph = im.naturalHeight * s;
+        ctx.drawImage(im, ox, oy, pw, ph);
+        OFFICE_SOCKETS.forEach((so, i) => { if (socketOpen(i)) return;   // locked socket: dark cover + lock
+          const sz = so.size * pw, cx = ox + so.x * pw, cy = oy + so.y * ph;
+          ctx.fillStyle = 'rgba(0, 0, 0, 0.6)'; rr(cx - sz / 2, cy - sz / 2, sz, sz, 6); ctx.fill();
+          ctx.font = `${Math.round(sz * 0.55)}px ${MONO}`; ctx.textAlign = 'center'; ctx.textBaseline = 'middle'; ctx.fillStyle = '#8a8a8a'; ctx.fillText('🔒', cx, cy + 1); });
         return;
       } else {
         const mw = w * 0.72, mh = h * 0.42, mx = x + (w - mw) / 2, my = y + 24;
         ctx.fillStyle = '#1b2233'; ctx.fillRect(mx, my, mw, mh); ctx.strokeStyle = '#3a4257'; ctx.lineWidth = 6; ctx.strokeRect(mx, my, mw, mh);
         ctx.fillStyle = '#062a33'; ctx.fillRect(mx + 14, my + 14, mw - 28, mh - 28);
         ctx.fillStyle = '#00e5ff'; ctx.font = '600 22px ' + MONO; ctx.textAlign = 'left'; ctx.textBaseline = 'middle';
-        ['> TradeCorp OS', '> chips: 0 / 5', '> ready_'].forEach((t, i) => ctx.fillText(t, mx + 30, my + 44 + i * 32));
+        ['> TradeCorp OS', `> sockets open: ${OFFICE_SOCKET_PROMO.filter((_, i) => socketOpen(i)).length} / 5`, '> ready_'].forEach((t, i) => ctx.fillText(t, mx + 30, my + 44 + i * 32));
         ctx.fillStyle = '#3a4257'; ctx.fillRect(x + w / 2 - 14, my + mh, 28, 30); ctx.fillRect(x + w / 2 - 70, my + mh + 30, 140, 10);
       }
       const n = 5, cs = Math.min(64, (w - 40) / n - 10), total = n * cs + (n - 1) * 10, cx0 = x + (w - total) / 2, cy = y + h - cs - 36;
       ctx.fillStyle = '#8a8a8a'; ctx.font = '16px ' + MONO; ctx.textAlign = 'center'; ctx.fillText('chip slots', x + w / 2, cy - 16);
-      for (let i = 0; i < n; i++) drawSlot(cx0 + i * (cs + 10), cy, cs, null);
+      for (let i = 0; i < n; i++) { const sx = cx0 + i * (cs + 10); drawSlot(sx, cy, cs, null);
+        if (!socketOpen(i)) { ctx.fillStyle = 'rgba(0, 0, 0, 0.6)'; ctx.fillRect(sx, cy, cs, cs); ctx.font = `${Math.round(cs * 0.45)}px ${MONO}`; ctx.textBaseline = 'middle'; ctx.fillStyle = '#8a8a8a'; ctx.fillText('🔒', sx + cs / 2, cy + cs / 2 + 1); } }
     }
     function drawBossPicture(x, y, w, h) {   // your boss (drawn until art/ui/boss.png exists)
       ctx.fillStyle = '#0b0d14'; ctx.fillRect(x, y, w, h - 8);
@@ -7081,7 +7106,7 @@
       ctx.fillText([q.lvl ? questTag(q.lvl, q.rarity || 'common') : '', q.from || ''].filter(Boolean).join(' · '), x + w - 14, y + 24);
     }
     // quest button under the minimap (click or Q opens the quest list); a badge shows how many quests are active
-    let questBtn = null, lbBtn = null;
+    let questBtn = null, lbBtn = null, miniBox = null;
     function drawLbButton() {   // desktop: top, left of the minimap
       const size = 64, x = canvas.width - 20 - MINI.cols * MINI.cw - 26 - size, y = 20;
       lbBtn = { x, y, w: size, h: size };
@@ -7717,6 +7742,7 @@
       const bLeft = Math.max(MAP_BOUNDS.bMin, Math.min(b - 1, MAP_BOUNDS.bMax - MINI.cols + 1));
       const aTop = Math.min(MAP_BOUNDS.aMax, Math.max(a + 1, MAP_BOUNDS.aMin + MINI.rows - 1));
       const w = MINI.cols * MINI.cw, h = MINI.rows * MINI.ch, x = canvas.width - w - 20, y = 20;
+      miniBox = { x: x - 6, y: y - 6, w: w + 12, h: h + 12 };   // tap / click it: the full map
       // the hero (his whole sprite, head included) near the minimap: fade it down to 5% so the map under it stays visible
       const hx = (rx + 0.5) * TILE * cam.z + cam.ox, hTop = (ry + 1 - HERO_H) * TILE * cam.z + cam.oy, hBot = (ry + 1) * TILE * cam.z + cam.oy, m = TILE * 0.75;
       const near = hx > x - m && hx < x + w + m && hTop < y + h + 30 + m && hBot > y - m;
@@ -8508,8 +8534,8 @@
         }
       }
       if (e.pointerType && e.pointerType !== 'mouse') mouseAim.on = false;   // a finger: phone aim again
+      if (!ui && !locked() && !anyOpen() && miniBox && e.button === 0 && cx >= miniBox.x && cx <= miniBox.x + miniBox.w && cy >= miniBox.y && cy <= miniBox.y + miniBox.h) { playSfx('interact'); openWindow('map'); return; }   // the minimap opens the full map
       if (!ui && !locked() && lbBtn && e.button === 0 && cx >= lbBtn.x && cx <= lbBtn.x + lbBtn.w && cy >= lbBtn.y && cy <= lbBtn.y + lbBtn.h) { openLeaderboard(); return; }
-      if (!ui && !anyOpen() && e.button === 0 && !inCombat() && tapOnHero(cx, cy)) { togglePanel('hero'); return; }   // tap / click the hero: stats (not mid-fight: then it's a swing)
       if (!anyOpen() && e.pointerType && e.pointerType !== 'mouse' && tapWorld(cx, cy)) return;   // finger on the faced building / an enemy
       if (!ui && !locked() && questBtn && e.button === 0 && cx >= questBtn.x && cx <= questBtn.x + questBtn.w && cy >= questBtn.y && cy <= questBtn.y + questBtn.h) { openWindow('quests'); return; }
       if (!anyOpen() && !locked() && e.button === 0 && e.pointerType === 'mouse') {   // left click in the world: swing toward the cursor (hold to keep swinging)
@@ -8642,7 +8668,7 @@
     $('t-quest-img').src = ART_SRC.questIcon; $('t-lb-img').src = ART_SRC.trophy; renderBagTile();
     addEventListener('resize', layoutView); addEventListener('orientationchange', () => setTimeout(layoutView, 150));
     new ResizeObserver(() => { if (!phoneView) touchEl.style.setProperty('--u', canvas.clientHeight / 100 + 'px'); }).observe(canvas);
-    [...touchEl.querySelectorAll('button[data-code]'), $('ph-face')].forEach(b => {
+    [...touchEl.querySelectorAll('button[data-code]'), $('phud')].forEach(b => {   // the hero plate: H
       b.addEventListener('pointerdown', e => { e.preventDefault(); b.classList.add('on'); sendKey(b.dataset.code); });
       const up = () => { b.classList.remove('on'); sendKey(b.dataset.code, 'keyup'); };
       b.addEventListener('pointerup', up); b.addEventListener('pointercancel', up); b.addEventListener('pointerleave', up);
