@@ -2454,19 +2454,25 @@
     const carriedCount = name => inventory.filter(it => it.name === name && !it.quest).reduce((t, it) => t + (it.count || 1), 0);
     const SPARKY_QUESTS = [
       { id: 'gridlock', giver: 'sparky', name: 'Gridlock', lvl: 2, rarity: 'common', need: 3, goal: 'Restore power to 3 grid nodes in The Grid (hold Space on each).',
-        talk: '"The Grid went dark and nobody up there lifts a finger. Three grid nodes are down: take the road from the city\'s bottom-left corner. Hold Space on each one for 5 seconds to reboot it. It only tickles. Mostly."',
+        talk: '"Somebody saw Scavs messing with the Grid: they ripped the copper right out of it, and now three grid nodes are dead. Take the road from the city\'s bottom-left corner and hold Space on each node for 5 seconds to reboot it. It only tickles. Mostly."',
         prog: () => Math.min(3, gridPowered.size) },
       { id: 'wireMeIn', giver: 'sparky', name: 'Wire me in', lvl: 3, after: 'gridlock', rarity: 'common', need: 5, goal: 'Collect 5 Copper Wire.', take: 'Copper Wire',
-        talk: '"Those nodes eat copper like candy. Bring me 5 Copper Wire: pull it from the glowing copper piles in the slums and the wastelands."',
+        talk: '"You actually fixed them! Okay, sparkplug, I trust you now. Can I ask a favour? I need copper for my research: bring me 5 Copper Wire from the glowing copper piles in the slums and the wastelands."',
         prog: () => Math.min(5, carriedCount('Copper Wire')) },
-      { id: 'chips', giver: 'sparky', name: 'Chips', lvl: 4, after: 'wireMeIn', rarity: 'rare', need: 3, goal: 'Bring 3 AI chips.', take: 'AI chip',
-        talk: '"Last one, promise! The Grid needs brains, not just muscle. Bring me 3 AI chips: those Mav-1K drones up there carry them, if you can catch one."',
+      { id: 'abandonedFactory', giver: 'sparky', name: 'Abandoned Factory', lvl: 3, after: 'wireMeIn', rarity: 'common', need: 4, goal: 'Scout the 4 abandoned factory zones (the entrance doesn\'t count).',
+        talk: '"Word is there are robots crawling around the abandoned factory, west of the city. Robots mean parts! Scout all 4 factory zones for me (the entrance doesn\'t count) and tell me what you saw."',
+        prog: () => Math.min(4, [...discovered].filter(id => ZONE_LIST[id] === 'factory').length) },
+      { id: 'chips', giver: 'sparky', name: 'Chips', lvl: 4, after: 'abandonedFactory', rarity: 'rare', need: 3, goal: 'Bring 3 AI chips.', take: 'AI chip',
+        talk: '"My project keeps fizzling out. No success at all. But I heard AI chips might be just what my research needs: bring me 3. Those Mav-1K drones in the factory carry them, if you can catch one."',
         prog: () => Math.min(3, carriedCount('AI chip')) },
+      { id: 'scavProblems', giver: 'sparky', name: 'Scav problems', lvl: 4, after: 'chips', rarity: 'common', need: 6, goal: 'Kill 6 Scavs.',
+        talk: '"I want to go gather copper wire myself, but the Scavs grab every scrap before I get there. Thin them out: kill 6 Scavs, and the piles are mine again."',
+        prog: () => Math.min(6, scavKills) },
     ];
     const GIVERS = { rogue: { name: 'the Rogue', list: ROGUE_QUESTS }, sparky: { name: 'Sparky', list: SPARKY_QUESTS } };
     const giverOf = id => { const r = rqDef(id); return r && r.giver || 'rogue'; };
     const rogueDone = new Set(saved.rogueDone || []);       // quests handed in (the Rogue's and Sparky's)
-    let weaponBought = !!saved.weaponBought, dripKills = saved.dripKills || 0, queenKills = saved.queenKills || 0;
+    let weaponBought = !!saved.weaponBought, dripKills = saved.dripKills || 0, queenKills = saved.queenKills || 0, scavKills = saved.scavKills || 0;
     const gridPowered = new Set(saved.gridPowered || []);   // restored grid nodes: "zone:x,y" (footprint top-left)
     let powering = null;   // a grid node being restored: { w, start, px, py }
     const rqDef = id => ROGUE_QUESTS.find(r => r.id === id) || SPARKY_QUESTS.find(r => r.id === id);
@@ -2794,7 +2800,7 @@
     }
     function newGame() {
       Object.assign(talents, newTalents()); ceoCalls = 0;
-      clearLbBuffs(); Object.assign(stats, START_STATS); dealsDone = 0; foodBought = 0; promotion = 0; kills = 0; dripKills = 0; queenKills = 0; weaponBought = false; rogueDone.clear(); gridPowered.clear(); powering = null; runCheated = false; Object.assign(prices, startPrices());
+      clearLbBuffs(); Object.assign(stats, START_STATS); dealsDone = 0; foodBought = 0; promotion = 0; kills = 0; dripKills = 0; queenKills = 0; scavKills = 0; weaponBought = false; rogueDone.clear(); gridPowered.clear(); powering = null; runCheated = false; Object.assign(prices, startPrices());
       discovered.clear();
       quests.length = 0;
       areaName = '0:0'; spawnAllDrips();
@@ -2904,7 +2910,7 @@
     // ---- saving -------------------------------------------------------------------
     // everything a run needs; drip/fights/timers restart when loaded
     function snapshot() {
-      return { x: player.x, y: player.y, fx: facing.x, fy: facing.y, stats: statsNoBuffs(), deals, prices: { ...prices }, dealsDone, foodBought, itemsV2: true, sets: [...activeSets], promotion, kills, dripKills, queenKills, weaponBought, rogueDone: [...rogueDone], gridPowered: [...gridPowered], cheated: runCheated, quests: quests.map(q => q.kind === 'delivery' ? { ...q, left: Math.max(0, q.until - gameTime) } : { ...q }),
+      return { x: player.x, y: player.y, fx: facing.x, fy: facing.y, stats: statsNoBuffs(), deals, prices: { ...prices }, dealsDone, foodBought, itemsV2: true, sets: [...activeSets], promotion, kills, dripKills, queenKills, scavKills, weaponBought, rogueDone: [...rogueDone], gridPowered: [...gridPowered], cheated: runCheated, quests: quests.map(q => q.kind === 'delivery' ? { ...q, left: Math.max(0, q.until - gameTime) } : { ...q }),
                inventory: inventory.map(it => ({ ...it })), equipped: equipped.map(it => ({ ...it })), skills: [...skills],
                weaponsV: 2, areaName, restReadyAt, levels: { ...levels }, manaCap: CAP_BASE.mana, energyCap: CAP_BASE.energy, level: hero.level, exp: hero.exp, strengthLevel: hero.level, bags: [...bags], vault: { open: vault.open, bags: [...vault.bags], items: vault.items.map(it => ({ ...it })) }, talents: JSON.parse(JSON.stringify(talents)), ceoCalls, tut, tutV: 3, pixiSeen, tutN, tutQuiz: { ...tutQuiz }, discovered: [...discovered], enemies: saveEnemies(), runner: saveRunner(), harvest: saveHarvest(),
                piles: piles.map(p => ({ ...p, gear: p.gear.map(it => ({ ...it })), items: p.items.map(it => ({ ...it })), left: Math.max(0, p.until - gameTime), until: undefined })) };
@@ -2917,7 +2923,7 @@
       clearLbBuffs(); Object.assign(stats, START_STATS, s.stats || {});
       if (s.strengthLevel === undefined) stats.strength += levelStrength(hero.level) - levelStrength(1);   // saves from before strength grew with level
       deals = s.deals && s.deals.every(d => d && d.type) ? s.deals : null; dealsDone = s.dealsDone || 0; foodBought = s.foodBought || 0; promotion = s.promotion || 0; kills = s.kills || 0; runCheated = !!s.cheated;
-      dripKills = s.dripKills || 0; queenKills = s.queenKills || 0; weaponBought = !!s.weaponBought; rogueDone.clear(); for (const id of s.rogueDone || []) rogueDone.add(id); gridPowered.clear(); for (const k of s.gridPowered || []) gridPowered.add(k); powering = null;
+      dripKills = s.dripKills || 0; queenKills = s.queenKills || 0; scavKills = s.scavKills || 0; weaponBought = !!s.weaponBought; rogueDone.clear(); for (const id of s.rogueDone || []) rogueDone.add(id); gridPowered.clear(); for (const k of s.gridPowered || []) gridPowered.add(k); powering = null;
       quests.length = 0; quests.push(...(s.quests || []).map(q => q.kind === 'delivery' ? { ...q, until: gameTime + (q.left ?? 0) } : q));
       for (const k in prices) delete prices[k]; for (const k in levels) delete levels[k];
       Object.assign(prices, startPrices(), renameKeys(s.prices)); Object.assign(levels, startLevels(), renameKeys(s.levels)); rebasePatch('Social');
@@ -5094,7 +5100,7 @@
         drip.fleeing = drip.fled = true; drip.act = null; drip.dash = null; float('fleeing!', '#b06cff', drip.x + 0.5, drip.y - 2.2);
       }
       if (drip.hp <= 0) {   // nothing is given yet: the loot waits on his puddle
-        drip.dead = true; drip.deadAt = gameTime; drip.hitAt = 0; drip.dot = null; drip.stunUntil = 0; kills++; lbEarn('kills', 1); if ((drip.kind || 'drip') === 'drip' && !drip.summoned) dripKills++; if (drip.kind === 'queen') queenKills++;
+        drip.dead = true; drip.deadAt = gameTime; drip.hitAt = 0; drip.dot = null; drip.stunUntil = 0; kills++; lbEarn('kills', 1); if ((drip.kind || 'drip') === 'drip' && !drip.summoned) dripKills++; if (drip.kind === 'queen') queenKills++; if (drip.kind === 'scav') scavKills++;
         if (drip.kind === 'drone') {   // falls: the wreck lands on the nearest walkable tile (it may have been over a building)
           drip.cloakUntil = 0; drip.dash = null;
           if (!free(Math.round(drip.x), Math.round(drip.y))) {
