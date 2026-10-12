@@ -471,13 +471,21 @@
     }).catch(() => fallbackMusic());   // an old browser that can't decode it: a plain looping <audio>
   }
   // sound effects: short clips decoded once, played through the SFX volume. gain: the clips are recorded quietly, so they're lifted a bit
-  const SFX = { interact: { src: 'audio/buttonInteract.m4a', gain: 2 }, navigate: { src: 'audio/menuNavigate.m4a', gain: 1.75 } };
+  // srcs: variants, one picked at random (never the same twice in a row); jitter: random ± pitch and volume each play
+  const SFX_DIR = 'audio/sfx/';
+  const SFX = { interact: { src: 'audio/buttonInteract.m4a', gain: 2 }, navigate: { src: 'audio/menuNavigate.m4a', gain: 1.75 },
+                stepHard: { srcs: ['footsteps/stepHard1', 'footsteps/stepHard2', 'footsteps/stepHard3', 'footsteps/stepHard4'], gain: 0.25, jitter: 0.05 } };
+  // footsteps by surface: a zone type without its own step files yet uses stepHard
+  const STEP_SURFACE = { forest: 'stepSoft', deepForest: 'stepSoft', overgrowth: 'stepSoft', lake: 'stepSoft', labs: 'stepLab', breach: 'stepLab' };
+  const stepSfxFor = type => SFX[STEP_SURFACE[type]] ? STEP_SURFACE[type] : 'stepHard';
   let sfxQuietUntil = 0;   // an interaction just played: skip the navigate tick that the same click causes
   function loadSfx(k) {
     const d = SFX[k], ac = audioCtx(); if (!ac || d.loading) return;
-    d.loading = fetch(d.src).then(r => { if (!r.ok) throw 0; return r.arrayBuffer(); })
+    const one = src => fetch(src).then(r => { if (!r.ok) throw 0; return r.arrayBuffer(); })
       .then(data => new Promise((ok, fail) => { const p = ac.decodeAudioData(data, ok, fail); if (p && p.catch) p.catch(fail); }))
-      .then(buf => { d.buffer = buf; }).catch(() => {});
+      .catch(() => null);
+    d.loading = d.srcs ? Promise.all(d.srcs.map(f => one(SFX_DIR + f + '.m4a'))).then(bs => { d.buffers = bs.filter(Boolean); })
+                       : one(d.src).then(buf => { if (buf) d.buffer = buf; });
   }
   function playSfx(k) {
     const d = SFX[k], now = performance.now();
@@ -486,11 +494,16 @@
     if (k === 'interact') sfxQuietUntil = now + 150;
     const ac = audioCtx(); if (!ac) return;
     if (ac.state === 'suspended' && !document.hidden) ac.resume().catch(() => {});
-    if (!d.buffer) { loadSfx(k); return; }
+    let buf = d.buffer;
+    if (d.srcs) {   // variants: never the same one twice in a row
+      const n = d.buffers ? d.buffers.length : 0;
+      if (n) { let i = Math.floor(Math.random() * n); if (n > 1 && i === d.last) i = (i + 1) % n; d.last = i; buf = d.buffers[i]; }
+    }
+    if (!buf) { loadSfx(k); return; }
     if (k === 'navigate' && d.lastAt && now - d.lastAt < 45) return;   // held key: at most ~20 ticks a second
     d.lastAt = now;
-    const src = ac.createBufferSource(), g = ac.createGain();
-    g.gain.value = d.gain; src.buffer = d.buffer; src.connect(g); g.connect(audio.sfx); src.start();
+    const src = ac.createBufferSource(), g = ac.createGain(), j = d.jitter || 0, r = () => 1 + (Math.random() * 2 - 1) * j;
+    g.gain.value = d.gain * r(); src.playbackRate.value = r(); src.buffer = buf; src.connect(g); g.connect(audio.sfx); src.start();
   }
   function fallbackMusic() {
     if (audio.el) return;
@@ -3237,7 +3250,7 @@
     const CONTROLS = [
       ['W A S D / arrows', 'move (any keyboard layout)'],
       ['two keys, e.g. W+D', 'move diagonally'],
-      ['mouse', 'aim: the hero faces the cursor; attacks and spells go that way. The cursor changes over enemies (reticle), buildings (pointing hand) and loot (grab hand)'],
+      ['mouse', 'aim: attacks and spells go toward the cursor. The hero faces where he walks and only turns to the cursor while he attacks or casts. The cursor changes over enemies (reticle), buildings (pointing hand) and loot (grab hand)'],
       ['left click (hold)', 'attack toward the cursor (hold to keep swinging); on a building / loot / harvest pile next to you: open / loot / harvest (hold)'],
       ['Space', 'open / select / loot / harvest what is next to you, otherwise attack'],
       ['Esc', 'back to the previous window / close'],
@@ -3257,7 +3270,7 @@
       ['click (shop)', 'select an item, click again to buy'],
       ['W / S', 'choose in a window'],
       ['1 2 3', 'pick a row (window) / cast spell'],
-      ['Tab', 'next target (closest first); spells go to it instead of the cursor'],
+      ['Tab', 'next target (closest first); spells go to it instead of the cursor (the hero turns to face it)'],
       ['Q (or the quest icon)', 'active quests'],
       ['L (or the trophy)', 'leaderboard: Top Exp, Top Dealers, Top Slayers; this month or all time (Space on the top row)'],
       ['click the hero', 'hero stats (not in combat: then it swings; H always works)'],
@@ -3562,7 +3575,7 @@
       if (focus === 'inventory' && panels.inventory) { playSfx('interact'); useSelected(panels.inventory); return; }
       if (focus === 'hero' && panels.hero) { playSfx('interact'); unequipSelected(panels.hero); return; }
       // enemy in reach: swing. Otherwise loot / open the faced building if there is one, else swing at the air.
-      if (!meleeTargets().length && !moving) {
+      if (!meleeTargets(cursorDir() || aim).length && !moving) {
         if (lootable()) { playSfx('interact'); lootTarget = lootable(); openWindow('loot'); return; }
         const w = facedBuilding();
         if (w && w.opens === 'node') { startPowering(w); return; }   // an offline grid node: hold to restore it
@@ -5039,6 +5052,7 @@
     function heroAttack() {
       if (gameTime < heroNextAttack) return;
       heroNextAttack = gameTime + heroAttackMs();
+      const cd = cursorDir(); if (cd) faceAction(cd.x, cd.y); else faceAction(aim.x, aim.y);   // computers swing toward the cursor; phones where he faces
       heroAttackStart = gameTime;   // attack animation in the facing direction (diagonals use the side view)
       heroAttackDir = Math.abs(aim.x) >= Math.abs(aim.y) * 0.7 ? 'side' : aim.y > 0 ? 'down' : 'up';   // nearest view to the exact angle
       if (facing.x) lookX = facing.x;
@@ -5050,14 +5064,14 @@
     // time between swings: 1 s with fists; equipment can shorten it (attackMs, e.g. banana sword -100 ms), at least 0.3 s
     const heroAttackMs = () => Math.max(300, Math.round((HERO_ATTACK_MS + equipped.reduce((t, it) => t + ((itemDef(it.name) || {}).attackMs || 0), 0)) / (1 + talentAttackSpeed())));
     const hasMeleeWeapon = () => equipped.some(it => MELEE_KINDS.includes(it.kind));
-    function meleeArea() {   // origin (tile units, centre of the hero tile's front edge), unit direction, radius
-      const len = Math.hypot(aim.x, aim.y) || 1, dx = aim.x / len, dy = aim.y / len;   // exact facing angle
+    function meleeArea(dir = aim) {   // origin (tile units, centre of the hero tile's front edge), unit direction, radius
+      const len = Math.hypot(dir.x, dir.y) || 1, dx = dir.x / len, dy = dir.y / len;   // exact swing angle
       const w = equipped.find(it => MELEE_KINDS.includes(it.kind)), area = w ? ((itemDef(w.name) || {}).meleeArea || MELEE.weaponArea) : 1;
       const r = MELEE.radius * Math.sqrt(area);   // the weapon's meleeArea: × area (Banana sword 1.2, baNano Sword 1.3)
       const c = ovalC(); return { ox: c.x + dx * 0.5, oy: c.y + dy * 0.5, dx, dy, r };   // from his body centre (where he aims from)
     }
-    function meleeTargets() {
-      const a = meleeArea(), keep = drip, ang = Math.atan2(a.dy, a.dx);
+    function meleeTargets(dir = aim) {
+      const a = meleeArea(dir), keep = drip, ang = Math.atan2(a.dy, a.dx);
       const inSwing = p => { const ex = p.x - a.ox, ey = p.y - a.oy; return Math.hypot(ex, ey) <= a.r && ex * a.dx + ey * a.dy >= 0; };
       const swingPts = [{ x: a.ox, y: a.oy }]; for (let i = -4; i <= 4; i++) for (const k of [0.5, 1]) swingPts.push({ x: a.ox + Math.cos(ang + i * Math.PI / 8) * a.r * k, y: a.oy + Math.sin(ang + i * Math.PI / 8) * a.r * k });
       const hits = drips.filter(d => {
@@ -5196,12 +5210,14 @@
       if (stats.mana < sp.mana) { float(`no mana (${sp.mana} ${ICON.mana})`, '#4ea1ff', hx, player.y - 0.7); return; }
       stats.mana -= sp.mana; renderStats();
       // aim at the selected (Tab) target; without one: computers toward the cursor, phones at the closest living enemy; else where he faces
-      let dx = aim.x, dy = aim.y;
+      const cd = cursorDir();
+      let dx = cd ? cd.x : aim.x, dy = cd ? cd.y : aim.y;
       const near = hasTarget() ? { q: foeBody(target) } : mouseAim.on ? null : drips.filter(d => !d.dead && !cloaked(d)).map(d => { const q = foeBody(d); return { q, dist: Math.hypot(q.x - hx, q.y - hy) }; })
         .sort((a, b) => a.dist - b.dist)[0];
       if (near) { dx = near.q.x - hx; dy = near.q.y - hy; }
       if (!dx && !dy) dx = lookX;
       const len = Math.hypot(dx, dy);
+      faceAction(dx, dy);   // he turns toward what he casts at
       if (sp.cone) { fuelSpray(Math.atan2(dy, dx), sp); if (dx) lookX = dx > 0 ? 1 : -1; return; }
       projectiles.push({ x: hx, y: hy, dx: dx / len, dy: dy / len, flown: 0, spell: sp, t: gameTime });
       if (dx) lookX = dx > 0 ? 1 : -1;
@@ -5402,6 +5418,7 @@
     const held = new Set();      // movement keys currently held
     const tapped = new Set();    // keys pressed since the last step, even if already released
     const COMBO_MS = 60;         // short wait so W+D pressed together counts as one diagonal step
+    const HERO_STEP_M = 1;   // metres per footstep sound: the walk cycle is 4 frames over 2 m, a foot lands on frames 0 and 2
     const MOVE_MS = 1000 / 6;    // ms per metre: the hero walks 6 m/s
     let stepMs = MOVE_MS;        // this step's duration: longer while injured
     const currentStepMs = () => (hasState('injured') ? MOVE_MS / STATES.injured.speed : MOVE_MS) / (1 + lbSpeed() + equipSum('speed')) / (gameTime < slowUntil ? 1 - slowAmt : 1);   // Top-1 buffs: +5% speed each (Dealer, Slayer)
@@ -5414,19 +5431,28 @@
     // faces (any angle with the joystick, 8 with keys); facing.x/y is that angle snapped to the nearest of 8 (for faced tiles).
     // Speed = today's (1 tile per MOVE_MS, with injured / slowed / buffs), the same in every direction; a 0.06 s ramp to start and stop.
     // Body: a 0.5 m circle at his feet; slides along walls, buildings and enemies, and is nudged around corners it clips.
-    const HERO_MOVE = { r: 0.25, rampS: 0.06, nudge: 0.3, harvestDrift: 0.3, backMult: 0.5 };   // backMult: walking away from where he aims (mouse) = half speed
+    const HERO_MOVE = { r: 0.25, rampS: 0.06, nudge: 0.3, harvestDrift: 0.3 };
     const hpos = { x: player.x, y: player.y }, vel = { x: 0, y: 0 }, aim = { x: 1, y: 0 };
     let heroDist = 0, heroSpeedNow = 0, lastTile = { x: player.x, y: player.y }, stickVec = null;   // stickVec: { x, y } analog 0..1 (phones)
     const setAim = (x, y) => { const l = Math.hypot(x, y); if (l < 1e-6) return; aim.x = x / l; aim.y = y / l;
       const a = Math.round(Math.atan2(aim.y, aim.x) / (Math.PI / 4)), dirs = [[1, 0], [1, 1], [0, 1], [-1, 1], [-1, 0], [-1, -1], [0, -1], [1, -1]];
       [facing.x, facing.y] = dirs[(a + 8) % 8]; if (Math.abs(aim.x) > 0.2) lookX = aim.x > 0 ? 1 : -1; };
-    // computers: the mouse cursor aims melee, Magic tar and Magic Nozzle (the hero always faces it). Phones keep the old aim.
+    // Facing: he always faces where he walks. Only an action turns him: a swing (left click / Space -> toward the cursor on
+    // computers) or a spell (Tab target, else the cursor, else phones: the closest enemy). He keeps that facing while the action
+    // plays (HERO_ATTACK_ANIM_MS) and while the left button is held, then turns back to his walking direction.
     const mouseAim = { on: false, inside: false, down: false, harvest: false, cx: 0, cy: 0, hud: false, hover: null, cursorKey: '' };   // cx/cy: canvas px; down: left button held (keeps swinging)
-    function updateMouseAim() {
-      if (!mouseAim.on || anyOpen()) return;
+    let actionFaceUntil = -1e9;   // game time until which he keeps facing his last action instead of where he walks
+    const acting = () => gameTime < actionFaceUntil || (mouseAim.on && mouseAim.down);
+    function faceAction(dx, dy) { setAim(dx, dy); actionFaceUntil = gameTime + HERO_ATTACK_ANIM_MS; }
+    function cursorDir() {   // from his body (a bit above the feet) to the mouse cursor, or null
+      if (!mouseAim.on) return null;
       const wx = (mouseAim.cx - cam.ox) / cam.z / TILE, wy = (mouseAim.cy - cam.oy) / cam.z / TILE;
-      const dx = wx - (hpos.x + 0.5), dy = wy - (hpos.y + 0.1);   // from his body (a bit above the feet)
-      if (Math.hypot(dx, dy) > 0.15) setAim(dx, dy);
+      const dx = wx - (hpos.x + 0.5), dy = wy - (hpos.y + 0.1);
+      return Math.hypot(dx, dy) > 0.15 ? { x: dx, y: dy } : null;
+    }
+    function updateMouseAim() {   // left button held: keep facing the cursor (he keeps swinging at it)
+      if (!mouseAim.on || !mouseAim.down || anyOpen()) return;
+      const c = cursorDir(); if (c) setAim(c.x, c.y);
     }
     const solidTile = (x, y) => !free(x, y);   // enemies are ground circles now (bodyHits)
     function bodyHits(px, py) {   // does the body circle at hpos (px, py) overlap a blocked tile? -> that tile, or null
@@ -5537,9 +5563,8 @@
       const dt = Math.min(0.05, dtMs / 1000);
       const blocked = !dt || anyOpen() || naming() || hasState('root') || stats.health <= 0;
       const inp = blocked ? { x: 0, y: 0 } : heroInput();
-      const back = mouseAim.on && (inp.x * aim.x + inp.y * aim.y) < 0;   // walking backwards: more than 90° away from the cursor
-      const speed = 1000 / currentStepMs() * (back ? HERO_MOVE.backMult : 1);
-      if ((inp.x || inp.y) && !mouseAim.on) setAim(inp.x, inp.y);   // with a mouse he faces the cursor, not where he walks
+      const speed = 1000 / currentStepMs();   // the same speed in every direction
+      if ((inp.x || inp.y) && !acting()) setAim(inp.x, inp.y);   // he faces where he walks, except during an action
       if (blocked && !dt) { heroSpeedNow = 0; moving = false; return; }
       // ramp the velocity toward the wanted one (stops instantly when blocked by root / death / a window)
       const tx = inp.x * speed, ty = inp.y * speed, step = speed / HERO_MOVE.rampS * dt;
@@ -5565,7 +5590,9 @@
           for (const s of [1, -1]) { const off = s * HERO_MOVE.nudge; if (!bodyHits(hpos.x + off, hpos.y + my) && !bodyHits(hpos.x + Math.sign(off) * Math.abs(my), hpos.y)) { moved += moveAxis(s * Math.abs(my), 0); break; } }
         }
       }
+      const stepBefore = Math.floor(heroDist / HERO_STEP_M);
       heroDist += moved; heroSpeedNow = moved / dt; moving = heroSpeedNow > 0.3;
+      if (moving && Math.floor(heroDist / HERO_STEP_M) !== stepBefore) playSfx(stepSfxFor(AREAS[areaName] && AREAS[areaName].type));   // a footfall every metre (walk frames 0 and 2)
       if (moved > 0.01) walkedOnce = true;
       const tx2 = Math.round(hpos.x), ty2 = Math.round(hpos.y);
       if (tx2 !== player.x || ty2 !== player.y) {   // stepped onto another tile
@@ -5644,7 +5671,7 @@
       }
       keys.forEach(k => { held.add(k); tapped.add(k); });
       // face along every movement key held, so W+D faces diagonally; walking itself happens every frame (updateHeroMove)
-      if (stickVec || mouseAim.on) return;   // the joystick steers (and aims) itself; the mouse aims
+      if (stickVec || acting()) return;   // the joystick steers (and aims) itself; an action keeps its facing
       const fx = (held.has('d') ? 1 : 0) - (held.has('a') ? 1 : 0), fy = (held.has('s') ? 1 : 0) - (held.has('w') ? 1 : 0);
       if (fx || fy) setAim(fx, fy);
       else setAim((keys.includes('d') ? 1 : 0) - (keys.includes('a') ? 1 : 0), (keys.includes('s') ? 1 : 0) - (keys.includes('w') ? 1 : 0));
@@ -7133,8 +7160,8 @@
         ctx.restore(); return;
       }
       // straight down / up use the front / back walk (never mirrored); everything else uses the side walk
-      const vx = mouseAim.on ? aim.x : vel.x, vy = mouseAim.on ? aim.y : vel.y;   // with a mouse he looks at the cursor (even standing)
-      const view = (moving || mouseAim.on) && Math.abs(vy) > Math.abs(vx) * 1.2 ? (vy > 0 ? 'down' : 'up') : 'side';   // nearest of side / front / back
+      const vx = aim.x, vy = aim.y;   // where he walks, or toward his action (also when standing)
+      const view = Math.abs(vy) > Math.abs(vx) * 1.2 ? (vy > 0 ? 'down' : 'up') : 'side';   // nearest of side / front / back
       const vert = view === 'down' ? skinned('heroWalkDown') : view === 'up' ? skinned('heroWalkUp') : null;
       const sheet = vert && ready(vert) ? vert : walk;
       if (lookX < 0 && sheet === walk) ctx.scale(-1, 1);
