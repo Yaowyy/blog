@@ -1803,7 +1803,21 @@
     { key: 'sludge', item: 'Sludge Crystal', art: 'sludgeCrystalNode', zones: ['lake'], per: 1, cooldownMs: 5 * 60000, w: 1.05 },
     { key: 'glowcap', item: 'Glowcap Truffle', art: 'glowcapNode', zones: ['deepForest'], per: 2, cooldownMs: 10 * 60000, w: 1.5 },
   ] };
-  const KNOCKBACK = { fists: 0.1, perRarity: 0.1, crit: 2, tougher: 0.5, outMs: 60, backMs: 200 };
+  const KNOCKBACK = { fists: 0.15, perRarity: 0.15, crit: 2, tougher: 0.5, outMs: 60, backMs: 200, staggerMs: 100 };   // staggerMs: it can't walk during the push + this long
+  // hit feel (melee hits that land): the enemy flashes pale (brightened, washed-out colours, outlines stay dark) for flashMs; the game freezes for stopMs (crit: critStopMs) and the
+  // screen shakes shakePx (crit: critShakePx, CSS px) easing out over shakeMs; the hero slides back `recoil` m over recoilMs
+  // (walls stop him); particles burst out of the enemy in the hit direction (count parts / critParts, cone ±spread rad,
+  // speed m/s (crit × critSpeed), life ms; fully visible for the first half, then fading; all drawn as streaks;
+  // they fly out in a cone, slowing down, on a flat upside-down arc), coloured by what it's made of (HIT_MATERIAL: organic blobs or machine sparks).
+  const HIT_FX = { flashMs: 50, flashFilter: 'brightness(2.1) saturate(0.4)', stopMs: 50, critStopMs: 90, shakePx: 2, critShakePx: 5, shakeMs: 150,
+                   recoil: 0.15, recoilMs: 120, parts: [6, 7], critParts: [16, 17], spread: 22.5 * Math.PI / 180, speed: [8, 14], critSpeed: 1.5, life: [250, 400],
+                   rise: 50, gravity: 400, sparkW: 3 };   // spread: cone half-angle (45° in total); rise px/s up at the start, gravity px/s² (a flat ∩ arc: +3 px at the top, ~12 px lower by the end)
+  const SPARKS = { type: 'spark', colors: ['#ffb000', '#ffe066', '#ff6a00', '#ffe066', '#9aa0aa'] };
+  const HIT_MATERIAL = { drip: { type: 'blob', colors: ['#0d0d14', '#0d0d14', '#00e5ff', '#ff3df2'] },
+                         spore: { type: 'blob', colors: ['#6a3cff', '#4fc3ff', '#d9c8ff'] },
+                         scav: { type: 'blob', colors: ['#c8743c', '#e0cc9a', '#4f7fc4', '#c8743c'] },   // rust, tarp beige, denim
+                         toxicScav: { type: 'blob', colors: ['#9dff5c', '#e6ff00', '#2f4f14'] },
+                         drone: SPARKS, runner: SPARKS, crawler: SPARKS, loader: SPARKS, queen: SPARKS };
   const MELEE_KINDS = ['sword'];   // equipment kinds that count as melee weapons
   const HERO_ATTACK_MS = 1000;   // hero: Space while facing an enemy hits for `strength`, at most once per second
   // sprite calibration (px in each image): body = hood top to puddle bottom, ax = puddle centre in a cell
@@ -3853,6 +3867,8 @@
       ctx.restore();
     }
     let heroNextAttack = 0, heroHurtStart = -1e9, heroAttackStart = -1e9, heroAttackDir = 'side';
+    let hitStopUntil = 0, shake = { at: -1e9, px: 0 }, heroRecoil = null;   // hit feel (HIT_FX): freeze (real ms), screen shake, hero slide-back
+    const hitParts = [];   // particles bursting out of hit enemies
     const hasSword = () => equipped.some(it => it.kind === 'sword');
     const swordDef = () => { const it = equipped.find(x => x.kind === 'sword'); return it ? itemDef(it.name) : null; };   // the equipped sword's rules (art, attack sheets)
     const floaters = [];   // rising combat text: { text, color, x, y, t } (x, y in tiles)
@@ -4014,6 +4030,7 @@
     }
     function foeMoveBy(d, mx, my, anim = true) {   // move, sliding along whatever is in the way; returns metres moved
       const len = Math.hypot(mx, my); if (len < 1e-6) return 0;
+      if (anim && gameTime < (d.staggerUntil || 0)) return 0;   // just knocked back: its own walking waits, so the push is seen
       const ign = foeOverlapsNow(d), n = Math.max(1, Math.ceil(len / 0.1)), big = foeSize(d) === 2 && !isFlyer(d);
       let moved = 0;
       for (let i = 0; i < n; i++) for (const [sx, sy] of [[mx / n, 0], [0, my / n]]) {
@@ -5046,8 +5063,49 @@
       const w = equipped.find(it => MELEE_KINDS.includes(it.kind)), step = w ? Object.keys(RARITY).indexOf(rarityOf(w.name)) + 1 : 0;   // fists 0, common 1, rare 2…
       const dist = (KNOCKBACK.fists + KNOCKBACK.perRarity * Math.max(0, step)) * (crit ? KNOCKBACK.crit : 1) * (d.hp > stats.health ? KNOCKBACK.tougher : 1);
       d.kb = dist > 0 ? { at: gameTime, dx: bx, dy: by, dist, done: 0 } : null;
+      if (d.kb) d.staggerUntil = gameTime + KNOCKBACK.outMs + KNOCKBACK.staggerMs;
     }
     function knockOffset(d) { return null; }   // knockback moves the enemy itself now (no picture nudge)
+    function hitImpact(crit) {   // once per swing that lands: freeze, screen shake, hero slides back from the swing
+      const now = performance.now();
+      hitStopUntil = Math.max(hitStopUntil, now + (crit ? HIT_FX.critStopMs : HIT_FX.stopMs));
+      shake = { at: now, px: crit ? HIT_FX.critShakePx : HIT_FX.shakePx };
+      const l = Math.hypot(aim.x, aim.y) || 1;
+      heroRecoil = { at: gameTime, dx: -aim.x / l, dy: -aim.y / l, done: 0 };
+    }
+    function burstHit(d, crit) {   // particles out of the centre of the enemy's hitbox (foeBody), away from the hero
+      const M = HIT_MATERIAL[d.kind || 'drip'] || HIT_MATERIAL.drip, c = foeGC(d), B = foeBody(d), gy = d.y + 1, z0 = Math.max(0, (gy - B.y) * TILE);
+      const dx = c.x - (hpos.x + 0.5), dy = c.y - (hpos.y + 0.5), L = Math.hypot(dx, dy), base = L > 0.01 ? Math.atan2(dy, dx) : Math.atan2(aim.y, aim.x);
+      const rnd = (a, b) => a + Math.random() * (b - a), [n0, n1] = crit ? HIT_FX.critParts : HIT_FX.parts, n = n0 + Math.floor(Math.random() * (n1 - n0 + 1));
+      for (let i = 0; i < n; i++) {
+        const ang = base + rnd(-HIT_FX.spread, HIT_FX.spread), sp = rnd(...HIT_FX.speed) * (crit ? HIT_FX.critSpeed : 1);
+        hitParts.push({ x: B.x, y: gy, z: z0, vx: Math.cos(ang) * sp, vy: Math.sin(ang) * sp, vz: HIT_FX.rise,
+                        born: gameTime, life: rnd(...HIT_FX.life), color: M.colors[Math.floor(Math.random() * M.colors.length)], type: M.type });
+      }
+    }
+    function updateHitParts(dtMs) {
+      const dt = dtMs / 1000;
+      for (let i = hitParts.length - 1; i >= 0; i--) {
+        const q = hitParts[i];
+        if (gameTime - q.born > q.life) { hitParts.splice(i, 1); continue; }
+        const drag = Math.exp(-5 * dt);   // straight out along the cone, slowing down (same at any frame rate)
+        q.x += q.vx * dt; q.y += q.vy * dt; q.vx *= drag; q.vy *= drag;
+        q.vz -= HIT_FX.gravity * dt; q.z = Math.max(0, q.z + q.vz * dt);   // a gentle rise, then a slow drop
+      }
+    }
+    function drawHitParts() {
+      if (!hitParts.length) return;
+      ctx.save();
+      for (const q of hitParts) {
+        const k = 1 - (gameTime - q.born) / q.life, x = q.x * TILE, y = q.y * TILE - q.z;
+        ctx.globalAlpha = Math.min(1, k * 2);   // full for the first half of its life, then fading out
+        // every particle is a short streak along its flight (streak length: 1.1 px per m/s). Machine sparks glow (added light);
+        // creature drops keep their true colours (drawn normally, so dark ooze stays dark)
+        ctx.globalCompositeOperation = q.type === 'spark' ? 'lighter' : 'source-over'; ctx.strokeStyle = q.color; ctx.lineWidth = HIT_FX.sparkW; ctx.lineCap = 'round';
+        ctx.beginPath(); ctx.moveTo(x, y); ctx.lineTo(x - q.vx * 1.1, y - q.vy * 1.1 + q.vz * 2.2 / TILE); ctx.stroke();
+      }
+      ctx.restore();
+    }
     function withKnock(d, paint) { const o = knockOffset(d); if (!o) return paint(); ctx.save(); ctx.translate(o.x, o.y); paint(); ctx.restore(); }
     function heroAttack() {
       if (gameTime < heroNextAttack) return;
@@ -5058,7 +5116,8 @@
       if (facing.x) lookX = facing.x;
       const crit = Math.random() < critChance(), dmg = Math.round(heroStr() * (crit ? 2 + critBonus() : 1));   // a crit adds strength once more (+ Quick Hands)
       let landed = false;
-      for (const d of meleeTargets()) { drip = d; if (!heroHits()) { heroMissed(d); continue; } landed = true; knock(d, crit); damageDrip(dmg, crit ? `-${dmg} crit!` : `-${dmg}`, crit ? '#ffe600' : '#fff'); }
+      for (const d of meleeTargets()) { drip = d; if (!heroHits()) { heroMissed(d); continue; } landed = true; d.flashAt = gameTime; burstHit(d, crit); knock(d, crit); damageDrip(dmg, crit ? `-${dmg} crit!` : `-${dmg}`, crit ? '#ffe600' : '#fff'); }
+      if (landed) hitImpact(crit);
       if (crit && landed) onHeroCrit();
     }
     // time between swings: 1 s with fists; equipment can shorten it (attackMs, e.g. banana sword -100 ms), at least 0.3 s
@@ -5594,6 +5653,11 @@
       heroDist += moved; heroSpeedNow = moved / dt; moving = heroSpeedNow > 0.3;
       if (moving && Math.floor(heroDist / HERO_STEP_M) !== stepBefore) playSfx(stepSfxFor(AREAS[areaName] && AREAS[areaName].type));   // a footfall every metre (walk frames 0 and 2)
       if (moved > 0.01) walkedOnce = true;
+      if (heroRecoil) {   // slid back from his own hit (HIT_FX.recoil), eased out, ON TOP of his walking (both moves add up); walls stop it; roots hold him
+        const r = heroRecoil, p = Math.min(1, (gameTime - r.at) / HIT_FX.recoilMs), want = HIT_FX.recoil * (1 - (1 - p) ** 2), st = want - r.done;
+        if (st > 0 && dt && !hasState('root')) { moveAxis(r.dx * st, 0); moveAxis(0, r.dy * st); }
+        r.done = want; if (p >= 1) heroRecoil = null;
+      }
       const tx2 = Math.round(hpos.x), ty2 = Math.round(hpos.y);
       if (tx2 !== player.x || ty2 !== player.y) {   // stepped onto another tile
         player.x = tx2; player.y = ty2; lastTile.x = tx2; lastTile.y = ty2; stepsTaken++;
@@ -5728,12 +5792,12 @@
       if (ui && ui.kind === 'loading' && !ui.wait && artProgress() >= 1 && decalsDone && !(ui.minUntil > performance.now())) ui.next();
       const hideTouch = !!ui && (ui.kind === 'start' || ui.kind === 'loading' || ui.kind === 'techversity');   // start screen: no joystick or buttons over its choices
       if (touchEl.style.visibility !== (hideTouch ? 'hidden' : '')) touchEl.style.visibility = hideTouch ? 'hidden' : '';
-      const dt = !anyOpen() && !naming() ? Math.min(100, now - lastFrame) : 0;
+      const dt = !anyOpen() && !naming() && now >= hitStopUntil ? Math.min(100, now - lastFrame) : 0;   // hit-stop (HIT_FX) freezes the game clock too
       gameTime += dt;   // game clock pauses behind windows
       lastFrame = now;
       syncChef();
       if (dt) { checkDeliveries(); checkRogueQuests(); for (let i = piles.length - 1; i >= 0; i--) if (gameTime >= piles[i].until) piles.splice(i, 1);
-        updateDrips(); updateQueenFx(); updateHarvest(); updatePowering(); updateProjectiles(dt); updateHeroDot(); updatePoison(); updateHeroMana(); updateHeroHealth(); }
+        updateDrips(); updateQueenFx(); updateHarvest(); updatePowering(); updateProjectiles(dt); updateHeroDot(); updatePoison(); updateHeroMana(); updateHeroHealth(); updateHitParts(dt); }
       updateHeroMove(dt);   // free movement (game time: stops behind windows)
       updateMouseAim();
       if (mouseAim.down && dt && !anyOpen()) heroAttack();   // left button held: keep swinging (attack speed limits it)
@@ -6135,6 +6199,9 @@
       ctx.fillStyle = '#000';
       ctx.fillRect(0, 0, canvas.width, canvas.height);
       cam = worldCam(rx, ry);
+      { const sk = performance.now() - shake.at;   // screen shake after a hit (CSS px, eased out)
+        if (sk < HIT_FX.shakeMs) { const a = shake.px * (1 - sk / HIT_FX.shakeMs) * (canvas.width / (canvas.clientWidth || canvas.width));
+          cam = { ...cam, ox: cam.ox + (Math.random() * 2 - 1) * a, oy: cam.oy + (Math.random() * 2 - 1) * a }; } }
       ctx.setTransform(cam.z, 0, 0, cam.z, cam.ox, cam.oy);   // world drawing below is in zone pixels
       syncGridNodes();   // node pictures (powered ones spark) before anything is drawn
       const wantDecals = AREAS[areaName].decals && ready(ART.decals);
@@ -6232,6 +6299,7 @@
       }
       for (const e of drips) if (e.kind === 'drone' && !e.dead) { drip = e; withKnock(e, () => drawDrone(e)); }   // flying: above everything
       drawMeleeFlash();
+      drawHitParts();
       drawProjectiles();
       drawRunnerParcels();
       // the Rogue: turns toward the hero when he is within 2 tiles; a '!' over her head until the tutorial starts
@@ -6866,9 +6934,11 @@
         return;
       }
       const sinceAtk = t - drip.attackStart, sinceHurt = t - drip.hurtStart;
+      const flash = t - (drip.flashAt ?? -1e9) < HIT_FX.flashMs;   // a melee hit just landed: the body (not the bar or rings) flashes pale
+      if (flash) { ctx.save(); ctx.filter = HIT_FX.flashFilter; }
       if (toxic) drawToxicScavBody(cx, feet, t);
-      else if (drip.kind === 'spore') { drawSporeBody(cx, feet, t); if (drip.hidden) return; }   // disguised: no bar, no rings
-      else if (drip.kind === 'crawler') { drawCrawlerBody(cx, feet, t); if (drip.hidden) return; }
+      else if (drip.kind === 'spore') drawSporeBody(cx, feet, t);
+      else if (drip.kind === 'crawler') drawCrawlerBody(cx, feet, t);
       else if (drip.kind === 'runner') drawRunnerBody(cx, feet, t);
       else if (drip.kind === 'scav') drawScavBody(cx, feet, t);
       else if (drip.kind === 'loader') drawLoaderBody(cx, feet, t);
@@ -6878,6 +6948,8 @@
       else if (walkFrame(t) >= 0 && ready(ART.dripWalk)) drawDripCell(ART.dripWalk, DRIP_ART.walk, walkFrame(t), cx, feet, 1, dripNeon());
       else if (ready(ART.dripIdle)) drawDripCell(ART.dripIdle, DRIP_ART.idle, 0, cx, feet, 1 + 0.025 * Math.sin(t / 260), dripNeon());   // oily wobble
       else { ctx.fillStyle = '#10131C'; ctx.fillRect(d.x * TILE + 10, d.y * TILE + 10, TILE - 20, TILE - 20); }
+      if (flash) ctx.restore();
+      if ((drip.kind === 'spore' || drip.kind === 'crawler') && drip.hidden) return;   // disguised: no bar, no rings
       if (drip.burning) drawBurning(cx, feet, t);
       if (drip.popAt && t - drip.popAt < 300) { ctx.save(); ctx.globalAlpha = 1 - (t - drip.popAt) / 300; ctx.fillStyle = '#07080c'; ctx.beginPath(); ctx.ellipse(cx, feet - 8, 50, 18, 0, 0, Math.PI * 2); ctx.fill(); ctx.restore(); }   // just pumped out: an oil splash
       if (t < (drip.slowUntil || 0)) {   // soaked by Magic Nozzle: a dark fuel slick at his feet
@@ -6942,7 +7014,8 @@
       const beep = !!d.hitAt && Math.floor((t - d.attackStart) / 50) % 2 === 0;   // fast red beeping while it rises for the ram
       ctx.save();
       if (cloaked(d)) ctx.globalAlpha = DRONE.cloakAlpha;
-      if (t - d.hurtStart < 150) ctx.filter = 'brightness(2.2)';
+      if (t - (d.flashAt ?? -1e9) < HIT_FX.flashMs) ctx.filter = HIT_FX.flashFilter;   // melee hit: pale flash
+      else if (t - d.hurtStart < 150) ctx.filter = 'brightness(2.2)';
       if (d === target || facingEnemy()) {   // outline ring: white = target, red = in melee reach
         ctx.save(); ctx.strokeStyle = d === target ? '#ffffff' : '#ff3b3b'; ctx.globalAlpha *= 0.8; ctx.lineWidth = 3;
         ctx.beginPath(); ctx.ellipse(cx, cy - 2, 44, 24, 0, 0, Math.PI * 2); ctx.stroke(); ctx.restore();
