@@ -474,9 +474,15 @@
   // srcs: variants, one picked at random (never the same twice in a row); jitter: random ± pitch and volume each play
   const SFX_DIR = 'audio/sfx/';
   const SFX = { interact: { src: 'audio/buttonInteract.m4a', gain: 2 }, navigate: { src: 'audio/menuNavigate.m4a', gain: 1.75 },
-                stepHard: { srcs: ['footsteps/stepHard1', 'footsteps/stepHard2', 'footsteps/stepHard3', 'footsteps/stepHard4'], gain: 0.25, jitter: 0.05 } };
+                stepHard: { srcs: ['footsteps/stepHard1', 'footsteps/stepHard2', 'footsteps/stepHard3', 'footsteps/stepHard4'], gain: 0.2, jitter: 0.05 },
+                stepSoft: { srcs: ['footsteps/stepSoft1', 'footsteps/stepSoft2', 'footsteps/stepSoft3', 'footsteps/stepSoft4'], gain: 0.2, jitter: 0.05 },
+                // combat volumes (set by the user 16 Oct): steps ×0.2, swings ×0.4, hits ×0.6
+                swingFist: { srcs: ['swings/swingFist1'], gain: 0.4, jitter: 0.05 },   // the swing starts (on the click), hit or miss
+                swingBlade: { srcs: ['swings/swingBlade1'], gain: 0.4, jitter: 0.05 },
+                hitFist: { srcs: ['hits/hitFist1', 'hits/hitFist2', 'hits/hitFist3'], gain: 0.6, jitter: 0.05 },   // a melee hit lands
+                hitBlade: { srcs: ['hits/hitBlade1', 'hits/hitBlade2', 'hits/hitBlade3'], gain: 0.6, jitter: 0.05 } };
   // footsteps by surface: a zone type without its own step files yet uses stepHard
-  const STEP_SURFACE = { forest: 'stepSoft', deepForest: 'stepSoft', overgrowth: 'stepSoft', lake: 'stepSoft', labs: 'stepLab', breach: 'stepLab' };
+  const STEP_SURFACE = { forest: 'stepSoft', deepForest: 'stepSoft', overgrowth: 'stepSoft', lake: 'stepSoft', labs: 'stepSoft', breach: 'stepSoft' };   // labs / Breach: stepLab once those files exist
   const stepSfxFor = type => SFX[STEP_SURFACE[type]] ? STEP_SURFACE[type] : 'stepHard';
   let sfxQuietUntil = 0;   // an interaction just played: skip the navigate tick that the same click causes
   function loadSfx(k) {
@@ -1788,7 +1794,14 @@
   // hero melee area: a half-disc whose flat side is the front edge of the hero's tile, facing where he looks.
   // Radius 1.2 tiles covers the whole tile in front and a little beyond; a melee weapon makes the area 20% bigger
   // (radius × √1.2). Every living enemy whose body (radius 0.25 tiles) touches the area is hit.
-  const MELEE = { radius: 1.2, weaponArea: 1.2, bodyR: 0.25, flashMs: 180 };
+  const MELEE = { radius: 1.2, weaponArea: 1.2, bodyR: 0.25, flashMs: 180,
+                  arcDeg: { fists: 90, sword: 150 }, windupMs: { fists: 100, sword: 200 } };   // swing cone (degrees, centred on the aim) and wind-up: the hit lands this long after the click
+  // the swing as a slash (starts when the wind-up ends): a wedge sweeps across the swing cone from its higher end on screen to its lower end (straight up /
+  // down swings: left to right) over sweepMs (eased), as a faint wedge `trail` × the cone's angle long, then fades over fadeMs.
+  // fill: peak opacity of the wedge. Every side is soft: across the wedge it rises from the tail to its peak at `peakAt`
+  // (0 = tail, 1 = leading side) and fades out again before the leading side; from the centre outwards it fades in until
+  // `inner` and out after `outer` (fractions of the radius), so neither the rim nor the straight sides draw a hard line
+  const SLASH = { sweepMs: 100, fadeMs: 80, trail: 0.41, fill: 0.06, peakAt: 0.7, inner: 0.35, outer: 0.7, slices: 24 };
   // knockback on a melee hit: the enemy's picture is nudged away from the hero and eases back (looks only; his tile doesn't change).
   // Distance in tiles: fists 0.1, a weapon 0.1 more per rarity step (common 0.2, rare 0.3, mythical 0.4 … transcendent 0.7).
   // Then: crit × 2; enemy's HP above the hero's HP × 0.5 (else × 1). It stops short of walls, buildings and anything else
@@ -1812,6 +1825,13 @@
   const HIT_FX = { flashMs: 50, flashFilter: 'brightness(2.1) saturate(0.4)', stopMs: 50, critStopMs: 90, shakePx: 2, critShakePx: 5, shakeMs: 150,
                    recoil: 0.15, recoilMs: 120, parts: [6, 7], critParts: [16, 17], spread: 22.5 * Math.PI / 180, speed: [8, 14], critSpeed: 1.5, life: [250, 400],
                    rise: 50, gravity: 400, sparkW: 3 };   // spread: cone half-angle (45° in total); rise px/s up at the start, gravity px/s² (a flat ∩ arc: +3 px at the top, ~12 px lower by the end)
+  // the hero getting hit (HURT_FX), share = damage ÷ max HP: he flashes for flashMs, pale below redAt, red above, then blinks
+  // as before; the screen edges flash red (vignette) and fade over vigMs, opacity vig[0] + share × vigPer, at most vig[1]
+  // (damage-over-time ticks: dotVig). Direct hits also shake the screen (shakePx, bigShakePx from bigAt) and throw a few red
+  // streaks away from the attacker (parts, same flight as enemy particles). Several hits at once merge (the strongest wins).
+  const HURT_FX = { flashMs: 60, redAt: 0.10, redFilter: 'sepia(1) saturate(9) hue-rotate(-40deg) brightness(1.05)',
+                    vigMs: 350, vig: [0.125, 0.3], vigPer: 0.75, dotVig: 0.075, shakePx: 2, bigShakePx: 5, bigAt: 0.20,
+                    parts: [3, 4], colors: ['#ff2a2a', '#ff5a5a', '#d10f0f'] };
   const SPARKS = { type: 'spark', colors: ['#ffb000', '#ffe066', '#ff6a00', '#ffe066', '#9aa0aa'] };
   const HIT_MATERIAL = { drip: { type: 'blob', colors: ['#0d0d14', '#0d0d14', '#00e5ff', '#ff3df2'] },
                          spore: { type: 'blob', colors: ['#6a3cff', '#4fc3ff', '#d9c8ff'] },
@@ -3867,8 +3887,10 @@
       ctx.restore();
     }
     let heroNextAttack = 0, heroHurtStart = -1e9, heroAttackStart = -1e9, heroAttackDir = 'side';
-    let hitStopUntil = 0, shake = { at: -1e9, px: 0 }, heroRecoil = null;   // hit feel (HIT_FX): freeze (real ms), screen shake, hero slide-back
-    const hitParts = [];   // particles bursting out of hit enemies
+    let hitStopUntil = 0, shake = { at: -1e9, px: 0 }, heroRecoil = null, heroSwingDir = { x: 1, y: 0 };
+    let heroSwingAt = -1e9, pendingSwing = null;   // when the wind-up ends (the hit lands and the slash starts); the swing waiting for it   // hit feel (HIT_FX): freeze (real ms), screen shake, hero slide-back
+    const hitParts = [];   // particles bursting out of hit enemies (and red ones out of the hero)
+    let heroFlashRed = false, heroFlashAt = -1e9, hurtVig = { at: -1e9, k: 0 };   // the hero's hit flash colour; the red screen-edge flash
     const hasSword = () => equipped.some(it => it.kind === 'sword');
     const swordDef = () => { const it = equipped.find(x => x.kind === 'sword'); return it ? itemDef(it.name) : null; };   // the equipped sword's rules (art, attack sheets)
     const floaters = [];   // rising combat text: { text, color, x, y, t } (x, y in tiles)
@@ -4636,7 +4658,7 @@
     }
     function updatePoison() {
       while (poisonUntil && gameTime >= poisonNext && poisonNext <= poisonUntil && stats.health > 0) {
-        hurtHero(Math.max(1, Math.round(CAPS.health * SPORE.poisonPct)), '#9dff5c'); poisonNext += 1000;
+        hurtHero(Math.max(1, Math.round(CAPS.health * SPORE.poisonPct)), '#9dff5c', true); poisonNext += 1000;
       }
       if (gameTime >= poisonUntil) poisonUntil = 0;
       for (let i = sporeClouds.length - 1; i >= 0; i--) {   // spore clouds left by dead Sporelings: standing in one poisons
@@ -4817,7 +4839,7 @@
       for (let i = fireTiles.length - 1; i >= 0; i--) if (t >= fireTiles[i].until) fireTiles.splice(i, 1);
       const onFire = fireTiles.some(f => f.zone === areaName && feetNear(f.x + 0.5, f.y + 0.5, QUEEN.trailR) && t - f.at > 150)
         || queenFx.some(f => f.kind === 'puddle' && f.lit && f.zone === areaName && feetNear(f.x + 0.5, f.y + 0.5, QUEEN.puddleR));
-      if (onFire && t >= heroFireNext && stats.health > 0) { heroFireNext = t + 1000; hurtHero(bossDamage(QUEEN.fireMult), '#ff6a00'); }
+      if (onFire && t >= heroFireNext && stats.health > 0) { heroFireNext = t + 1000; hurtHero(bossDamage(QUEEN.fireMult), '#ff6a00', true); }
     }
 
     // ---- Mav-1K drone (see DRONE) ----
@@ -4900,7 +4922,7 @@
     const levelDmgFactor = diff => diff >= 0 ? 1 + 0.2 * diff : Math.max(0, 1 - 0.3 * -diff);
     const npcDamage = (mult, lvl = npcLevel()) => Math.round(heroHealthCap(10, lvl) * mult * levelDmgFactor(lvl - hero.level));
     // an enemy's hit lands on the hero (0 damage: a grey "0", no blink)
-    function hurtHero(dmg, color) {
+    function hurtHero(dmg, color, dot = false) {   // dot: a damage-over-time tick (poison, burning, tar, fuel): lighter feedback
       harvesting = null; powering = null;   // any hit stops a harvest or a node restore
       if (dmg <= 0) { float('0', '#8a8a8a', player.x + 0.5, player.y - 0.6); return; }
       const pc = tal('chrome', 0);   // Pain Correction
@@ -4913,7 +4935,7 @@
         heroHurtStart = gameTime; float('ReZero!', '#4ea1ff', player.x + 0.5, player.y - 1.2); renderStats(); return;
       }
       stats.health = Math.max(0, stats.health - dmg);
-      heroHurtStart = gameTime;
+      heroHurtStart = gameTime; hurtFx(dmg, dot);
       float(`-${dmg}`, color, player.x + 0.5, player.y - 0.6);
       renderStats();
       if (stats.health <= 0) gameOver();
@@ -5106,20 +5128,61 @@
       }
       ctx.restore();
     }
+    function hurtFx(dmg, dot) {   // feedback when the hero takes damage (HURT_FX); hits in the same moment merge
+      const share = dmg / Math.max(1, CAPS.health), now = performance.now(), H = HURT_FX;
+      heroFlashRed = share > H.redAt || (heroFlashAt === gameTime && heroFlashRed);   // another hit in the same moment keeps the stronger flash
+      heroFlashAt = gameTime;
+      const left = Math.max(0, hurtVig.k * (1 - (now - hurtVig.at) / H.vigMs));   // what's still showing of the last flash
+      const k = dot ? H.dotVig : Math.min(H.vig[1], H.vig[0] + share * H.vigPer);
+      hurtVig = { at: now, k: Math.max(k, left) };
+      if (dot) return;
+      const px = share >= H.bigAt ? H.bigShakePx : H.shakePx, sk = now - shake.at < HIT_FX.shakeMs ? shake.px : 0;
+      if (px >= sk) shake = { at: now, px };
+      // red streaks out of his body, away from the enemy hitting him (the one being updated), else straight up the screen
+      const foe = typeof drip !== 'undefined' && drip && !drip.dead ? drip : null, gc = foe ? foeGC(foe) : null;
+      const hx = hpos.x + 0.5, hy = hpos.y + 0.5, base = gc && Math.hypot(hx - gc.x, hy - gc.y) > 0.05 ? Math.atan2(hy - gc.y, hx - gc.x) : -Math.PI / 2;
+      const c = ovalC(), gy = hpos.y + 1, z0 = Math.max(0, (gy - c.y) * TILE), rnd = (a, b) => a + Math.random() * (b - a);
+      const n = H.parts[0] + Math.floor(Math.random() * (H.parts[1] - H.parts[0] + 1));
+      for (let i = 0; i < n; i++) {
+        const ang = base + rnd(-HIT_FX.spread, HIT_FX.spread), sp = rnd(...HIT_FX.speed);
+        hitParts.push({ x: c.x, y: gy, z: z0, vx: Math.cos(ang) * sp, vy: Math.sin(ang) * sp, vz: HIT_FX.rise,
+                        born: gameTime, life: rnd(...HIT_FX.life), color: H.colors[Math.floor(Math.random() * H.colors.length)], type: 'blob' });
+      }
+    }
+    function drawHurtVignette() {   // red glow creeping in from the screen edges after the hero is hit (screen space)
+      const t = performance.now() - hurtVig.at; if (t >= HURT_FX.vigMs || hurtVig.k <= 0) return;
+      const a = hurtVig.k * (1 - t / HURT_FX.vigMs), W = canvas.width, Hh = canvas.height, R = Math.hypot(W, Hh) / 2;
+      ctx.save(); ctx.setTransform(1, 0, 0, 1, 0, 0);
+      const g = ctx.createRadialGradient(W / 2, Hh / 2, R * 0.55, W / 2, Hh / 2, R);
+      g.addColorStop(0, 'rgba(255, 20, 20, 0)'); g.addColorStop(1, `rgba(255, 20, 20, ${a})`);
+      ctx.fillStyle = g; ctx.fillRect(0, 0, W, Hh); ctx.restore();
+    }
     function withKnock(d, paint) { const o = knockOffset(d); if (!o) return paint(); ctx.save(); ctx.translate(o.x, o.y); paint(); ctx.restore(); }
     function heroAttack() {
       if (gameTime < heroNextAttack) return;
       heroNextAttack = gameTime + heroAttackMs();
       const cd = cursorDir(); if (cd) faceAction(cd.x, cd.y); else faceAction(aim.x, aim.y);   // computers swing toward the cursor; phones where he faces
       heroAttackStart = gameTime;   // attack animation in the facing direction (diagonals use the side view)
+      heroSwingDir = { x: aim.x, y: aim.y };   // the swing keeps this direction even if he turns during the wind-up or the slash
       heroAttackDir = Math.abs(aim.x) >= Math.abs(aim.y) * 0.7 ? 'side' : aim.y > 0 ? 'down' : 'up';   // nearest view to the exact angle
       if (facing.x) lookX = facing.x;
+      heroSwingAt = gameTime + swingWindup();   // wind-up: the hit lands (and the slash starts) this much later
+      pendingSwing = { at: heroSwingAt, dir: { ...heroSwingDir }, zone: areaName };
+      playSfx(hasMeleeWeapon() ? 'swingBlade' : 'swingFist');   // the swoosh starts with the swing; the hit sound comes when it lands
+    }
+    function updateSwing() {   // the wind-up is over: whoever is in the swing cone now gets hit
+      const sw = pendingSwing; if (!sw || gameTime < sw.at) return;
+      pendingSwing = null;
+      if (sw.zone !== areaName || stats.health <= 0) return;   // left the zone or died during the wind-up
       const crit = Math.random() < critChance(), dmg = Math.round(heroStr() * (crit ? 2 + critBonus() : 1));   // a crit adds strength once more (+ Quick Hands)
       let landed = false;
-      for (const d of meleeTargets()) { drip = d; if (!heroHits()) { heroMissed(d); continue; } landed = true; d.flashAt = gameTime; burstHit(d, crit); knock(d, crit); damageDrip(dmg, crit ? `-${dmg} crit!` : `-${dmg}`, crit ? '#ffe600' : '#fff'); }
-      if (landed) hitImpact(crit);
+      for (const d of meleeTargets(sw.dir)) { drip = d; if (!heroHits()) { heroMissed(d); continue; } landed = true; d.flashAt = gameTime; burstHit(d, crit); knock(d, crit); damageDrip(dmg, crit ? `-${dmg} crit!` : `-${dmg}`, crit ? '#ffe600' : '#fff'); }
+      if (landed) { hitImpact(crit); playSfx(hasMeleeWeapon() && SFX.hitBlade ? 'hitBlade' : 'hitFist'); }   // once per swing, however many it hits
       if (crit && landed) onHeroCrit();
     }
+    const swingKind = () => hasMeleeWeapon() ? 'sword' : 'fists';
+    const swingWindup = () => MELEE.windupMs[swingKind()];
+    const swingHalf = () => MELEE.arcDeg[swingKind()] / 2 * Math.PI / 180;   // half the swing cone, radians
     // time between swings: 1 s with fists; equipment can shorten it (attackMs, e.g. banana sword -100 ms), at least 0.3 s
     const heroAttackMs = () => Math.max(300, Math.round((HERO_ATTACK_MS + equipped.reduce((t, it) => t + ((itemDef(it.name) || {}).attackMs || 0), 0)) / (1 + talentAttackSpeed())));
     const hasMeleeWeapon = () => equipped.some(it => MELEE_KINDS.includes(it.kind));
@@ -5127,36 +5190,44 @@
       const len = Math.hypot(dir.x, dir.y) || 1, dx = dir.x / len, dy = dir.y / len;   // exact swing angle
       const w = equipped.find(it => MELEE_KINDS.includes(it.kind)), area = w ? ((itemDef(w.name) || {}).meleeArea || MELEE.weaponArea) : 1;
       const r = MELEE.radius * Math.sqrt(area);   // the weapon's meleeArea: × area (Banana sword 1.2, baNano Sword 1.3)
-      const c = ovalC(); return { ox: c.x + dx * 0.5, oy: c.y + dy * 0.5, dx, dy, r };   // from his body centre (where he aims from)
+      const c = ovalC(); return { ox: c.x + dx * 0.5, oy: c.y + dy * 0.5, dx, dy, r, half: swingHalf() };   // from his body centre (where he aims from); a cone of ±half
     }
     function meleeTargets(dir = aim) {
       const a = meleeArea(dir), keep = drip, ang = Math.atan2(a.dy, a.dx);
-      const inSwing = p => { const ex = p.x - a.ox, ey = p.y - a.oy; return Math.hypot(ex, ey) <= a.r && ex * a.dx + ey * a.dy >= 0; };
-      const swingPts = [{ x: a.ox, y: a.oy }]; for (let i = -4; i <= 4; i++) for (const k of [0.5, 1]) swingPts.push({ x: a.ox + Math.cos(ang + i * Math.PI / 8) * a.r * k, y: a.oy + Math.sin(ang + i * Math.PI / 8) * a.r * k });
+      const cosH = Math.cos(a.half);   // inside the cone: within the radius and at most `half` off the aim
+      const inSwing = p => { const ex = p.x - a.ox, ey = p.y - a.oy, L = Math.hypot(ex, ey); return L <= a.r && ex * a.dx + ey * a.dy >= L * cosH - 1e-9; };
+      const swingPts = [{ x: a.ox, y: a.oy }]; for (let i = -4; i <= 4; i++) for (const k of [0.5, 1]) swingPts.push({ x: a.ox + Math.cos(ang + i / 4 * a.half) * a.r * k, y: a.oy + Math.sin(ang + i / 4 * a.half) * a.r * k });
       const hits = drips.filter(d => {
         if (d.dead || cloaked(d) || !droneLow(d)) return false;   // a flying drone is out of reach except right after its ram
-        const B = foeBody(d);   // the swing (front half of a circle) overlaps its body
+        const B = foeBody(d);   // the swing cone overlaps its body
         return ellPts(B, 32).some(inSwing) || swingPts.some(p => ellIn(B, p.x, p.y));
       });
       drip = keep; return hits;
     }
     // a quick faint flash of the swing area
-    function drawMeleeFlash() {
-      const t = gameTime - heroAttackStart;
-      if (t < 0 || t > MELEE.flashMs) return;
-      const a = meleeArea(), ang = Math.atan2(a.dy, a.dx), ox = a.ox * TILE, oy = a.oy * TILE, R = a.r * TILE;
-      // colour by weapon: white with fists, yellow with the Banana sword, neon green with the baNano Sword
+    function drawMeleeFlash() {   // the swing: a slash sweeping across the attack area (SLASH)
+      const t = gameTime - heroSwingAt, S = SLASH;   // starts when the wind-up ends
+      if (t < 0 || t > S.sweepMs + S.fadeMs) return;
+      const a = meleeArea(heroSwingDir), ang = Math.atan2(a.dy, a.dx), ox = a.ox * TILE, oy = a.oy * TILE, R = a.r * TILE;
+      // colour by weapon: white with fists, yellow with the Banana sword, neon green with the baNano Sword / Mothersword
       const w = equipped.find(e => MELEE_KINDS.includes(e.kind)), rgb = !w ? '255, 255, 255' : w.name === 'baNano Sword' ? '157, 255, 92' : w.name === 'Mothersword' ? '62, 214, 120' : '255, 230, 0';
-      const base = 0.06 * (1 - t / MELEE.flashMs);
-      // corners dimmed: full in front, fading to about half toward both ends of the flat side (a conic gradient around the hero)
-      ctx.save(); ctx.globalAlpha = base;
-      if (ctx.createConicGradient) {
-        const g = ctx.createConicGradient(ang - Math.PI, ox, oy);
-        g.addColorStop(0, `rgba(${rgb}, 0.45)`); g.addColorStop(0.25, `rgba(${rgb}, 0.45)`); g.addColorStop(0.5, `rgba(${rgb}, 1)`);
-        g.addColorStop(0.75, `rgba(${rgb}, 0.45)`); g.addColorStop(1, `rgba(${rgb}, 0.45)`);
-        ctx.fillStyle = g;
-      } else ctx.fillStyle = `rgb(${rgb})`;   // older browsers: even colour
-      ctx.beginPath(); ctx.moveTo(ox, oy); ctx.arc(ox, oy, R, ang - Math.PI / 2, ang + Math.PI / 2); ctx.closePath(); ctx.fill();
+      // the two ends of the cone; start from the one higher on screen (equal: the left one)
+      const e1 = ang - a.half, e2 = ang + a.half, d = Math.sin(e1) - Math.sin(e2);
+      const start = Math.abs(d) > 0.2 ? (d < 0 ? e1 : e2) : (Math.cos(e1) < Math.cos(e2) ? e1 : e2), end = start === e1 ? e2 : e1, dir = Math.sign(end - start);
+      const p = Math.min(1, t / S.sweepMs), cur = start + (end - start) * (1 - (1 - p) ** 2);   // eased: fast, then settling
+      const fade = t < S.sweepMs ? 1 : 1 - (t - S.sweepMs) / S.fadeMs;
+      const trail = S.trail * 2 * a.half, tail = dir > 0 ? Math.max(start, cur - trail) : Math.min(start, cur + trail);
+      ctx.save();
+      const g = ctx.createRadialGradient(ox, oy, 0, ox, oy, R);   // soft from the centre outwards
+      g.addColorStop(0, `rgba(${rgb}, 0)`); g.addColorStop(S.inner, `rgba(${rgb}, 1)`); g.addColorStop(S.outer, `rgba(${rgb}, 1)`); g.addColorStop(1, `rgba(${rgb}, 0)`);
+      ctx.fillStyle = g;
+      const N = S.slices, ss = x => x * x * (3 - 2 * x);   // thin slices across the wedge, opacity on a smooth hump
+      for (let i = 0; i < N; i++) {
+        const a0 = tail + (cur - tail) * i / N, a1 = tail + (cur - tail) * (i + 1) / N, u = (i + 0.5) / N;
+        const k = u < S.peakAt ? ss(u / S.peakAt) : ss((1 - u) / (1 - S.peakAt));
+        ctx.globalAlpha = S.fill * fade * k;
+        ctx.beginPath(); ctx.moveTo(ox, oy); ctx.arc(ox, oy, R, Math.min(a0, a1), Math.max(a0, a1)); ctx.closePath(); ctx.fill();
+      }
       ctx.restore();
     }
 
@@ -5337,8 +5408,8 @@
     // damage over time on the hero (enemy Magic Tar)
     function updateHeroDot() {
       while (heroDot && gameTime >= heroDot.next && stats.health > 0) {
-        if (heroDot.boss) hurtHero(bossDamage(heroDot.mult), heroDot.color);   // Pump Queen's Fuel Spray
-        else hurtHero(npcDamage(DRIP.tarMult, heroDot.lvl || zoneLevel(areaName)), '#ff2bd6');   // Drip's Magic Tar: 8% of a same-level hero's max HP per second
+        if (heroDot.boss) hurtHero(bossDamage(heroDot.mult), heroDot.color, true);   // Pump Queen's Fuel Spray
+        else hurtHero(npcDamage(DRIP.tarMult, heroDot.lvl || zoneLevel(areaName)), '#ff2bd6', true);   // Drip's Magic Tar: 8% of a same-level hero's max HP per second
         if (stats.health <= 0) { heroDot = null; return; }
         if (--heroDot.left <= 0) heroDot = null; else heroDot.next += heroDot.spell.tickMs;
       }
@@ -5797,7 +5868,7 @@
       lastFrame = now;
       syncChef();
       if (dt) { checkDeliveries(); checkRogueQuests(); for (let i = piles.length - 1; i >= 0; i--) if (gameTime >= piles[i].until) piles.splice(i, 1);
-        updateDrips(); updateQueenFx(); updateHarvest(); updatePowering(); updateProjectiles(dt); updateHeroDot(); updatePoison(); updateHeroMana(); updateHeroHealth(); updateHitParts(dt); }
+        updateDrips(); updateQueenFx(); updateHarvest(); updatePowering(); updateProjectiles(dt); updateHeroDot(); updatePoison(); updateHeroMana(); updateHeroHealth(); updateHitParts(dt); updateSwing(); }
       updateHeroMove(dt);   // free movement (game time: stops behind windows)
       updateMouseAim();
       if (mouseAim.down && dt && !anyOpen()) heroAttack();   // left button held: keep swinging (attack speed limits it)
@@ -5807,6 +5878,7 @@
       if (settings.fps) { fpsStat.frames.push(now); fpsStat.draws.push(performance.now() - d0);
         const inGame = !(ui && (ui.kind === 'start' || ui.kind === 'loading')) && document.getElementById('account')?.hidden !== false;   // not on the start, loading or account screens
         if (inGame) drawFps(); }
+      drawHurtVignette();
       drawCrosshair();
       requestAnimationFrame(frame);
     }
@@ -7215,7 +7287,9 @@
       const cx = (rx + 0.5) * TILE, feet = (ry + 1) * TILE - 4;
       ctx.save();
       const dying = ui && ui.kind === 'gameover';   // game time is frozen at death, so a blink would stay stuck half-transparent
-      if (!dying && gameTime - heroHurtStart < 300 && Math.floor((gameTime - heroHurtStart) / 60) % 2 === 0) ctx.globalAlpha = 0.35;   // hit blink
+      const sinceHurt = gameTime - heroHurtStart;
+      if (!dying && sinceHurt < HURT_FX.flashMs) ctx.filter = heroFlashRed ? HURT_FX.redFilter : HIT_FX.flashFilter;   // hit flash: pale, red for a big hit
+      else if (!dying && sinceHurt < HURT_FX.flashMs + 300 && Math.floor((sinceHurt - HURT_FX.flashMs) / 60) % 2 === 0) ctx.globalAlpha = 0.35;   // then the old blink
       ctx.imageSmoothingQuality = 'high';
       ctx.translate(cx, feet);
       if (ui && ui.kind === 'gameover' && ready(ART.heroFall)) {   // dying: fall frames over 2 s, then he stays down
