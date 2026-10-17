@@ -2353,14 +2353,22 @@
       { q: 'How do you see your stats?', a: ['Press H or click on my hero', 'Open the map (M)', 'Visit TradeCorp'], right: 0 },
     ];
     let tutN = saved.tutN ?? 0;                                   // progress inside the current task
-    // Pixi's news, newest first: her window shows the latest PIXI_SHOW. A new first entry brings back her pink '!' until she's talked to.
+    // Pixi's update history, newest first: her window shows PIXI_SHOW at a time (the newest when it opens); older ones are
+    // there if you scroll down (W/S, wheel, or picking the bottom row). The "Yay" button stays under them. A new first entry
+    // brings back her pink '!' until she's talked to.
     const PIXI_SHOW = 3;
     const PIXI_WAVE = { delay: 200, hold: 500 };   // ms after her window closes: wait, then pom-pom up (she waves goodbye)
     const pixiWave = { open: false, at: -1e9 };
     const PIXI_FEED = [
+      { id: 'streak-chip', title: 'New chip at TradeCorp!', icon: 'chipStreak', text: `TradeCorp put chip sockets in the office PCs, and the first chip is out! The Streak chip makes your next call pay extra, and if you're fast it keeps going up and up! It's 1,000\uE100, but sooo worth it!!` },
+      { id: 'specimen-vial', title: 'Glowing vials in the Labs?!', icon: 'specimenVial', text: `Someone found racks of glowing purple vials in the Quarantine Labs! They're rare and they sell for a LOT. Watch out for the Toxic Scavs though, they really don't like visitors…` },
+      { id: 'vesper', title: "Who's the hooded girl?", icon: 'vesperPortrait', text: `There's a mysterious girl in a hood by the south noodle bar. Her name's Vesper and she hunts monsters for money! She won't talk to newbies, so get a weapon first!` },
+      { id: 'labs', title: "MutaTech's secret labs!", icon: 'toxicScavPortrait', text: `A whole abandoned MutaTech lab compound past the slums! Quarantine signs everywhere and creepy people in hazmat suits… I'm NOT going there. You go!` },
       { id: 'runner', title: 'A runaway robot?!', icon: 'runnerPortrait', text: `Okay so, someone from MutaTech saw a ROBOT racing between the deep forest and the slums, like, back and forth, all day!! It throws parcels at people who get too close. Rumour says it carries a busted courier shell that MutaTech can fix. Be careful out there!` },
       { id: 'sparky', title: 'Meet Sparky!', icon: 'sparkyPortrait', text: `Did you meet Sparky yet?! She's SO cool!! She's the electrician by the east road, just past the noodle bar, and sparks literally come out of her fingers! She needs help getting The Grid's power back on. Go say hi!` },
       { id: 'credbank-vault', title: 'The CredBank is open!', icon: 'credBank', text: `OMG OMG OMG!! The CredBank is finally OPEN!! It has a super-safe Vault: unlock a bag socket, pop a bag in, and boom, extra storage! Storing stuff is just 1\uE100, taking it back is 2\uE100, and get this... EVERYTHING in the Vault stays even if you, like, totally die!! Go go go, it's right here in the city!` },
+      { id: 'wasteland', title: 'Robots in the wasteland!', icon: 'crawlerPortrait', text: `North of the old factory there's a huge industrial wasteland full of scrap piles. Except some of the piles are ROBOTS. Spider robots. Ew!!` },
+      { id: 'harvest', title: 'Free stuff on the ground!', icon: 'glowcapTruffle', text: `See those glowing piles around the world? Hold Space on them to collect copper, moss, crystals and even rare truffles! They grow back after a while!` },
     ];
     const PIXI_NEWS = { id: PIXI_FEED[0].id };   // the newest entry: her '!' until it's been heard
     // window: one row per news (icon, title, text), newest first, then the "Yay, thanks Pixi!" button
@@ -2601,6 +2609,12 @@
     const rogueOffers = (g = 'rogue') => g === 'rogue' && tut < TUT_DONE ? [] : GIVERS[g].list.filter(r => hero.level >= r.lvl && !rogueDone.has(r.id) && rqUnlocked(r)
       && !quests.some(q => q.kind === 'rogue' && q.id === r.id));
     const rogueReady = (g = 'rogue') => quests.filter(q => q.kind === 'rogue' && giverOf(q.id) === g && rqComplete(q));
+    let promoWasReady = null;   // was a promotion ready last check? (null: not checked yet since the game started / loaded: no sound)
+    function checkPromoReady() {   // a promotion at the Boss just became available: the quest-complete sound
+      const r = promoReadyAny();
+      if (promoWasReady === false && r) playSfx('questComplete');
+      promoWasReady = r;
+    }
     function checkRogueQuests() {   // a quest just got done: tell the hero once
       for (const q of quests) if (q.kind === 'rogue' && !q.told && rqComplete(q)) { q.told = true; playSfx('questComplete'); showHint(`Quest done: ${q.name}. Hand it in to ${GIVERS[giverOf(q.id)].name}.`); }
     }
@@ -2902,7 +2916,7 @@
         } }];
       }
       if (['metro', 'ripperdoc'].includes(ui.kind)) return [{ left: 'ok', right: '', act() { ui = null; } }];
-      if (ui.kind === 'pixi') return [...PIXI_FEED.slice(0, PIXI_SHOW).map((n, i) => ({ news: n, fresh: i === 0 && ui.fresh, left: n.title, right: '', act() { ui = null; } })),
+      if (ui.kind === 'pixi') return [...PIXI_FEED.map((n, i) => ({ news: n, fresh: i === 0 && ui.fresh, left: n.title, right: '', act() { ui = null; } })),
         { left: 'Yay, thanks Pixi!', right: '', short: true, act() { ui = null; } }];
       if (ui.kind === 'bank') {   // Vault tab: rows 0-3 = the sockets, 4+ = the Vault's storage slots (drawn as a grid: drawVault)
         if (WINDOW_TABS.bank[tabOf()].key !== 'vault') return [];
@@ -2976,7 +2990,7 @@
     }
     function newGame() {
       Object.assign(talents, newTalents()); ceoCalls = 0;
-      officeChips.fill(null); resetTracker(); clearLbBuffs(); Object.assign(stats, START_STATS); dealsDone = 0; foodBought = 0; promotion = 0; kills = 0; dripKills = 0; queenKills = 0; scavKills = 0; droneKills = 0; weaponBought = false; rogueDone.clear(); gridPowered.clear(); powering = null; runCheated = false; Object.assign(prices, startPrices());
+      officeChips.fill(null); resetTracker(); promoWasReady = null; clearLbBuffs(); Object.assign(stats, START_STATS); dealsDone = 0; foodBought = 0; promotion = 0; kills = 0; dripKills = 0; queenKills = 0; scavKills = 0; droneKills = 0; weaponBought = false; rogueDone.clear(); gridPowered.clear(); powering = null; runCheated = false; Object.assign(prices, startPrices());
       discovered.clear();
       quests.length = 0;
       areaName = '0:0'; spawnAllDrips();
@@ -3093,6 +3107,7 @@
     }
     function applySave(s) {
       resetTracker();   // the loaded quests appear without the entrance
+      promoWasReady = null;
       Object.assign(CAP_BASE, BASE_CAPS, s.manaCap !== undefined ? { mana: s.manaCap } : {});
       if (s.energyCap !== undefined) CAP_BASE.energy = s.energyCap;   // bought at TradeCorp
       fixTalentOrder(Object.assign(talents, newTalents(), s.talents || {})); ceoCalls = s.ceoCalls || 0;   // before the caps (talents change them)
@@ -3472,12 +3487,12 @@
     // Data Clerk → socket 2, Neurodiversity Manager → socket 3, AI Overseer → sockets 4 and 5. No chips exist yet (empty sockets).
     const OFFICE_SOCKET_PROMO = [0, 1, 2, 3, 3];   // promotions needed for each socket (0 = open from the start)
     const socketOpen = i => promotion >= OFFICE_SOCKET_PROMO[i];
-    // Streak chip: taking a customer call boosts one random call among the new deals by +streak$ for streakMs (real time: 2 s at +1, down to 1.3 s at +7).
+    // Streak chip: taking a customer call boosts one random call among the new deals by +streak$ for streakMs (real time: 2 s at +1, down to 1 s at +7).
     // Taking that boosted call in time boosts the next one by one more (+1, +2, +3 …); missing it starts over at +1.
     const CHIPS = { streak: { name: 'Streak chip', price: 1000, art: 'chipStreak', color: '#3ddc84',
       desc: 'A call boosts a random next call +1$ for 2 s. Catch it in time: the next boost grows by 1, but gets faster.' } };
-    const STREAK = { ms: 2000, minMs: 1300, scale: [0, 2, 4, 5, 7, 9, 11, 12] };   // scale: semitones up for the click at streak 0..7 (do re mi … do)
-    const streakMs = b => STREAK.ms - (STREAK.ms - STREAK.minMs) * (Math.min(b, 7) - 1) / 6;   // +1: 2 s … +7 and up: 1.3 s
+    const STREAK = { ms: 2000, minMs: 1000, sparkles: 7, sparkleMs: 700, scale: [0, 2, 4, 5, 7, 9, 11, 12] };   // scale: semitones up for the click at streak 0..7 (do re mi … do)
+    const streakMs = b => STREAK.ms - (STREAK.ms - STREAK.minMs) * (Math.min(b, 7) - 1) / 6;   // +1: 2 s … +7 and up: 1 s
     let streakNext = 1;   // the bonus the next boosted call gets (set when a call is taken)
     navSemis = () => streakNext > 1 && ui && ui.kind === 'work' && deals.some(d => boostLeft(d) > 0) ? STREAK.scale[Math.min(streakNext - 1, 7)] : null;   // the note of the last boosted click
     const boostLeft = d => d && d.boost && d.boostUntil ? Math.max(0, d.boostUntil - performance.now()) : 0;   // ms left on a boosted call
@@ -3653,7 +3668,7 @@
     function openWindow(kind, cursor = 0, back = null) {
       if (kind === 'rogue') tutEvent('talk');   // last task: come back and talk to her
       const fresh = kind === 'pixi' && pixiSeen !== PIXI_NEWS.id;
-      if (kind === 'pixi') { pixiSeen = PIXI_NEWS.id; cursor = Math.min(PIXI_SHOW, PIXI_FEED.length); }   // her '!' goes away once you've heard the news; cursor on "Yay"
+      if (kind === 'pixi') { pixiSeen = PIXI_NEWS.id; cursor = PIXI_FEED.length; }   // her '!' goes away once you've heard the news; cursor on "Yay"
       ui = { kind, cursor, msg: '', back, fresh };
       focus = 'window';   // keys go to the window (a click on an open panel gives them to the panel)
       if (((kind === 'shop' && fillView) || kind === 'scrap' || kind === 'bank') && !panels.inventory) panels.inventory = { cursor: 0, msg: '' };   // computers: the shop opens the inventory; the Scrap Dealer everywhere (sell from the bag)   // computers: the shop opens the inventory next to it
@@ -3690,6 +3705,10 @@
     }
     function moveCursor(d) {
       const n = rows().length;
+      if (ui && ui.kind === 'pixi') {   // her feed: the button stays under the visible news; up from it = the lowest visible one, no wrap-around
+        const N = PIXI_FEED.length, sc = ui.scroll || 0;
+        ui.cursor = ui.cursor === N && d < 0 ? Math.min(N - 1, sc + Math.min(PIXI_SHOW, N) - 1) : Math.max(0, Math.min(N, ui.cursor + d)); ui.msg = ''; return;
+      }
       if (ui && n) { ui.cursor = (ui.cursor + d + n) % n; ui.msg = ''; }
     }
 
@@ -3954,7 +3973,7 @@
     // to its place while the dimming fades; any key or click skips to the glide. The quest it replaces shrinks into the
     // Quests button as the new one glides in. When the shown quest ends, the next most recent flies back out of the button.
     const TASK_INTRO = { zoomMs: 400, holdMs: 1500, glideMs: 600, startScale: 6, midScale: 2, dim: 0.6, dimInMs: 200,
-                         shrinkMs: 500, flyOutMs: 450, btnScale: 0.15, maxW: 440 };
+                         shrinkMs: 500, flyOutMs: 450, btnScale: 0.15, maxW: 440, phoneScale: 0.68, phoneMaxW: 0.5 };   // phone: the box at 68% size (about 10 px text), at most half the screen wide
     let taskIntro = { key: null, start: -1e9 }, taskTracker = null;   // taskTracker: this frame's shown box (drawTutorial)
     let trackOrder = [], trackSeen = {}, trackInit = false, trackShrink = null, trackFly = null;   // keys, oldest first; trackSeen: key → its t1 (tutorial: a new task re-announces)
     function resetTracker() { trackOrder = []; trackSeen = {}; trackInit = false; trackShrink = trackFly = null; taskIntro = { key: null, start: -1e9 }; }
@@ -3982,7 +4001,8 @@
     }
     function layoutTrack(e, k, x, y) {   // size the box: t2 wraps at TASK_INTRO.maxW
       ctx.font = `600 ${Math.round(15 * k)}px ${MONO}`;
-      const lines = wrapText(e.t2, TASK_INTRO.maxW * k), w = Math.max(ctx.measureText(e.t1).width, ...lines.map(l => ctx.measureText(l).width)) + 24 * k;
+      const maxW = phoneView ? Math.min(TASK_INTRO.maxW, canvas.clientWidth * TASK_INTRO.phoneMaxW / TASK_INTRO.phoneScale) : TASK_INTRO.maxW;
+      const lines = wrapText(e.t2, maxW * k), w = Math.max(ctx.measureText(e.t1).width, ...lines.map(l => ctx.measureText(l).width)) + 24 * k;
       return { ...e, lines, k, x, y, w, h: (30 + 22 * lines.length) * k };
     }
     function drawTaskBox(b, x, y, sc, alpha = 1) {   // the tracker box with its top-left at (x, y), scaled by sc
@@ -4058,7 +4078,7 @@
       {   // quest tracker, just under the stats box (and the buff row)
         const P = plateBox(), n = heroStates().length, rowsN = n ? Math.ceil(n / statesPerRow(P)) : 0;
         const x = P.x || 12 * k, y = Math.max(12 * k, P.y + P.h + 10 * k) + rowsN * (STATE_ICON + STATE_GAP) * k;
-        updateTracker(k, x, y);
+        updateTracker(phoneView ? k * TASK_INTRO.phoneScale : k, x, y);   // phones: a smaller box (12 px text)
         const b = taskTracker, now = performance.now();
         if (b && !(taskIntro.key === b.key && now < introEnd()) && !(trackFly && trackFly.key === b.key)) drawTaskBox(b, x, y, 1);
         if (trackShrink && now < trackShrink.start) drawTaskBox(trackShrink.box, trackShrink.box.x, trackShrink.box.y, 1);   // waits for the new one's glide
@@ -6161,7 +6181,7 @@
       gameTime += dt;   // game clock pauses behind windows
       lastFrame = now;
       syncChef();
-      if (dt) { checkDeliveries(); checkRogueQuests(); for (let i = piles.length - 1; i >= 0; i--) if (gameTime >= piles[i].until) piles.splice(i, 1);
+      if (dt) { checkDeliveries(); checkRogueQuests(); checkPromoReady(); for (let i = piles.length - 1; i >= 0; i--) if (gameTime >= piles[i].until) piles.splice(i, 1);
         updateDrips(); updateQueenFx(); updateHarvest(); updatePowering(); updateProjectiles(dt); updateHeroDot(); updatePoison(); updateHeroMana(); updateHeroHealth(); updateHitParts(dt); updateSwing(); }
       updateHeroMove(dt);   // free movement (game time: stops behind windows)
       updateMouseAim();
@@ -7755,6 +7775,23 @@
       ctx.fillText(glyph, x + size / 2, y + size / 2 + 2);
     }
     function rareEdge(x, y, size) { const i = size * 0.09; ctx.save(); ctx.globalAlpha = 0.85; glowBox(x + i, y + i, size - 2 * i, size - 2 * i, RARITY.rare, 6, 3); ctx.restore(); }
+    // a boosted call: a few small amber sparkles twinkle around the row's edge, each at a new spot every time it lights up
+    function drawStreakSparkles(x, y, w, h) {
+      const now = performance.now(), per = 2 * (w + h), hash = n => { const v = Math.sin(n * 127.1) * 43758.5453; return v - Math.floor(v); };
+      ctx.save(); ctx.globalCompositeOperation = 'lighter';
+      for (let i = 0; i < STREAK.sparkles; i++) {
+        const t = now / STREAK.sparkleMs + i / STREAK.sparkles, cyc = Math.floor(t), u = t - cyc, a = Math.sin(u * Math.PI);   // fades in and out
+        let p = hash(cyc * 13 + i * 7.3) * per, px, py;   // a spot on the row's outline (a little in or out)
+        if (p < w) { px = x + p; py = y; } else if ((p -= w) < h) { px = x + w; py = y + p; } else if ((p -= h) < w) { px = x + w - p; py = y + h; } else { px = x; py = y + h - (p - w); }
+        px += (hash(cyc + i * 3.1) - 0.5) * 10; py += (hash(cyc * 2 + i) - 0.5) * 10;
+        const r = (7 + 6 * hash(cyc * 5 + i)) * (0.4 + 0.6 * a);
+        ctx.globalAlpha = Math.min(1, 1.2 * a); ctx.fillStyle = i % 2 ? '#ffb000' : '#ffd36b';
+        ctx.beginPath();   // a 4-point star
+        for (let k = 0; k < 8; k++) { const ang = k * Math.PI / 4, rr2 = k % 2 ? r * 0.3 : r; ctx.lineTo(px + Math.cos(ang) * rr2, py + Math.sin(ang) * rr2); }
+        ctx.closePath(); ctx.fill();
+      }
+      ctx.restore();
+    }
     function dealCoinAt(d) {   // the coin of a call's "+N$" in its Deals row (layout as in drawDealRow)
       const r = rowRects.find(b => !b.panel && b.tab === undefined && ui && b.i === ui.cursor); if (!r) return null;
       ctx.save(); ctx.font = '600 24px ' + MONO; const tw = ctx.measureText(`+${d.money + (boostLeft(d) ? d.boost : 0)}`).width; ctx.restore();
@@ -7786,7 +7823,7 @@
       else if (quests.length >= MAX_QUESTS) { ctx.fillStyle = '#e5484d'; ctx.fillText(`${MAX_QUESTS}/${MAX_QUESTS}`, priceX, cy); }
       else { ctx.fillStyle = '#00e5ff'; ctx.fillText('accept', priceX, cy); }
       if (dealMult() < 1 && d.type === 'call') { ctx.font = '600 16px ' + MONO; ctx.fillStyle = '#9dff5c'; ctx.fillText(`${Math.round((1 - dealMult()) * 100)}% discount`, priceX, cy + 30); }   // sales say their discount in their text
-      if (bl) { ctx.fillStyle = '#3ddc84'; ctx.fillRect(x + 4, y + h - 5, (w - 8) * bl / (d.boostMs || STREAK.ms), 3); }   // the boost's time left, shrinking along the bottom
+      if (bl) { ctx.fillStyle = '#3ddc84'; ctx.fillRect(x + 4, y + h - 5, (w - 8) * bl / (d.boostMs || STREAK.ms), 3); drawStreakSparkles(x, y, w, h); }   // the boost's time left, shrinking along the bottom
     }
     // My Office / Boss: a picture on the left, a small scrolling list on the right
     function drawSideTab(list, x, y, w, h) {
@@ -8037,7 +8074,7 @@
       const textLines = wtext ? wrapText(wtext, pw - 80) : [];
       const msgLines = ui.msg ? wrapText(ui.msg, pw - 80) : [];
       const tabs = WINDOW_TABS[ui.kind], shop = !!tabs, tabsH = tabs ? 70 : 0;   // tabbed windows: row of tabs under the title, fixed height
-      const listN = ui.kind === 'shop' ? Math.max(...SHOP_TABS.map(t => [...SHOP_ITEMS, ...BAG_ITEMS()].filter(it => it.tab === t.key).length)) : ui.kind === 'work' ? 3 : ui.kind === 'leaderboard' ? LB_TOP + 2 : ui.kind === 'cheat' ? 11 : list.length;
+      const listN = ui.kind === 'pixi' ? Math.min(PIXI_SHOW, PIXI_FEED.length) + 1 : ui.kind === 'shop' ? Math.max(...SHOP_TABS.map(t => [...SHOP_ITEMS, ...BAG_ITEMS()].filter(it => it.tab === t.key).length)) : ui.kind === 'work' ? 3 : ui.kind === 'leaderboard' ? LB_TOP + 2 : ui.kind === 'cheat' ? 11 : list.length;
       const textH = (textLines.length ? textLines.length * 34 + 24 : 0) + tabsH, gaps = list.filter(r => r.gapBefore).length * 24 - list.filter(r => r.short).length * (rowH - 72);   // short rows (Pixi's button) are 72 tall
       const ph = hero || inv ? 7 * TILE : ui.kind === 'bank' ? Math.min(canvas.height - 20, 11 * TILE)
         : Math.min(canvas.height - 20, Math.max((ui.kind === 'rest' ? 4.5 : 6) * TILE, 110 + textH + listN * rowH + gaps + Math.max(1, msgLines.length) * 32 + 100));
@@ -8114,12 +8151,26 @@
         if (ui.cursor + ahead >= ui.scroll + fitN) ui.scroll = Math.min(list.length - fitN, ui.cursor + ahead - fitN + 1);
         const bx = px + pw - 18, bh = fitN * rowH - 8, th = bh * fitN / list.length, ty = top + bh * ui.scroll / list.length;   // scroll bar
         ctx.fillStyle = 'rgba(255, 255, 255, 0.12)'; ctx.fillRect(bx, top, 5, bh); ctx.fillStyle = 'rgba(255, 255, 255, 0.55)'; ctx.fillRect(bx, ty, 5, th);
-      } else if (ui.kind !== 'work') ui.scroll = 0;
+      } else if (ui.kind !== 'work' && ui.kind !== 'pixi') ui.scroll = 0;
+      let pixiTop = null;   // Pixi: the visible window of her feed (PIXI_SHOW rows, scrolled), her button right under it
+      if (ui.kind === 'pixi') {
+        const N = PIXI_FEED.length, vis = Math.min(PIXI_SHOW, N), ahead = 0;
+        ui.scroll = Math.max(0, Math.min(N - vis, ui.scroll || 0));
+        if (ui.cursor < N) {   // a news row selected: keep it in view
+          if (ui.cursor - ahead < ui.scroll) ui.scroll = Math.max(0, ui.cursor - ahead);
+          if (ui.cursor + ahead >= ui.scroll + vis && ui.cursor + ahead < N) ui.scroll = Math.min(N - vis, ui.cursor + ahead - vis + 1);
+          if (ui.cursor >= ui.scroll + vis) ui.scroll = ui.cursor - vis + 1;
+        }
+        pixiTop = { first: ui.scroll, vis, N };
+        if (N > vis) { const bx = px + pw - 18, bh = vis * rowH - 8, th = bh * vis / N, ty = top + bh * ui.scroll / N;   // scroll bar
+          ctx.fillStyle = 'rgba(255, 255, 255, 0.12)'; ctx.fillRect(bx, top, 5, bh); ctx.fillStyle = 'rgba(255, 105, 214, 0.75)'; ctx.fillRect(bx, ty, 5, th); }
+      }
       const first = scrolls ? ui.scroll : 0;
       (ui.kind === 'bank' || (list.length && list[0].side) ? [] : list).forEach((r, i) => {
         if (r.gapBefore) gapY += 24;
         if (scrolls && (i < first || i >= first + fitN)) return;
-        const y = top + (i - first) * rowH + gapY, sel = !info && i === ui.cursor;
+        if (pixiTop && i < pixiTop.N && (i < pixiTop.first || i >= pixiTop.first + pixiTop.vis)) return;   // a news row scrolled out of view
+        const y = pixiTop ? top + (i < pixiTop.N ? i - pixiTop.first : pixiTop.vis) * rowH : top + (i - first) * rowH + gapY, sel = !info && i === ui.cursor;
         const rh = r.short ? 72 : rowH;   // a short row is the last one, so the rows below don't move
         rowRects.push({ x: px + 24, y, w: pw - 48, h: rh - 8, i });
         if (sel) { ctx.fillStyle = 'rgba(255, 220, 0, 0.12)'; ctx.fillRect(px + 24, y, pw - 48, rh - 8); }
@@ -9198,7 +9249,11 @@
     canvas.addEventListener('wheel', e => {   // mouse wheel: move through a long window list (it scrolls with the cursor); full map: zoom
       if (ui && ui.kind === 'map' && !naming()) { e.preventDefault(); const { cx, cy } = canvasPt(e); mapZoomAt(cx, cy, MAPV.span * Math.exp(e.deltaY * 0.0015)); return; }
       if (!ui || naming() || ['techversity', 'map', 'start', 'loading', 'gameover', 'bank'].includes(ui.kind) || (WINDOW_TABS[ui.kind] && ui.kind === 'work')) return;
-      e.preventDefault(); moveCursor(e.deltaY > 0 ? 1 : -1);
+      e.preventDefault();
+      if (ui.kind === 'pixi') { const N = PIXI_FEED.length, vis = Math.min(PIXI_SHOW, N);   // her feed: the wheel scrolls the news, the cursor stays in view
+        ui.scroll = Math.max(0, Math.min(N - vis, (ui.scroll || 0) + (e.deltaY > 0 ? 1 : -1)));
+        if (ui.cursor < N) ui.cursor = Math.max(ui.scroll, Math.min(ui.scroll + vis - 1, ui.cursor)); return; }
+      moveCursor(e.deltaY > 0 ? 1 : -1);
     }, { passive: false });   // right-click is the game's item menu, not the browser's
     // touch: a tap on the highlighted building / NPC opens it, on an enemy in reach attacks, on another enemy targets it,
     // on a lootable body loots it (all the same as the A button)
