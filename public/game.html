@@ -75,6 +75,9 @@
   .t-spell.s1 { right: 58%; bottom: 0; } .t-spell.s2 { right: 52%; bottom: 40%; } .t-spell.s3 { right: 11%; bottom: 58%; }
   .t-spell.t-shoot { right: -8%; bottom: 84%; background: rgba(179, 107, 255, 0.22); border-color: #b36bff; display: none; }   /* ranged weapon: only with one equipped */
   .t-spell.t-shoot.filled { display: block; }
+  .t-spell.t-tele { right: 40%; bottom: 84%; background: rgba(0, 229, 255, 0.18); border-color: #00e5ff; display: none; }   /* Tele-pad: only while carried */
+  .t-spell.t-tele.filled { display: block; }
+  .t-spell.t-tele .cd { position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; font-weight: 700; color: #fff; text-shadow: 0 0 3px #000, 0 0 3px #000; pointer-events: none; }
   .touch button:active, .touch button.on { opacity: 1; filter: brightness(1.4); }
   .t-menu { position: absolute; left: 1.5%; top: 2%; display: flex; gap: clamp(4px, var(--u), 8px); }
   .t-menu button { width: clamp(36px, calc(var(--u) * 13), 56px); aspect-ratio: 1; display: grid; place-items: center; align-content: center; gap: 0;
@@ -303,6 +306,7 @@
       <button type="button" class="t-spell s3" data-code="Digit3" aria-label="Spell 3">3</button>
       <button type="button" class="t-act" data-code="Space" aria-label="Action">A</button>
       <button type="button" class="t-spell t-shoot" data-code="KeyE" aria-label="Shoot">E</button>
+      <button type="button" class="t-spell t-tele" data-code="KeyT" aria-label="Tele-pad">T</button>
     </div>
   </div>
   <!-- account screen at the start: create an account (name, email, password) or log in. Accounts live in Supabase;
@@ -387,6 +391,7 @@
 
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.117.1/dist/umd/supabase.js"></script>
 <script>
+  const GREASER_DRIPS = 2;   // zone Drips in the greaser (the Pump Queen's zone)
   const COLS = 47, ROWS = 29, TILE = 80;   // every zone is 47 x 29 tiles (was 21 x 13: older content sits in the top-left 21 x 13)
   const OLD_COLS = 21, OLD_ROWS = 13;       // the old zone size (layouts made for it) and the camera's view on computers
   const VIEW_W = OLD_COLS * TILE, VIEW_H = OLD_ROWS * TILE;
@@ -723,6 +728,11 @@
     { name: 'Filter Chip', class: 'upgrade', noPool: true, stack: 4, gain: {}, value: 300, rarity: 'rare', art: 'filterChip', desc: 'A MutaTech spore filter built around an Infected Core. Its mesh burns spores on contact. It fits the empty socket of a Mothersword.' },
     { name: 'Specimen Tag', class: 'questItem', noPool: true, stack: 1, gain: {}, value: 0, rarity: 'mythical', art: 'specimenTag', startsQuest: 'theTag', desc: 'An electronic MutaTech specimen tag, torn off the crate inside Specimen G-0. Its cracked screen still glows. Someone will want this back. Open its menu to start a quest.' },   // Specimen G-0: starts Chain 3
     // Chain 3 keycards (keep: can't be thrown away, stored or sold). Having one once opens its door for good (DOORS).
+    // Tele-pad (Vesper, accepting The Queen): hold-cast TELEPAD.castMs (moving cancels) → the city's TelePort (until it exists: in front of
+    // HomeDome); recharges TELEPAD.rechargeMs of game time. keep: no throwing away / selling / scrapping; keepOnDeath: never drops in the death pile.
+    // It CAN go into the CredBank Vault. Use: its menu, T, or the phone's tele-pad button.
+    { name: 'Tele-pad', class: 'gadget', keep: true, keepOnDeath: true, noPool: true, stack: 1, gain: {}, value: 0, rarity: 'rare', art: 'telePad',
+      desc: 'A palm-sized teleport beacon from Vesper. Hold it for 3 seconds without moving and it pulls you back to the city\'s TelePort. Needs 20 minutes to recharge.' },
     { name: 'Keycard', class: 'questItem', keep: true, noPool: true, stack: 1, gain: {}, value: 0, rarity: 'rare', art: 'keycard', desc: 'A MutaTech lab access card. It opens the decontamination airlock into the Quarantine Labs (slums, -7:3).' },
     { name: 'Special Keycard', class: 'questItem', keep: true, noPool: true, stack: 1, gain: {}, value: 0, rarity: 'legendary', art: 'specialKeycard', desc: 'High-clearance MutaTech access, taken off a dead guard. A live spore pulses behind its cracked window. It opens the airlock into the Breach (-9:8).' },
     { name: 'Loader Core', class: 'resource', stack: 16, gain: {}, value: 110, rarity: 'mythical', art: 'loaderCore', desc: 'The still-warm power core of an Overgrown Loader.' },
@@ -1084,6 +1094,10 @@
       return { x: x0 + 1 + Math.floor(w / 2) - (w % 2 ? 0 : 1), y: y1 + 1, w, h, color: d.color || '#3a4257', art: d.art, artW: d.artW,
                label: d.label, opens: d.opens, open: d.open, flip, front: k === 'work' || undefined };
     });
+    // the TelePort (21 Oct): two pylons on tiles (15, 16) and (17, 16), the Tele-pad's landing pad between them on (16, 16)
+    // (walkable from every side; its glowing ring is drawn on the ground, see drawTelePad). The right pylon is the mirrored picture.
+    AREAS['0:0'].walls.push({ x: 16, y: 17, w: 1, h: 1, color: '#00e5ff', label: 'TelePort', art: 'telePortPylon', artH: 2.1, telePort: true },
+                            { x: 18, y: 17, w: 1, h: 1, color: '#00e5ff', label: 'TelePort', art: 'telePortPylon', artH: 2.1, telePort: true, flip: true });
     // the Rogue: quest giver (the tutorial), next to the ATB-Market; turns toward the hero when he is within 2 tiles
     AREAS['0:0'].walls.push({ x: 18, y: 13, w: 1, h: 1, color: '#2a1f3d', label: 'Rogue', opens: 'rogue', art: 'npcRogue', artH: 1.75, npc: true, facesRight: true });
     // Pixi: the city's announcer, on the pavement under TradeCorp, just right of its graffiti (tile 30, 12). Idle picture, the cheer
@@ -1595,17 +1609,20 @@
       }
     }
     // Drips in the slums: 4 up to 2 zones from the city, then +2 for every 2 zones further (by the farther map coordinate);
-    // the greaser district has 8. They replace the Drips placed before, have no twins, and never start behind a tall building.
+    // the greaser district has GREASER_DRIPS (8 are still rolled so the rest of the world stays the same; only the first ones are kept).
+    // They replace the Drips placed before, have no twins, and never start behind a tall building.
     for (const id of [...slums, ...zonesOf('greaser')]) {
       const A = AREAS[id], [a, b] = id.split(':').map(Number), ring = Math.max(Math.abs(a), Math.abs(b));
       const n = ZONE_LIST[id] === 'greaser' ? 8 : ring <= 2 ? 4 : 4 + 2 * Math.ceil((ring - 2) / 2);
       A.drips = 0; A.foes = A.foes.filter(f => f.kind !== 'drip');
+      const before = (A.extraFoes || []).length;
       for (let i = 0, t = 0; i < n && t < 3000; t++) {
         const x = 2 + Math.floor(rnd() * (COLS - 4)), y = 2 + Math.floor(rnd() * (ROWS - 4));
         if (!tileOk(A, x, y) || behindTall(id, x, y) || !farFromFoes(A, [[x, y]], -1)) continue;
         if ((A.extraFoes || []).some(f => f.kind === 'queen' && Math.max(Math.abs(f.spawn.x - 1 - x), Math.abs(f.spawn.y - 1 - y)) < 10)) continue;   // her own Drips are enough near the Pump Queen
         addFoe(A, 'drip', x, y); i++;
       }
+      if (ZONE_LIST[id] === 'greaser') A.extraFoes.splice(before + GREASER_DRIPS);   // 21 Oct: 8 → 2 (the Queen's own Drips are enough)
     }
     // factory entrance: 2 Drips and 1 Mav-1K drone
     for (const id of zonesOf('factoryIn')) { foeSomewhere(id, 'drip'); foeSomewhere(id, 'drip'); foeSomewhere(id, 'drone'); }
@@ -1866,6 +1883,7 @@
   }
   const footCX = w => { const f = foot(w); return (f.x0 + f.x1 + 1) / 2; };   // footprint centre, in tiles
   const START = { x: 21, y: 11 };   // 0-based: just below HomeDome
+  const TELEPAD = { castMs: 3000, rechargeMs: 20 * 60000, drift: 0.25 };   // Tele-pad: cast, recharge (game time), how far he may drift (m) before it cancels
 
   // ---- enemies ----------------------------------------------------------------
   // Drip: half human, half oil slime. Every slums zone has 1 (2 where a map coordinate is 3 or more).
@@ -1980,20 +1998,20 @@
   // her body. Level 2 (the zone's), but her own attacks hit like a level `dmgLevel` enemy (bossDamage).
   // Stage 1 (the pump, 100-50% HP): walks 1 tile per 1.5 s. Hose Slap next to the hero (0.45 s wind-up, every 1.5 s).
   //   Fuel Spray: every 6 s a cone at the hero (0.6 s warning), slows him 40% for 3 s + 3 ticks of damage.
-  //   Pumps out 2 level-2 Drips every 17 s (first 7 s after waking; they start with 1 mana), at most 4 of hers alive.
+  //   Pumps out 1 level-2 Drip every 17 s (costs her 1 HP) (first 7 s after waking; they start with 1 mana), at most 2 of hers alive.
   // At 50% HP: Ignition (1.5 s scream): she absorbs every living Drip within `absorbR` tiles (+5% max HP each), the pump shell
-  //   bursts off. Stage 2: 1 tile per second, takes 10% less damage, Hose Slap ×0.18, 1 Burning Drip every 12 s (first 5 s in; at most 3;
+  //   bursts off. Stage 2: 1 tile per second, takes 10% less damage, Hose Slap ×0.18, 1 Burning Drip every 12 s (first 5 s in; at most 2; costs 1 HP;
   //   faster, leaves a burning trail). Pump & Ignite every 15 s (first 6 s in): 4-5 oil puddles (one under the hero), lit 1.5 s after they
   //   land: ×0.3 to the hero if he stands in one; Drips in one start burning.
-  // Gives up when the hero is `leash`+ tiles from her home: walks home healing 100% of max HP per 30 s, back to stage 1 when full.
+  // Gives up when the hero is `leash`+ m from her home and walks home. Out of a fight she heals idleHealPerMin (5%) of max HP a minute; full: back to stage 1.
   // Her Drips give no exp or loot. Comes back 10 minutes after she dies.
-  const QUEEN = { name: 'Pump Queen', size: 2, aggro: 5, leash: 15, dmgLevel: 4, dmgScale: 0.8, stepMs: [1000, 1000 / 1.5], headY: 2.9,
+  const QUEEN = { name: 'Pump Queen', size: 2, aggro: 5, leash: 20, dmgLevel: 4, dmgScale: 0.8, stepMs: [1000, 1000 / 1.5], headY: 2.9,
                   slapWindupMs: 450, slapEveryMs: 1500, slapMult: [0.15, 0.18],
                   sprayEveryMs: 6000, sprayWarnMs: 600, sprayMs: 700, sprayRange: 4.5, sprayHalfAngle: 0.45, sprayMult: 0.05, sprayTicks: 3, slow: 0.4, slowMs: 3000,
-                  summonEveryMs: [17000, 12000], summonN: [2, 1], summonMax: [4, 3], firstSummonMs: 7000, summonLevel: 2,
+                  summonEveryMs: [17000, 12000], summonN: [1, 1], summonMax: [2, 2], summonCost: 1, firstSummonMs: 7000, summonLevel: 2,
                   roarMs: 1500, absorbR: 8, absorbHeal: 0.05, stage2Armor: 0.9,
                   igniteEveryMs: 15000, firstIgniteMs: 6000, igniteThrowMs: 600, igniteFuseMs: 1500, igniteMult: 0.3, flameMs: 1200, puddles: [4, 5], puddleR: 0.6,
-                  burnStepMs: 1000 / 2.5, trailMs: 2000, trailStep: 0.6, trailR: 0.4, fireMult: 0.06, homeHealPerMin: 2,
+                  burnStepMs: 1000 / 2.5, trailMs: 2000, trailStep: 0.6, trailR: 0.4, fireMult: 0.06, idleHealPerMin: 0.05,
                   respawnMs: [600000, 600000], lootMs: 60000, fadeMs: 3000, exp: 60,
                   loot: { money: [80, 120], tar: [5, 10], queenRare: true, queenTarShare: 0.75 } };   // + one spell: Magic tar 75% / Magic Nozzle 25%
   // Scrap Crawler (industrial wasteland + pit): a small spider-like salvage bot, in packs of 3, hidden in scrap piles (can't be
@@ -2044,13 +2062,13 @@
   //   firstWaveMs after the overcharge): his core glows for waveChargeMs, then a ring runs out waveSpeed m/s up to waveR m; it hits the
   //   hero once as it passes him: ×waveMult up close, smoothly down to 1 at waveR m. Can't be dodged (only outrun).
   // Fairness: no hook while the wave charges or within hookAfterWaveMs after one; no wave within waveAfterPullMs after a pull.
-  // Not fighting: heals idleHealPerMin of his max HP per minute (stays in stage 2 below 50%). Gives up `leash`+ m from home.
+  // Not fighting: heals idleHealPerMin (10%) of his max HP per minute; full: back to stage 1. Gives up `leash`+ m from home.
   // Loot: Hacked Core + money + Scrap / Copper Wire; the Winch Hook hookChance per kill, certain on the hookPity-th kill without it.
-  const HLOADER = { name: 'Hacked Loader', size: 2, level: 5, dmgLevel: 6, aggro: 6, leash: 18, stepMs: [1000 / 1.5, 1000 / 2], headY: 3.0, exp: 150,
+  const HLOADER = { name: 'Hacked Loader', size: 2, level: 5, dmgLevel: 6, aggro: 6, leash: 20, stepMs: [1000 / 1.5, 1000 / 2], headY: 3.0, exp: 150,
                     smashGap: 1.1, smashWindupMs: 600, pullSmashMs: 900, smashMs: 1300, smashEveryMs: 2400, smashMult: 0.2, slamR: 2.5,
                     hookEveryMs: 7000, firstHookMs: 2000, hookMin: 2.5, hookRange: 7, hookWarnMs: 700, hookSpeed: 20, hookR: 0.45, hookMult: 0.04, pullSpeed: 9,
                     overMs: 1800, stage2Armor: 0.9, waveEveryMs: 8000, firstWaveMs: 3000, waveChargeMs: 1000, waveSpeed: 9, waveR: 10, waveMult: 0.23,
-                    hookAfterWaveMs: 1000, waveAfterPullMs: 1500, idleHealPerMin: 0.02,
+                    hookAfterWaveMs: 1000, waveAfterPullMs: 1500, idleHealPerMin: 0.10,
                     respawnMs: [600000, 600000], lootMs: 60000, fadeMs: 3000,
                     loot: { money: [100, 160], scrap: [2, 4], copper: [1, 3], hackedCore: true, hookChance: 0.25, hookPity: 4 } };
   // Specimen G-0 (the Overgrowth boss, -6:-6, plan: claude/specimen-g0-plan.md): a huge mutant plant grown around a cracked MutaTech
@@ -2063,7 +2081,7 @@
   //   strip for lungeWarnMs, a lungeLen m dash, then a quick lash), Heartbeat every heartEveryMs: a heartMs pulse; each hero hit
   //   during it cuts the heal by a third (heartHits hits = no heal), else heals heartHeal of max HP. 1 Sporeling every
   //   summonEveryMs from the arena's edge (at most summonMax of his; no exp / loot).
-  // Out of a fight: heals idleHealPerMin per minute, keeps stage 2. Loot: Specimen Tag (while the hero has none) + money + Spore
+  // Out of a fight: heals idleHealPerMin (15%) per minute; full (at home): back to stage 1. Loot: Specimen Tag (while the hero has none) + money + Spore
   // Sacs + Glowcap Truffle / Neon Moss.
   const G0 = { name: 'Specimen G-0', size: 2, level: 7, dmgLevel: 7, aggro: 8, leash: 20, stepMs: [1e9, 1000 / 1.5], headY: 3.6, exp: 250,
                lashGap: 1.6, lashReach: 2.2, lashCone: 180, lashWindupMs: 700, lashMs: 1300, lashEveryMs: 2600, lashMult: 0.28, knock: 1.5,
@@ -2072,13 +2090,13 @@
                uprootMs: 2000,
                lungeEveryMs: 8000, firstLungeMs: 3000, lungeWarnMs: 600, lungeLen: 3, lungeSpeed: 10, lungeW: 1.6, lungeMult: 0.2, lungeRange: [2, 7], lungeLashMs: 350,
                heartEveryMs: 12000, firstHeartMs: 6000, heartMs: 1500, heartHeal: 0.08, heartHits: 3,
-               summonEveryMs: 15000, firstSummonMs: 4000, summonMax: 3, summonDist: [5.5, 7.5], idleHealPerMin: 0.02,
+               summonEveryMs: 15000, firstSummonMs: 4000, summonMax: 3, summonDist: [5.5, 7.5], idleHealPerMin: 0.15,
                respawnMs: [600000, 600000], lootMs: 60000, fadeMs: 3000,
                loot: { money: [180, 260], sporeSacs: [3, 5], forest: [1, 2], tag: true, pistolChance: 0.2, pistolPity: 5 } };
   const ENEMY = { drip: DRIP, scav: SCAV, toxicScav: TOXIC_SCAV, drone: DRONE, spore: SPORE, loader: LOADER, queen: QUEEN, crawler: CRAWLER, runner: RUNNER, hloader: HLOADER, g0: G0 };
   // enemy max health = round(the hero's max HP at the enemy's level × the enemy's hpMult). Every new enemy gets its own hpMult.
   // Drip ×1: 10 / 12 / 14 / 17 / 21 at lvl 1-5 · Mav-1K ×0.8: 8 / 10 / 11 / 14 / 17 · Toxic Scav ×1.8: 18 / 22 / 25 / 31 / 38
-  CRAWLER.hpMult = 0.6; RUNNER.hpMult = 1.4; SCAV.hpMult = 1.2; DRIP.hpMult = 1; DRONE.hpMult = 0.8; TOXIC_SCAV.hpMult = 1.8; SPORE.hpMult = 0.7; LOADER.hpMult = 3; QUEEN.hpMult = 122 / 12;   // Pump Queen: 122 HP at level 2
+  CRAWLER.hpMult = 0.6; RUNNER.hpMult = 1.4; SCAV.hpMult = 1.2; DRIP.hpMult = 1; DRONE.hpMult = 0.8; TOXIC_SCAV.hpMult = 1.8; SPORE.hpMult = 0.7; LOADER.hpMult = 3; QUEEN.hpMult = 116 / 12;   // Pump Queen: 116 HP at level 2
   G0.hpMult = 650 / 32;   // Specimen G-0: 650 HP at his level 7
   HLOADER.hpMult = 390 / 21;   // Hacked Loader: 390 HP at his level 5 (set in makeDrip)
   const enemyMaxHp = (kind, zoneId) => Math.max(1, Math.round(heroHealthCap(10, zoneLevel(zoneId)) * (ENEMY[kind].hpMult ?? 1)));
@@ -2183,7 +2201,8 @@
     treeForestA: 'art/world/trees/treeForestA.webp', treeForestB: 'art/world/trees/treeForestB.webp', treeDeepA: 'art/world/trees/treeDeepA.webp',
     treeDeepB: 'art/world/trees/treeDeepB.webp', treeOvergrowth: 'art/world/trees/treeOvergrowth.webp',
     passageForest: 'art/world/passages/passageForest.png', passageLake: 'art/world/passages/passageLake.png', passageFactory: 'art/world/passages/passageFactory.png',   // passage pictures (straight right edge on the map edge)   // tar puddle flowing in from the right edge (mirrored for the left edge)
-    homedome:     'art/buildings/homeDome.png',   // HomeDome apartments, front view (faces down)
+    homedome:     'art/buildings/homeDome.png',
+    telePortPylon: 'art/buildings/telePortPylon.webp',   // TelePort pylon (city), faces right; mirrored for the right one   // HomeDome apartments, front view (faces down)
     noodleBar:    'art/buildings/noodleBar.png',   // CaaCaanTeng noodle bar, front view, closed
     charging:     'art/buildings/chargingStation.png',   // hover-car charging station, front view
     food: 'art/items/food/cheapNoodles.png',   // noodle bowl item icon
@@ -2204,7 +2223,7 @@
     sporelingAttack: 'art/enemies/sporeling/sporelingAttack.webp', sporelingHurt: 'art/enemies/sporeling/sporelingHurt.webp', sporelingPortrait: 'art/enemies/sporeling/sporelingPortrait.webp', sporeCloud: 'art/enemies/sporeling/sporelingCloud.webp',
     loaderIdle: 'art/enemies/overgrownLoader/overgrownLoaderIdle.webp', loaderWalk: 'art/enemies/overgrownLoader/overgrownLoaderWalk.webp', loaderWhip: 'art/enemies/overgrownLoader/overgrownLoaderWhip.webp', loaderSlam: 'art/enemies/overgrownLoader/overgrownLoaderSlam.webp',
     hloaderIdle: 'art/enemies/hackedLoader/hackedLoaderIdle.webp', hloaderIdle2: 'art/enemies/hackedLoader/hackedLoaderIdle2.webp', hloaderWalk: 'art/enemies/hackedLoader/hackedLoaderWalk.webp', hloaderHook: 'art/enemies/hackedLoader/hackedLoaderHook.webp', hloaderSmash: 'art/enemies/hackedLoader/hackedLoaderSmash.webp', hloaderWalk2: 'art/enemies/hackedLoader/hackedLoaderWalk2.webp', hloaderHook2: 'art/enemies/hackedLoader/hackedLoaderHook2.webp', hloaderSmash2: 'art/enemies/hackedLoader/hackedLoaderSmash2.webp',
-    hloaderOver: 'art/enemies/hackedLoader/hackedLoaderOvercharge.webp', hloaderHurt: 'art/enemies/hackedLoader/hackedLoaderHurt.webp', hloaderPortrait: 'art/enemies/hackedLoader/hackedLoaderPortrait.webp', hloaderHookHead: 'art/enemies/hackedLoader/hackedLoaderHookHead.webp', winchHook: 'art/items/weapons/winchHook.webp', sporePistol: 'art/items/weapons/sporePistol.webp', motherMk2: 'art/items/weapons/motherMk2.webp', filterChip: 'art/items/loot/filterChip.webp', keycard: 'art/items/loot/keycard.webp', specialKeycard: 'art/items/loot/specialKeycard.webp',
+    hloaderOver: 'art/enemies/hackedLoader/hackedLoaderOvercharge.webp', hloaderHurt: 'art/enemies/hackedLoader/hackedLoaderHurt.webp', hloaderPortrait: 'art/enemies/hackedLoader/hackedLoaderPortrait.webp', hloaderHookHead: 'art/enemies/hackedLoader/hackedLoaderHookHead.webp', winchHook: 'art/items/weapons/winchHook.webp', sporePistol: 'art/items/weapons/sporePistol.webp', motherMk2: 'art/items/weapons/motherMk2.webp', filterChip: 'art/items/loot/filterChip.webp', keycard: 'art/items/loot/keycard.webp', telePad: 'art/items/loot/telePad.webp', specialKeycard: 'art/items/loot/specialKeycard.webp',
     heroMk2Side: 'art/hero/heroMk2Side.webp', heroMk2Down: 'art/hero/heroMk2Down.webp', heroMk2Up: 'art/hero/heroMk2Up.webp',   // Mothersword MK-II attacks slotOutlines: 'art/ui/slotOutlines.webp',
     heroShootSide: 'art/hero/heroShootSide.webp', heroShootDown: 'art/hero/heroShootDown.webp', heroShootUp: 'art/hero/heroShootUp.webp',   // Spore Pistol shots
     heroWinchSide: 'art/hero/heroWinchSide.webp', heroWinchDown: 'art/hero/heroWinchDown.webp', heroWinchUp: 'art/hero/heroWinchUp.webp',   // Winch Hook attacks
@@ -2806,7 +2825,7 @@
         talk: '"So the oil trail ends in the greaser. Then you know what\'s waiting there. I don\'t send people to die in a T-shirt. Come back with something on your head, your chest and your feet."',
         prog: () => inSlot(1) && inSlot(2) && inSlot(3) ? 1 : 0 },
       { id: 'queen', giver: 'vesper', name: 'The Queen', lvl: 3, after: 'gearUp', rarity: 'rare', boss: true, need: 1, kill: 'queen', goal: 'Kill the Pump Queen in the greaser (2:2).',
-        talk: '"Every Drip is a drop of her: the Pump Queen, living fuel in the old gas station in the greaser, 2:2. She burns and she brings friends. Bring food. Then kill her. Biggest bounty in the slums."',
+        talk: '"Every Drip is a drop of her: the Pump Queen, living fuel in the old gas station in the greaser, 2:2. She burns and she brings friends. Bring food. Then kill her. Biggest bounty in the slums. And take this Tele-pad: hold it for three seconds and it pulls you back to the city. If it goes bad, get out."',
         prog: q => killsSince(q, 'queen', 1) },
       { id: 'loading', giver: 'vesper', name: 'Loading...', lvl: 5, after: 'anomaly', rarity: 'common', need: 3, kill: 'loader', goal: 'Kill 3 Overgrown Loaders in the forest.',
         talk: '"Sparky\'s hacked loader isn\'t the only one. The Overgrown Loaders in the forest have the same green mess in them. There\'s a bounty on three of them. Bring them down and see what they\'re carrying."',
@@ -2880,6 +2899,8 @@
       promoWasReady = r;
     }
     function checkRogueQuests() {   // a quest just got done: tell the hero once
+      if (!rogueDone.has('item:telePad') && (rogueDone.has('queen') || quests.some(q => q.kind === 'rogue' && q.id === 'queen')) && inventory.length < invSlots()) {   // older saves: Vesper's Tele-pad
+        inventory.push({ name: 'Tele-pad', count: 1 }); rogueDone.add('item:telePad'); showHint('Vesper left you a Tele-pad: hold T (or use it from your bag) to teleport back to the city. 20 min recharge.'); }
       for (const D of DOORS) if (!rogueDone.has(D.flag) && carriedCount(D.item) > 0) { rogueDone.add(D.flag); showHint(`${D.item}: the ${D.key === 'labs' ? 'Quarantine Labs airlock (slums, -7:3)' : 'Breach airlock (-9:8)'} opens for you now.`); }
       for (const q of quests) if (q.kind === 'rogue' && q.id === 'anomaly' && !q.seen && ZONE_LIST[areaName] === 'pit') {   // Anomaly objective 1: being in the pit after accepting
         q.seen = true; playSfx('questAccept'); showHint(`Objective done: scouted the Industrial Pit. ${rqDef('anomaly').steps[0].msg} Next: destroy the Hacked Loader.`); }
@@ -2922,7 +2943,11 @@
         if (quests.length >= MAX_QUESTS) return `You already have ${MAX_QUESTS} active quests. Cancel one first (Q).`;
         const q = { kind: 'rogue', id: r.id, name: r.name, from: who, lvl: r.lvl, rarity: r.rarity };
         if (r.kill) q.k0 = killCount(r.kill);   // kill quests count from now on
-        if (r.id === 'loading') loadingK0 = loaderKills;   // the Infected Core drops from the 3rd Loader killed from now on
+        if (r.id === 'loading') loadingK0 = loaderKills;
+        if (r.id === 'queen' && !rogueDone.has('item:telePad')) {   // Vesper hands over the Tele-pad with the Pump Queen contract
+          if (inventory.length >= invSlots()) return '"I\'ve got something for you, but your bag is full. Make room first."';
+          inventory.push({ name: 'Tele-pad', count: 1 }); rogueDone.add('item:telePad'); itemSfx('Tele-pad');
+        }   // the Infected Core drops from the 3rd Loader killed from now on
         quests.push(q); ui.cursor = 0;
         const talk = rogueDone.has('path:sold') && r.talkSold ? r.talkSold : r.talk;   // Sparky remembers the sold tag
         if (r.instant) return `${talk} ${pay_(q, r, rqPay(r))}`;   // advice: done the moment it's accepted
@@ -3169,10 +3194,11 @@
         return [1, 2, 3].map(n => {
           const s = slotInfo.slots[n], label = n === 1 ? 'autosave' : `slot ${n}`;
           return {
-            left: label, right: s ? `${s.summary} · ${when(s.at)}` : 'empty', dim: saving && n === 1,
+            left: label, right: s ? `${s.summary} · ${when(s.at)}` : 'empty', dim: saving && (n === 1 || inBossArea()),
             act() {
               if (saving) {
                 if (n === 1) return 'The autosave slot is written by the game only.';
+                if (inBossArea()) return 'No saving in a boss area. Leave the zone to save.';
                 writeSlot(n).then(err => { if (ui && ui.kind === 'save') ui.msg = err ? `Save failed: ${err}` : `Saved to slot ${n}.`; });
                 return 'Saving…';
               }
@@ -3274,7 +3300,7 @@
     }
     function newGame() {
       Object.assign(talents, newTalents()); ceoCalls = 0;
-      officeChips.fill(null); resetTracker(); promoWasReady = null; clearLbBuffs(); Object.assign(stats, START_STATS); dealsDone = 0; foodBought = 0; promotion = 0; kills = 0; dripKills = 0; queenKills = 0; scavKills = 0; droneKills = 0; hloaderKills = 0; hookMisses = 0; loaderKills = 0; loadingK0 = null; g0Kills = 0; pistolMisses = 0; infCoreMisses = 0; toxicKills = 0; weaponBought = false; rogueDone.clear(); gridPowered.clear(); powering = null; runCheated = false; Object.assign(prices, startPrices());
+      officeChips.fill(null); resetTracker(); promoWasReady = null; clearLbBuffs(); Object.assign(stats, START_STATS); dealsDone = 0; foodBought = 0; promotion = 0; kills = 0; dripKills = 0; queenKills = 0; scavKills = 0; droneKills = 0; hloaderKills = 0; hookMisses = 0; loaderKills = 0; loadingK0 = null; g0Kills = 0; pistolMisses = 0; infCoreMisses = 0; toxicKills = 0; telePadReadyAt = 0; teleCast = null; weaponBought = false; rogueDone.clear(); gridPowered.clear(); powering = null; runCheated = false; Object.assign(prices, startPrices());
       discovered.clear();
       quests.length = 0;
       areaName = '0:0'; spawnAllDrips();
@@ -3384,7 +3410,7 @@
     // ---- saving -------------------------------------------------------------------
     // everything a run needs; drip/fights/timers restart when loaded
     function snapshot() {
-      return { x: player.x, y: player.y, fx: facing.x, fy: facing.y, stats: statsNoBuffs(), deals: deals.map(({ boost, boostUntil, boostMs, ...d }) => d), prices: { ...prices }, dealsDone, foodBought, itemsV2: true, questsV2: true, droneKills, hloaderKills, hookMisses, loaderKills, loadingK0, g0Kills, pistolMisses, infCoreMisses, toxicKills, officeChips: [...officeChips], sets: [...activeSets], promotion, kills, dripKills, queenKills, scavKills, weaponBought, rogueDone: [...rogueDone], gridPowered: [...gridPowered], cheated: runCheated, quests: quests.map(q => q.kind === 'delivery' ? { ...q, left: Math.max(0, q.until - gameTime) } : { ...q }),
+      return { x: player.x, y: player.y, fx: facing.x, fy: facing.y, stats: statsNoBuffs(), deals: deals.map(({ boost, boostUntil, boostMs, ...d }) => d), prices: { ...prices }, dealsDone, foodBought, itemsV2: true, questsV2: true, droneKills, hloaderKills, hookMisses, loaderKills, loadingK0, g0Kills, pistolMisses, infCoreMisses, toxicKills, teleLeft: Math.max(0, telePadReadyAt - gameTime), officeChips: [...officeChips], sets: [...activeSets], promotion, kills, dripKills, queenKills, scavKills, weaponBought, rogueDone: [...rogueDone], gridPowered: [...gridPowered], cheated: runCheated, quests: quests.map(q => q.kind === 'delivery' ? { ...q, left: Math.max(0, q.until - gameTime) } : { ...q }),
                inventory: inventory.map(it => ({ ...it })), equipped: equipped.map(it => ({ ...it })), skills: [...skills],
                weaponsV: 2, areaName, restReadyAt, levels: { ...levels }, manaCap: CAP_BASE.mana, energyCap: CAP_BASE.energy, level: hero.level, exp: hero.exp, strengthLevel: hero.level, bags: [...bags], vault: { open: vault.open, bags: [...vault.bags], items: vault.items.map(it => ({ ...it })) }, talents: JSON.parse(JSON.stringify(talents)), ceoCalls, tut, tutV: 3, pixiSeen, tutN, tutQuiz: { ...tutQuiz }, discovered: [...discovered], enemies: saveEnemies(), runner: saveRunner(), harvest: saveHarvest(),
                piles: piles.map(p => ({ ...p, gear: p.gear.map(it => ({ ...it })), items: p.items.map(it => ({ ...it })), left: Math.max(0, p.until - gameTime), until: undefined })) };
@@ -3400,7 +3426,7 @@
       if (s.strengthLevel === undefined) stats.strength += levelStrength(hero.level) - levelStrength(1);   // saves from before strength grew with level
       for (let i = 0; i < 5; i++) officeChips[i] = (s.officeChips && s.officeChips[i]) || null;
       deals = s.deals && s.deals.every(d => d && d.type) ? s.deals : null; dealsDone = s.dealsDone || 0; foodBought = s.foodBought || 0; promotion = s.promotion || 0; kills = s.kills || 0; runCheated = !!s.cheated;
-      dripKills = s.dripKills || 0; queenKills = s.queenKills || 0; scavKills = s.scavKills || 0; droneKills = s.droneKills || 0; hloaderKills = s.hloaderKills || 0; hookMisses = s.hookMisses || 0; loaderKills = s.loaderKills || 0; loadingK0 = s.loadingK0 ?? null; g0Kills = s.g0Kills || 0; pistolMisses = s.pistolMisses || 0; infCoreMisses = s.infCoreMisses || 0; toxicKills = s.toxicKills || 0; weaponBought = !!s.weaponBought; rogueDone.clear(); for (const id of s.rogueDone || []) rogueDone.add(id); gridPowered.clear(); for (const k of s.gridPowered || []) gridPowered.add(k); powering = null;
+      dripKills = s.dripKills || 0; queenKills = s.queenKills || 0; scavKills = s.scavKills || 0; droneKills = s.droneKills || 0; hloaderKills = s.hloaderKills || 0; hookMisses = s.hookMisses || 0; loaderKills = s.loaderKills || 0; loadingK0 = s.loadingK0 ?? null; g0Kills = s.g0Kills || 0; pistolMisses = s.pistolMisses || 0; infCoreMisses = s.infCoreMisses || 0; toxicKills = s.toxicKills || 0; telePadReadyAt = gameTime + (s.teleLeft || 0); teleCast = null; weaponBought = !!s.weaponBought; rogueDone.clear(); for (const id of s.rogueDone || []) rogueDone.add(id); gridPowered.clear(); for (const k of s.gridPowered || []) gridPowered.add(k); powering = null;
       quests.length = 0; quests.push(...(s.quests || []).map(q => q.kind === 'delivery' ? { ...q, until: gameTime + (q.left ?? 0) } : q));
       migrateQuests(s);   // saves from before the quest rework
       for (let i = quests.length - 1; i >= 0; i--) if (quests[i].kind === 'rogue' && !rqDef(quests[i].id)) quests.splice(i, 1);   // removed quests
@@ -3461,6 +3487,7 @@
     function openSlots(kind) { openWindow(kind, kind === 'save' ? 1 : 0, fromHere()); refreshSlots(); }
     const fromHere = () => ui && { kind: ui.kind, cursor: ui.cursor, back: ui.back };   // the window to come back to
     async function writeSlot(n) {   // -> error text, or null when saved
+      if (inBossArea()) return 'no saving in a boss area';   // the boss is fought from the start: the last save is outside
       const state = { version: SAVE_VERSION, ...snapshot() }, at = new Date().toISOString();
       if (!account || !sb) return 'guests can’t save';
       if (!(await sessionPulse())) return 'signed out: this account is playing in another tab';   // never save over the other device's game
@@ -3473,7 +3500,10 @@
     // autosave into slot 1: every 2 minutes of play, and when changing area (at most once per 5 s)
     const AUTOSAVE_MS = 2 * 60 * 1000;
     let lastAutosave = 0, lastWrite = 0;
+    const BOSS_AREAS = ['greaser', 'pit', 'overgrowth', 'breach'];   // zone types with a boss: saving is off there
+    const inBossArea = () => BOSS_AREAS.includes(ZONE_LIST[areaName]);
     function autosave(force) {
+      if (inBossArea()) return;
       if (!account || !heroName || naming() || locked() || stats.health <= 0) return;
       if (!force && Date.now() - lastWrite < 5000) return;
       lastAutosave = lastWrite = Date.now(); writeSlot(1);
@@ -3621,6 +3651,7 @@
           const q = drips.find(d => d.kind === 'g0' && !d.dead); if (!q) return 'It is not alive in this zone.';
           q.hp = Math.floor(q.maxHp * 0.51) + 1; return `Specimen G-0 at ${q.hp}/${q.maxHp}.`;
         }),
+        row('Tele-pad', 'into inventory + recharge', () => { telePadReadyAt = 0; if (hasTelePad()) return 'Tele-pad recharged.'; if (inventory.length >= invSlots()) return 'Inventory full.'; inventory.push({ name: 'Tele-pad', count: 1 }); rogueDone.add('item:telePad'); return 'Added the Tele-pad.'; }),
         row('Specimen Tag', 'into inventory (starts Chain 3)', () => { if (inventory.length >= invSlots()) return 'Inventory full.'; inventory.push({ name: 'Specimen Tag', count: 1 }); return 'Added the Specimen Tag.'; }),
         row('Keycard', 'into inventory (opens the labs)', () => { if (inventory.length >= invSlots()) return 'Inventory full.'; inventory.push({ name: 'Keycard', count: 1 }); return 'Added the Keycard.'; }),
         row('Special Keycard', 'into inventory (opens the Breach)', () => { if (inventory.length >= invSlots()) return 'Inventory full.'; inventory.push({ name: 'Special Keycard', count: 1 }); return 'Added the Special Keycard.'; }),
@@ -3748,6 +3779,7 @@
       ['A', 'attack · open · pick up · confirm'],
       ['1 2 3', 'cast your spells'],
       ['pistol button', 'shoot (only with a ranged weapon on)'],
+      ['tele-pad button', 'teleport back to the city (hold still 3 s)'],
       ['tap your hero plate (top left)', 'hero stats and equipment'],
       ['tap the minimap', 'world map'],
       ['top buttons', 'bag, quests, top, menu'],
@@ -3778,6 +3810,7 @@
       ['W / S', 'choose in a window'],
       ['1 2 3', 'pick a row (window) / cast spell'],
       ['Tab', 'next target (closest first); spells go to it instead of the cursor (the hero turns to face it)'],
+      ['T', 'Tele-pad: hold still 3 s to teleport back to the city (20 min recharge)'],
       ['right-click / E (hold)', 'shoot the ranged weapon (Spore Pistol) toward the cursor or the target; 1 NRG a shot'],
       ['Q (or the quest icon)', 'active quests'],
       ['L (or the trophy)', 'leaderboard: Top Exp, Top Dealers, Top Slayers; this month or all time (Space on the top row)'],
@@ -3786,6 +3819,7 @@
       ['Esc (target selected)', 'deselect target'],
       ['phone: joystick', 'move (in a window: choose)'],
       ['phone: A · 1 2 3', 'Space (act / confirm) · spells'],
+      ['phone: tele-pad button', 'teleport to the city (only while you carry the Tele-pad)'],
       ['phone: pistol button', 'shoot (only with a ranged weapon on; aims at the target, else where he faces)'],
       ['phone: top-left row', 'bag, hero, map, quests, menu / back'],
       ['phone: hold', 'item or quest: throw away / cancel menu'],
@@ -4038,6 +4072,7 @@
       const item = inventory[pn.cursor];
       if (!item) { pn.msg = 'This slot is empty.'; return; }
       const def = itemDef(item.name) || {};
+      if (item.name === 'Tele-pad') { pn.msg = startTeleCast(); return; }
       if (def.class === 'skill') {
         if (skills.includes(item.name)) { pn.msg = `You already know ${item.name}.`; return; }
         if (skills.length >= ABILITY_SLOTS) { pn.msg = 'No free spell slot.'; return; }
@@ -4146,7 +4181,7 @@
     function openItemMenu(idx, x, y) {
       const it = inventory[idx]; if (!it) { itemMenu = null; return; }
       const n = it.count || 1, def = itemDef(it.name) || {}, opts = [];
-      const use = it.quest ? null : def.startsQuest ? (itemQuestMark(it.name) === '!' ? 'Start quest' : null) : def.class === 'equipment' ? 'Equip' : def.class === 'food' ? 'Eat' : def.class === 'skill' ? 'Learn' : def.class === 'bag' ? 'Wear' : def.consume ? 'Use' : null;
+      const use = it.quest ? null : it.name === 'Tele-pad' ? 'Teleport to the city' : def.startsQuest ? (itemQuestMark(it.name) === '!' ? 'Start quest' : null) : def.class === 'equipment' ? 'Equip' : def.class === 'food' ? 'Eat' : def.class === 'skill' ? 'Learn' : def.class === 'bag' ? 'Wear' : def.consume ? 'Use' : null;
       if (vaultOpen() && !it.quest && def.class !== 'questItem' && !questLocked(it.name)) {   // CredBank: store it (a bag can also go into a free socket)
         if (def.class === 'bag' && vaultFreeSocket() >= 0) opts.push({ label: `Put in socket ${vaultFreeSocket() + 1}`, act: 'vaultSocket' });
         opts.push({ label: `Store  ${VAULT_FEES.store}${G.money}`, act: 'vaultStore' });
@@ -4255,6 +4290,7 @@
                      overclock: { label: 'Overclock', icon: 'talentSystemOverclock', color: '#e5484d', symbol: '⚡' },
                      poison: { label: 'poisoned', icon: 'statusPoison', color: '#9dff5c', symbol: '☠' },
                      rezeroCd: { label: 'ReZero recharging', icon: 'talentReZero', color: '#6f7d99', symbol: '⟲', dim: true },
+                     telePad: { label: 'Tele-pad recharging', icon: 'telePad', color: '#6f7d99', symbol: '⌁', dim: true },
                      ceo: { label: 'free call ready', icon: 'talentCeoMindset', color: '#9dff5c', symbol: '☎' } };
     const heroStates = () => {
       const s = [];
@@ -4267,6 +4303,7 @@
       if (gameTime < avUntil) s.push({ key: 'arcane', left: (avUntil - gameTime) / 1000 });
       if (ocActive()) s.push({ key: 'overclock', left: (ocUntil - gameTime) / 1000, count: ocStacks });
       if (ceoFree()) s.push({ key: 'ceo' });
+      if (gameTime < telePadReadyAt && hasTelePad()) s.push({ key: 'telePad', left: (telePadReadyAt - gameTime) / 1000 });
       for (const k in LB_BUFFS) if (lbActive[k]) s.push({ key: 'lb_' + k });   // leaderboard Top-1 buffs, while they last
       return s;
     };
@@ -4469,8 +4506,9 @@
         }
         if (s.left !== undefined) {   // time left, bottom-right corner
           ctx.font = `700 ${Math.round(12 * k)}px ${MONO}`; ctx.textAlign = 'right'; ctx.textBaseline = 'alphabetic';
-          ctx.lineWidth = 3 * k; ctx.strokeStyle = '#000'; ctx.strokeText(s.left >= 10 ? Math.ceil(s.left) + '' : s.left.toFixed(1), x + size - 2 * k, y + size - 3 * k);
-          ctx.fillStyle = '#fff'; ctx.fillText(s.left >= 10 ? Math.ceil(s.left) + '' : s.left.toFixed(1), x + size - 2 * k, y + size - 3 * k);
+          const lt = s.left >= 120 ? Math.ceil(s.left / 60) + 'm' : s.left >= 10 ? Math.ceil(s.left) + '' : s.left.toFixed(1);   // long ones in minutes
+          ctx.lineWidth = 3 * k; ctx.strokeStyle = '#000'; ctx.strokeText(lt, x + size - 2 * k, y + size - 3 * k);
+          ctx.fillStyle = '#fff'; ctx.fillText(lt, x + size - 2 * k, y + size - 3 * k);
         }
         ctx.restore();
         if (mouseAim.inside && mouseAim.on && !touchOn() && mouseAim.cx >= x && mouseAim.cx <= x + size && mouseAim.cy >= y && mouseAim.cy <= y + size) hover = { s, x, y, size };
@@ -4485,6 +4523,7 @@
         case 'root': return "You're stuck in place and can't move.";
         case 'slowed': return `You walk ${Math.round(slowAmt * 100)}% slower.`;
         case 'injured': return `HP at ${Math.round(STATES.injured.healthShare * 100)}% or less: you walk ${Math.round((1 - STATES.injured.speed) * 100)}% slower.`;
+        case 'telePad': return 'The Tele-pad is recharging: it can take you back to the city again when this runs out.';
         case 'poison': return `You lose ${Math.round(SPORE.poisonPct * 100)}% of your max HP every second, and your HP doesn't regenerate.`;
         case 'lb_exp': return `#1 in exp this month: ${buffText('exp')} while you hold the spot.`;
         case 'lb_deals': return `#1 in deals this month: ${buffText('deals')} while you hold the spot.`;
@@ -4500,7 +4539,7 @@
     function drawStateTip({ s, x, y, size }, k) {
       const def = STATES[s.key], w = 300 * k, pad = 10 * k, title = def.label[0].toUpperCase() + def.label.slice(1);
       ctx.save(); ctx.font = `${Math.round(14 * k)}px ${MONO}`;
-      const lines = wrapText(stateInfo(s) + (s.left !== undefined ? ` (${s.left >= 10 ? Math.ceil(s.left) : s.left.toFixed(1)} s left)` : ''), w - 2 * pad);
+      const lines = wrapText(stateInfo(s) + (s.left !== undefined ? ` (${s.left >= 120 ? Math.ceil(s.left / 60) + ' min' : (s.left >= 10 ? Math.ceil(s.left) : s.left.toFixed(1)) + ' s'} left)` : ''), w - 2 * pad);
       const h = pad * 2 + 22 * k + lines.length * 19 * k, tx = Math.max(8, Math.min(canvas.width - w - 8, x)), ty = y + size + 8 * k;
       ctx.fillStyle = 'rgba(0, 0, 0, 0.9)'; rr(tx, ty, w, h, 8 * k); ctx.fill();
       ctx.strokeStyle = def.color; ctx.lineWidth = 2; rr(tx + 1, ty + 1, w - 2, h - 2, 7 * k); ctx.stroke();
@@ -4571,7 +4610,7 @@
       const out = {};
       for (const id in zoneDrips) out[id] = zoneDrips[id].filter(d => !d.summoned && !d.runner).map(d => d.dead
         ? { dead: true, x: d.x, y: d.y, since: gameTime - d.deadAt, respawnIn: Math.max(0, d.respawnAt - gameTime), loot: d.loot || null }
-        : { hp: d.hp, kind: d.kind, max: d.maxHp, carry: d.carry || undefined });
+        : { hp: d.hp, kind: d.kind, max: d.maxHp, carry: d.carry || undefined, stage: d.stage || undefined });
       return out;
     }
     function loadEnemies(saved) {
@@ -4580,7 +4619,7 @@
         const d = zoneDrips[id] && zoneDrips[id][i];
         if (!d) return;
         if (e.kind && e.kind !== d.kind) return;   // a different enemy lives in this slot now: keep the fresh one
-        if (!e.dead) { if (e.max === d.maxHp) d.hp = Math.max(1, Math.min(d.maxHp, e.hp ?? d.maxHp)); if (e.carry) d.carry = { money: e.carry.money || 0, items: renameItems(e.carry.items || []) }; return; }   // max health changed (rebalance): full health
+        if (!e.dead) { if (e.max === d.maxHp) { d.hp = Math.max(1, Math.min(d.maxHp, e.hp ?? d.maxHp)); if (e.stage) d.stage = e.stage; } if (e.carry) d.carry = { money: e.carry.money || 0, items: renameItems(e.carry.items || []) }; return; }   // max health changed (rebalance): full health
         Object.assign(d, { dead: true, hp: 0, x: e.x, y: e.y, fromX: e.x, fromY: e.y, aggro: false,
                            deadAt: gameTime - e.since, respawnAt: gameTime + e.respawnIn, loot: e.loot ? { ...e.loot, items: renameItems(e.loot.items) } : null });
       });
@@ -4590,7 +4629,7 @@
       const list = zoneDrips[id] || [];
       for (let i = list.length - 1; i >= 0; i--) if (list[i].summoned) list.splice(i, 1);   // the Pump Queen's Drips melt away
       list.forEach((d, i) => { if (d.runner) { d.aggro = false; d.act = null; d.dash = null; return; }   // the Runner keeps its place on its route
-        if (!d.dead) { const n = makeDrip(d.spawn, id, d.kind); n.hp = d.kind === 'queen' ? n.maxHp : d.hp; n.regenT = d.regenT; n.carry = d.carry || null; if (d.kind === 'hloader' || d.kind === 'g0') n.stage = d.stage; list[i] = n; } });   // the Queen resets fully (the Hacked Loader keeps his health and stage)
+        if (!d.dead) { const n = makeDrip(d.spawn, id, d.kind); n.hp = d.hp; n.regenT = d.regenT; n.carry = d.carry || null; if (d.kind === 'queen' || d.kind === 'hloader' || d.kind === 'g0') { n.stage = d.stage; n.healT = d.healT; n.healBuf = d.healBuf; } list[i] = n; } });   // bosses keep their health and stage
       for (let i = queenFx.length - 1; i >= 0; i--) if (queenFx[i].zone !== id) queenFx.splice(i, 1);
       for (let i = fireTiles.length - 1; i >= 0; i--) if (fireTiles[i].zone !== id) fireTiles.splice(i, 1);
       drips = list; drip = null;
@@ -4831,6 +4870,10 @@
         }
       }
       separateFoes();
+    }
+    function bossHeal(d, perMin, t) {   // out of a fight: perMin of max HP a minute (fractions saved up)
+      d.healBuf = (d.healBuf || 0) + (t - (d.healT || t)) * d.maxHp * perMin / 60000; d.healT = t;
+      const n = Math.floor(d.healBuf); if (n) { d.healBuf -= n; d.hp = Math.min(d.maxHp, d.hp + n); }
     }
     const SUMMON_FADE_MS = 2500;   // a beaten summoned Drip lies 1.5 s, then fades out over 1 s
     function updateDrip(dt = 0) {
@@ -5391,6 +5434,7 @@
         const lv = QUEEN.summonLevel, hp = Math.max(1, Math.round(heroHealthCap(10, lv) * DRIP.hpMult));   // her Drips' level (2: 12 HP)
         Object.assign(m, { x, y, home: { x, y }, level: lv, hp, maxHp: hp, summoned: true, queen: d, burning: !!burning, aggro: true, mana: 1, manaT: t, nextAttack: t + 600, popAt: t });
         drips.push(m); made++;
+        if (QUEEN.summonCost && d.hp > QUEEN.summonCost) { d.hp -= QUEEN.summonCost; float(`-${QUEEN.summonCost}`, '#ff9a2e', d.x + 1, d.y - 2.4); }   // every Drip she pumps out costs her summonCost HP
         queenFx.push({ kind: 'absorb', zone: areaName, x: d.x + 1, y: d.y - 0.6, tx: x + 0.5, ty: y + 0.6, at: t, end: t + 350 });   // a squirt of oil to where it lands
       }
       if (made) float(burning ? 'Burning Drip!' : `+${made} Drip${made > 1 ? 's' : ''}`, burning ? '#ff9a2e' : '#ff2bd6', d.x + 1, d.y - QUEEN.headY - 0.4);
@@ -5442,14 +5486,12 @@
         if (t < a.end) return;
         d.act = null;
       }
-      if (d.returning) {   // walks home healing 100% of max HP per 30 s; full again at home: back to the pump (stage 1)
-        d.healBuf = (d.healBuf || 0) + (t - (d.healT || t)) * d.maxHp * Q.homeHealPerMin / 60000; d.healT = t;
-        const n = Math.floor(d.healBuf); if (n) { d.healBuf -= n; d.hp = Math.min(d.maxHp, d.hp + n); }
-        if (goHome(d, dt) && d.hp >= d.maxHp) { d.returning = false; d.stage = 1; d.woke = false; }
-        return;
-      }
+      // not fighting: heals idleHealPerMin of her max HP a minute; full again: back to the pump (stage 1)
+      const heal = () => { bossHeal(d, Q.idleHealPerMin, t); if (d.hp >= d.maxHp && d.stage === 2) d.stage = 1; };
+      if (d.stage === 1 && d.hp <= d.maxHp / 2 && !d.aggro) d.stage = 2;   // (a loaded save)
+      if (d.returning) { heal(); if (goHome(d, dt)) { d.returning = false; d.woke = false; } return; }
+      if (!d.aggro) { heal(); if (gap > Q.aggro || stats.health <= 0) return; d.aggro = true; }
       d.healT = 0;
-      if (!d.aggro) { if (gap > Q.aggro || stats.health <= 0) return; d.aggro = true; }
       if (!d.woke) {   // wakes up: the pump display flickers on
         d.woke = true; d.nextSpray = t + 2500; d.nextSummon = t + Q.firstSummonMs; d.nextAttack = t + 500; d.nextIgnite = t + Q.firstIgniteMs;
         float('PUMP QUEEN', '#ff9a2e', d.x + 1, d.y - Q.headY - 0.6);
@@ -5521,10 +5563,7 @@
         } else if (t < a.end) return;
         d.act = null;
       }
-      const heal = () => {   // not fighting: slow repair (he stays in stage 2)
-        d.healBuf = (d.healBuf || 0) + (t - (d.healT || t)) * d.maxHp * H.idleHealPerMin / 60000; d.healT = t;
-        const n = Math.floor(d.healBuf); if (n) { d.healBuf -= n; d.hp = Math.min(d.maxHp, d.hp + n); }
-      };
+      const heal = () => { bossHeal(d, H.idleHealPerMin, t); if (d.hp >= d.maxHp && d.stage === 2) d.stage = 1; };   // not fighting: repairs; full: back to stage 1
       if (d.stage === 1 && d.hp <= d.maxHp / 2 && !d.aggro) d.stage = 2;   // (a loaded save)
       if (d.returning) { heal(); if (goHome(d, dt)) { d.returning = false; d.woke = false; } return; }
       if (!d.aggro) { heal(); if (gap > H.aggro || stats.health <= 0) return; d.aggro = true; }
@@ -5629,7 +5668,7 @@
         if (t < a.end) return;
         d.act = null;
       }
-      const heal = () => { d.healBuf = (d.healBuf || 0) + (t - (d.healT || t)) * d.maxHp * H.idleHealPerMin / 60000; d.healT = t; const n = Math.floor(d.healBuf); if (n) { d.healBuf -= n; d.hp = Math.min(d.maxHp, d.hp + n); } };
+      const heal = () => { bossHeal(d, H.idleHealPerMin, t); if (d.hp >= d.maxHp && d.stage === 2 && !d.returning) d.stage = 1; };   // regrows; full (at home): rooted again, stage 1
       if (st === 1 && d.hp <= d.maxHp / 2 && !d.aggro) d.stage = 2;   // (a loaded save)
       if (d.returning) { heal(); if (goHome(d, dt)) { d.returning = false; d.woke = false; } return; }
       if (!d.aggro) { heal(); if (gap > H.aggro || stats.health <= 0) return; d.aggro = true; }
@@ -5870,6 +5909,85 @@
         w.art = on ? (on2 ? 'gridNodeOn2' : 'gridNodeOn') : 'gridNodeOff';
         w.label = on ? 'Grid Node (online)' : 'Grid Node (offline)'; w.opens = on ? null : 'node';
       }
+    }
+    // ---- Tele-pad: hold still TELEPAD.castMs, then he's in the city (the TelePort's pad once it is built; HomeDome until then) ----
+    let telePadReadyAt = gameTime + (saved.teleLeft || 0), teleCast = null;   // teleCast: { start, px, py }
+    const hasTelePad = () => inventory.some(it => it.name === 'Tele-pad');
+    const telePadTile = () => { const w = (AREAS['0:0'].walls || []).find(x => x.telePort && !x.flip); if (!w) return null; const f = foot(w); return { x: f.x1 + 1, y: f.y0 }; };   // right of the left pylon
+    const teleDest = () => telePadTile() || { x: START.x, y: START.y };
+    // the energy arc between the two pylons' emitter tips (the pictures have no arc of their own): tip = TP_TIP.dx tiles from the pylon's
+    // centre toward the pad, TP_TIP.h tiles above the tile's bottom edge (artH 2.1)
+    const TP_TIP = { dx: 0.469, h: 1.323, lift: 0.5 };
+    function drawTeleArc() {
+      if (areaName !== '0:0') return; const t = telePadTile(); if (!t) return;
+      const y = (t.y + 1 - TP_TIP.h) * TILE, x1 = (t.x - 0.5 + TP_TIP.dx) * TILE, x2 = (t.x + 1.5 - TP_TIP.dx) * TILE, mx = (x1 + x2) / 2;
+      const tt = gameTime, wob = Math.sin(tt / 90) * 4 + Math.sin(tt / 37) * 2, cy = y - TP_TIP.lift * TILE + wob, k = teleFlash && tt - teleFlash.at < 900 ? 1 - (tt - teleFlash.at) / 900 : 0;
+      const pt = u => ({ x: (1 - u) ** 2 * x1 + 2 * (1 - u) * u * mx + u * u * x2, y: (1 - u) ** 2 * y + 2 * (1 - u) * u * cy + u * u * y });
+      ctx.save(); ctx.lineCap = 'round';
+      ctx.strokeStyle = `rgba(0, 229, 255, ${0.28 + 0.4 * k})`; ctx.lineWidth = 12 + 8 * k; ctx.beginPath(); ctx.moveTo(x1, y); ctx.quadraticCurveTo(mx, cy, x2, y); ctx.stroke();
+      ctx.strokeStyle = 'rgba(0, 229, 255, 0.85)'; ctx.lineWidth = 5; ctx.stroke();
+      ctx.strokeStyle = '#eaffff'; ctx.lineWidth = 2; ctx.stroke();
+      ctx.fillStyle = '#eaffff';
+      for (let i = 0; i < 3; i++) { const u = ((tt / 1400) + i / 3) % 1, q = pt(u); ctx.globalAlpha = 0.9; ctx.beginPath(); ctx.arc(q.x, q.y - 5 * Math.sin(u * Math.PI * 4 + i), 2.5, 0, Math.PI * 2); ctx.fill(); }   // sparks running along it
+      ctx.restore();
+    }
+    function drawTelePad() {   // the TelePort's landing rings on the ground (city): soft, blurred, fading out toward their left and right ends
+      if (areaName !== '0:0') return; const t = telePadTile(); if (!t) return;
+      const cx = (t.x + 0.5) * TILE, cy = (t.y + 0.72) * TILE, k = teleFlash && gameTime - teleFlash.at < 900 ? 1 - (gameTime - teleFlash.at) / 900 : 0, pul = 0.5 + 0.5 * Math.sin(gameTime / 450);   // the glow breathes: a little dimmer, a little brighter, every ~2.8 s
+      const ring = (rx, ry, rgb, a, w) => {
+        const g = ctx.createLinearGradient(cx - rx - 4, 0, cx + rx + 4, 0);   // dim at the sides, brightest at the front and back
+        g.addColorStop(0, `rgba(${rgb}, 0)`); g.addColorStop(0.3, `rgba(${rgb}, ${a * 0.6})`); g.addColorStop(0.5, `rgba(${rgb}, ${a})`); g.addColorStop(0.7, `rgba(${rgb}, ${a * 0.6})`); g.addColorStop(1, `rgba(${rgb}, 0)`);
+        ctx.strokeStyle = g; ctx.lineWidth = w; ctx.beginPath(); ctx.ellipse(cx, cy, rx, ry, 0, 0, Math.PI * 2); ctx.stroke();
+      };
+      ctx.save();
+      const glow = ctx.createRadialGradient(cx, cy, 0, cx, cy, 48);   // a soft cyan glow on the ground under the rings
+      glow.addColorStop(0, `rgba(0, 229, 255, ${0.1 + 0.12 * pul + 0.3 * k})`); glow.addColorStop(1, 'rgba(0, 229, 255, 0)');
+      ctx.save(); ctx.translate(cx, cy); ctx.scale(1, 0.4); ctx.translate(-cx, -cy); ctx.fillStyle = glow; ctx.beginPath(); ctx.arc(cx, cy, 48, 0, Math.PI * 2); ctx.fill(); ctx.restore();
+      ctx.filter = 'blur(2.5px)'; ctx.shadowColor = `rgba(0, 229, 255, ${0.5 + 0.35 * pul})`; ctx.shadowBlur = 10 + 8 * pul;
+      ring(34, 13, '0, 229, 255', 0.42 + 0.25 * pul + 0.35 * k, 4);
+      ctx.shadowColor = `rgba(255, 43, 214, ${0.4 + 0.3 * pul})`; ctx.shadowBlur = 8 + 6 * pul;
+      ring(20, 7.5, '255, 43, 214', 0.36 + 0.22 * pul + 0.35 * k, 3);
+      ctx.restore();
+    }
+
+    function startTeleCast() {
+      if (!hasTelePad()) return 'You don\'t carry the Tele-pad.';
+      if (teleCast) return 'Already charging the Tele-pad.';
+      if (stats.health <= 0) return '';
+      const left = telePadReadyAt - gameTime;
+      if (left > 0) { const m = Math.ceil(left / 60000); float(`tele-pad: ${m} min`, '#6f7d99', player.x + 0.5, player.y - 1.2); return `The Tele-pad is recharging: ${m} min left.`; }
+      closePanels(); itemMenu = null;
+      teleCast = { start: gameTime, px: hpos.x, py: hpos.y };
+      float('teleporting...', '#00e5ff', player.x + 0.5, player.y - 1.3); playSfx('interact');
+      return 'Hold still: teleporting in 3 s.';
+    }
+    function updateTeleCast() {
+      const c = teleCast; if (!c) return;
+      if (stats.health <= 0) { teleCast = null; return; }
+      if (Math.hypot(hpos.x - c.px, hpos.y - c.py) > TELEPAD.drift) { teleCast = null; float('teleport cancelled', '#8a8a8a', player.x + 0.5, player.y - 1.2); return; }   // moving cancels it (hits don't)
+      if (gameTime - c.start < TELEPAD.castMs) return;
+      teleCast = null; telePadReadyAt = gameTime + TELEPAD.rechargeMs; heroPullUntil = 0;
+      const d = teleDest(); teleFlash = { at: gameTime, zone: '0:0' };
+      enterArea('0:0', d.x, d.y, 1);
+      playSfx('questAccept'); float('TELEPORTED', '#00e5ff', player.x + 0.5, player.y - 1.3);
+    }
+    let teleFlash = null;
+    function drawTeleFx() {   // charging: cyan rings rising around him + a progress ring; arriving: a flash
+      const c = teleCast, cx = (hpos.x + 0.5) * TILE, feet = (hpos.y + 0.95) * TILE;
+      ctx.save();
+      if (c) {
+        const p = Math.min(1, (gameTime - c.start) / TELEPAD.castMs);
+        for (let i = 0; i < 3; i++) { const u = ((gameTime / 700) + i / 3) % 1;
+          ctx.globalAlpha = (1 - u) * (0.4 + 0.5 * p); ctx.strokeStyle = '#00e5ff'; ctx.lineWidth = 4;
+          ctx.beginPath(); ctx.ellipse(cx, feet - u * 150, 46 - u * 10, 16 - u * 4, 0, 0, Math.PI * 2); ctx.stroke(); }
+        ctx.globalAlpha = 0.9; ctx.lineWidth = 6; ctx.strokeStyle = 'rgba(0, 0, 0, 0.6)'; ctx.beginPath(); ctx.arc(cx, feet - 175, 18, 0, Math.PI * 2); ctx.stroke();
+        ctx.strokeStyle = '#00e5ff'; ctx.beginPath(); ctx.arc(cx, feet - 175, 18, -Math.PI / 2, -Math.PI / 2 + p * Math.PI * 2); ctx.stroke();
+      }
+      const f = teleFlash;
+      if (f && f.zone === areaName && gameTime - f.at < 600) { const k = (gameTime - f.at) / 600;
+        const g = ctx.createRadialGradient(cx, feet - 60, 0, cx, feet - 60, 140); g.addColorStop(0, `rgba(180, 250, 255, ${0.8 * (1 - k)})`); g.addColorStop(1, 'rgba(0, 229, 255, 0)');
+        ctx.globalAlpha = 1; ctx.fillStyle = g; ctx.fillRect(cx - 140, feet - 200, 280, 280); }
+      ctx.restore();
     }
     function startPowering(w) {
       if (!gridlockActive()) { float('no power', '#8a8a8a', player.x + 0.5, player.y - 1.2); showHint('This grid node is dead. Someone in the city might know how to fix it.'); return; }
@@ -6565,11 +6683,12 @@
       const keep = Math.floor(Math.max(0, stats.money) * Math.max(0, ...wornBags().map(n => (itemDef(n) || {}).keepMoney || 0)));   // Vault Pack: 10% stays with him (two don't add up)
       keptMoney = keep;
       const pile = { zone: areaName, x: player.x, y: player.y, money: Math.max(0, stats.money) - keep, bags: wornBags(), gear: equipped.map(it => ({ ...it })),
-                     items: inventory.map(it => ({ ...it })), until: gameTime + PILE_MS };
+                     items: inventory.filter(it => !(itemDef(it.name) || {}).keepOnDeath).map(it => ({ ...it })), until: gameTime + PILE_MS };
+      const kept = inventory.filter(it => (itemDef(it.name) || {}).keepOnDeath);   // the Tele-pad stays with him
       for (const it of [...equipped]) { const def = itemDef(it.name); equipped.splice(equipped.indexOf(it), 1); if (def) takeOffGains(def); }
       syncSets();
       for (let i = 0; i < bags.length; i++) if (bags[i]) wearBag(null, i);   // both bags (and their bonuses) go into the pile
-      inventory.length = 0; stats.money = 0;
+      inventory.length = 0; inventory.push(...kept); stats.money = 0; teleCast = null;
       const dropped = pile.money || pile.bags.length || pile.gear.length || pile.items.length;
       if (dropped) piles.push(pile);
       const name = heroName || DEFAULT_NAME;
@@ -6972,7 +7091,7 @@
       if (dt) { checkDeliveries(); checkRogueQuests(); checkPromoReady(); for (let i = piles.length - 1; i >= 0; i--) if (gameTime >= piles[i].until) piles.splice(i, 1);
         updateDrips(); updateQueenFx(); updateHLWaves(); updateG0Fx(); updateHarvest(); updatePowering(); updateProjectiles(dt); updateShots(dt); updateHeroDot(); updatePoison(); updateHeroMana(); updateHeroHealth(); updateHitParts(dt); updateSwing(); }
       updateHeroMove(dt);   // free movement (game time: stops behind windows)
-      sealedNotice();
+      sealedNotice(); if (dt) updateTeleCast(); syncTeleBtn();
       updateMouseAim();
       if (mouseAim.down && dt && !anyOpen()) heroAttack();   // left button held: keep swinging (attack speed limits it)
       if ((mouseAim.shoot || shootHeld) && dt && !anyOpen() && !locked()) heroShoot();   // right button / E held: keep shooting (one per shot.ms)
@@ -7433,7 +7552,7 @@
       }
       drawPiles();
       drawHarvest();
-      drawSporeClouds(); drawFoeTelegraphs(); drawHLoaderGround(); drawG0Ground(); drawQueenGround();
+      drawTelePad(); drawSporeClouds(); drawFoeTelegraphs(); drawHLoaderGround(); drawG0Ground(); drawQueenGround();
       for (const e of drips) if (e.kind === 'drone' && !e.dead) { drip = e; drawDroneShadow(e); }   // drones' shadows on the ground, under buildings
 
       for (const d of AREAS[areaName].decos || []) drawWall(d);   // walkable ground decoration (mushroom patches)
@@ -7477,7 +7596,7 @@
       drawMeleeFlash();
       drawHLoaderHook(); drawG0Over(); drawHitParts();
       drawLevelUpWorld();
-      drawProjectiles(); drawShots(); drawPoisonFx();
+      drawProjectiles(); drawShots(); drawPoisonFx(); drawTeleArc(); drawTeleFx();
       drawRunnerParcels();
       // the Rogue: turns toward the hero when he is within 2 tiles; a '!' over her head until the tutorial starts
       for (const w of WALLS) if (w.opens === 'rogue' || w.opens === 'chef' || w.opens === 'pixi' || w.opens === 'sparky' || w.opens === 'vesper') {
@@ -10158,7 +10277,7 @@
     // keys are read by their physical position (e.code), so WASD, H, I, P and 1-3 work on any keyboard layout
     // (Cyrillic, AZERTY, Greek…). Arrow keys also move, and the number pad works for numbers.
     const CODE_KEYS = { KeyW: 'w', KeyA: 'a', KeyS: 's', KeyD: 'd', ArrowUp: 'w', ArrowLeft: 'a', ArrowDown: 's', ArrowRight: 'd',
-                        KeyH: 'h', KeyI: 'i', KeyP: 'p', KeyM: 'm', KeyQ: 'q', KeyL: 'l', KeyE: 'e' };
+                        KeyH: 'h', KeyI: 'i', KeyP: 'p', KeyM: 'm', KeyQ: 'q', KeyL: 'l', KeyE: 'e', KeyT: 't' };
     const keyOf = e => CODE_KEYS[e.code] || (/^(Digit|Numpad)[0-9]$/.test(e.code) ? e.code.slice(-1) : (e.key || '').toLowerCase());   // e.key can be missing (e.g. Chrome autofill fires a keydown without it)
     addEventListener('keydown', e => {
       if (naming() || e.metaKey || e.ctrlKey || e.altKey) return;
@@ -10178,6 +10297,7 @@
       if (k === 'l') { e.preventDefault(); if (!e.repeat && !locked()) { if (ui && ui.kind === 'leaderboard') closeWindow(); else if (!ui) openLeaderboard(); } return; }
       if (k === 'q') { e.preventDefault(); if (!e.repeat && !locked()) { if (ui && ui.kind === 'quests') closeWindow(); else if (!ui) openWindow('quests'); } return; }
       if (e.code === 'Tab') { e.preventDefault(); if (!e.repeat && !anyOpen()) cycleTarget(); return; }
+      if (k === 't' && !ui) { e.preventDefault(); if (!e.repeat && !locked()) { if (anyOpen()) closePanels(); const m = startTeleCast(); if (m && !teleCast) float(m.length < 40 ? m : 'no Tele-pad', '#8a8a8a', player.x + 0.5, player.y - 0.9); } return; }   // T: Tele-pad
       if (k === 'e' && !ui) { e.preventDefault(); if (!e.repeat && !anyOpen() && !locked()) { shootHeld = true; heroShoot(true); } return; }   // E: shoot the ranged weapon (hold to keep shooting)
       if (ui && /^[1-9]$/.test(k)) { playSfx('interact'); choose(+k - 1); return; }
       if (!anyOpen() && /^[1-3]$/.test(k)) { e.preventDefault(); if (!e.repeat) castSpell(+k - 1); return; }
@@ -10512,13 +10632,20 @@
       b.addEventListener('contextmenu', e => e.preventDefault());
     });
     // spell slots show their spell, the A button the equipped weapon; filled controls are more visible (CSS .filled)
-    let touchSyncKey = '';
+    let touchSyncKey = '', teleBtnKey = '';
+    function syncTeleBtn() {   // phones: the Tele-pad button shows while it's carried, with the minutes of recharge left
+      if (!phoneView) return;
+      const has = hasTelePad(), left = Math.max(0, telePadReadyAt - gameTime), m = left > 0 ? Math.ceil(left / 60000) : 0, key = has + '|' + m;
+      if (key === teleBtnKey) return; teleBtnKey = key;
+      const b = touchEl.querySelector('.t-tele'); b.classList.toggle('filled', has);
+      b.innerHTML = (ART_SRC.telePad ? `<img src="${ART_SRC.telePad}" alt="" onerror="this.remove()" style="${m ? 'opacity:0.35' : ''}">` : '') + (m ? `<span class="cd">${m}m</span>` : ART_SRC.telePad ? '' : 'T');
+    }
     function syncTouchButtons() {
       if (!phoneView) return;
       const sw = swordDef(), gun = rangedDef(), key = skills.join('|') + '#' + (sw ? sw.art : '') + '#' + (gun ? gun.art : '');
       if (key === touchSyncKey) return;
       touchSyncKey = key;
-      touchEl.querySelectorAll('.t-spell:not(.t-shoot)').forEach((b, i) => {
+      touchEl.querySelectorAll('.t-spell:not(.t-shoot):not(.t-tele)').forEach((b, i) => {
         const name = skills[i], art = name && (itemDef(name) || {}).art, src = art && ART_SRC[art];
         b.classList.toggle('filled', !!name);
         b.innerHTML = src ? `<img src="${src}" alt="" onerror="this.replaceWith('${i + 1}')">` : String(i + 1);
