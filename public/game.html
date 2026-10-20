@@ -578,13 +578,19 @@
   // sharp rendering: the game draws in "logical" canvas px (canvas.width/height, ~1040 tall), but the canvas buffer is sized
   // to the real screen pixels (devicePixelRatio), so nothing gets stretched by the browser. PX = screen px per logical px.
   let LW = canvas.width, LH = canvas.height, PX = 1;
+  // graphics quality (Settings → video): how many real pixels the canvas paints. The game is limited by painting pixels
+  // (fill rate), not by its code, so fewer pixels = more fps. dpr = most screen px per CSS px, px = pixel budget.
+  // 'high' is how it was before 20 Oct 2026 (to undo the change: make 'high' the default below).
+  const QUALITY = { high: { name: 'high', dpr: 4, px: 9e6 }, balanced: { name: 'balanced', dpr: 1.5, px: 3.5e6 }, performance: { name: 'performance', dpr: 1, px: 1.8e6 } };
+  if (!QUALITY[settings.quality]) settings.quality = 'balanced';
   const CANVAS_W = Object.getOwnPropertyDescriptor(HTMLCanvasElement.prototype, 'width'), CANVAS_H = Object.getOwnPropertyDescriptor(HTMLCanvasElement.prototype, 'height');
   Object.defineProperty(canvas, 'width', { get: () => LW, set: v => { LW = v; fitBacking(); } });
   Object.defineProperty(canvas, 'height', { get: () => LH, set: v => { LH = v; fitBacking(); } });
   function fitBacking() {
-    const r = canvas.getBoundingClientRect(), dpr = Math.min(window.devicePixelRatio || 1, matchMedia('(pointer: coarse)').matches ? 2 : 4);   // phones: at most 2x (3x screens fill 2.25x more pixels for little visible gain)
+    const q = QUALITY[settings.quality] || QUALITY.balanced;
+    const r = canvas.getBoundingClientRect(), dpr = Math.min(window.devicePixelRatio || 1, q.dpr, matchMedia('(pointer: coarse)').matches ? 2 : 4);   // phones: at most 2x (3x screens fill 2.25x more pixels for little visible gain)
     let k = r.width && r.height ? Math.min(r.width / LW, r.height / LH) * dpr : 1;
-    k = Math.min(k, Math.sqrt(9e6 / (LW * LH)));   // at most ~9 million pixels (4K), so big retina screens stay fast
+    k = Math.min(k, Math.sqrt(q.px / (LW * LH)));   // pixel budget of the quality setting (high: ~9 million = 4K)
     const pw = Math.max(1, Math.round(LW * k)), ph = Math.max(1, Math.round(LH * k));
     if (CANVAS_W.get.call(canvas) !== pw) CANVAS_W.set.call(canvas, pw);
     if (CANVAS_H.get.call(canvas) !== ph) CANVAS_H.set.call(canvas, ph);
@@ -623,8 +629,12 @@
   // ---- experience and levels ----
   // Level 1 → 2 needs 100 exp; each next level needs 1.4 × the previous, rounded to 10. Max level 20.
   const MAX_LEVEL = 20;
+  // level cap for now (20 Oct 2026): heroes stop at LEVEL_CAP; every level table still goes to MAX_LEVEL. Heroes loaded above
+  // it drop to it (talents reset for free, the "Potential contained" window once). To lift it: LEVEL_CAP = MAX_LEVEL.
+  const LEVEL_CAP = 8;
   const EXP_NEED = (() => { const a = [100]; while (a.length < MAX_LEVEL - 1) a.push(Math.round(a[a.length - 1] * 1.4 / 10) * 10); return a; })();
   const expNeed = lvl => lvl >= MAX_LEVEL ? 0 : EXP_NEED[lvl - 1];   // exp to go from lvl to lvl + 1
+  const expToNext = lvl => lvl >= LEVEL_CAP ? 0 : expNeed(lvl);   // the same, 0 at the cap (bars full)
   // quest rewards: every quest has a level and a rarity. exp = (exp from its level to the next) × 0.1 × rarity multiplier,
   // money = the same × 0.04 (rounded). Level 20 quests use the last step (19 → 20).
   const QUEST_MULT = { common: 1, rare: 2, mythical: 3, legendary: 4 };
@@ -2196,7 +2206,7 @@
     mapFog: 'art/ui/mapFog.webp',   // seamless fog texture for undiscovered zones on the maps
     heroFall: 'art/hero/heroFall.png', heroDefeated: 'art/hero/heroDefeated.png',   // death: 4-frame fall (faces right) + Game over picture
     statusRooted: 'art/ui/statusRooted.png', statusInjured: 'art/ui/statusInjured.png', statusPoison: 'art/ui/statusPoison.webp',
-    buffTopExp: 'art/ui/buffTopExp.webp', buffTopDeals: 'art/ui/buffTopDeals.webp', buffTopKills: 'art/ui/buffTopKills.webp',   // Top 1 leaderboard buffs (gold crown on the badge)
+    buffTopExp: 'art/ui/buffTopExp.webp', buffTopDeals: 'art/ui/buffTopDeals.webp', buffTopKills: 'art/ui/buffTopKills.webp', buffTopAch: 'art/ui/buffTopAch.webp',   // Top 1 leaderboard buffs (gold crown on the badge)
       // status effect icons (badge with a coloured border)
     heroPunchSide: 'art/hero/heroPunchSide.png', heroPunchDown: 'art/hero/heroPunchDown.png', heroPunchUp: 'art/hero/heroPunchUp.png',   // attack sheets, 4 frames each
     heroSwordSide: 'art/hero/heroSwordSide.png', heroSwordDown: 'art/hero/heroSwordDown.png', heroSwordUp: 'art/hero/heroSwordUp.png',
@@ -3073,9 +3083,9 @@
       document.getElementById('portrait').title = heroName || DEFAULT_NAME;
       document.getElementById('hud-name').textContent = heroName || DEFAULT_NAME;
       document.getElementById('stat-deals').textContent = dealsDone;
-      const need = expNeed(hero.level);
+      const need = expToNext(hero.level);
       document.getElementById('xp-fill').style.width = (need ? Math.min(100, hero.exp / need * 100) : 100) + '%';
-      document.getElementById('xp-text').textContent = need ? `${hero.exp} / ${need}` : 'max level';
+      document.getElementById('xp-text').textContent = need ? `${hero.exp} / ${need}` : 'max for now';
       document.getElementById('xp-lvl').textContent = `lvl ${hero.level}`;
       document.getElementById('area-name').textContent = areaLabel(areaName);
       document.getElementById('stat-health').textContent = stats.health;
@@ -3213,9 +3223,13 @@
         { left: 'sound effects', right: volumeBar(settings.sfx), vol: 'sfx', act() { stepVolume('sfx', 1); } },
       ];
       if (ui.kind === 'video') return [
+        { left: 'graphics quality', right: settings.quality, act() {
+          settings.quality = { high: 'balanced', balanced: 'performance', performance: 'high' }[settings.quality] || 'balanced'; store.set(SETTINGS_KEY, { ...settings }); fitBacking(); spriteCache.clear();
+          return `Graphics: ${settings.quality} (${CANVAS_W.get.call(canvas)} x ${CANVAS_H.get.call(canvas)} px). ${settings.quality === 'high' ? 'Sharpest, slowest.' : settings.quality === 'balanced' ? 'Sharp and smooth (default).' : 'Softer picture, most fps.'}`; } },
         { left: 'decal density', right: '', act() { openWindow('decals', 0, fromHere()); } },
       ];
       if (ui.kind === 'decals') return DECAL_TYPES_ORDER.map(type => ({ left: ZONE_TYPES[type].name, right: densityBar(decalDensity(type)), dens: type, act() { stepDensity(type, 1); } }));
+      if (ui.kind === 'capped') return [{ left: 'I will grow again', right: '', act() { ui = null; autosave(); } }];   // saved at once: the window doesn't come back
       if (ui.kind === 'guest') return [
         { left: 'create account', right: '', act() { toAccount('create'); } },
         { left: 'log in', right: '', act() { toAccount('login'); } },
@@ -3376,7 +3390,7 @@
     const LB_TOP = 10;
     const LB_TABS = [{ key: 'exp', name: 'Top Exp', col: 'exp_total', mcol: 'exp', unit: 'exp' }, { key: 'deals', name: 'Top Dealers', col: 'deals', mcol: 'deals', unit: G.deals },
                      { key: 'kills', name: 'Top Slayers', col: 'kills', mcol: 'kills', unit: 'slain' }, { key: 'ach', name: 'Top Achievers', col: 'ach_points', mcol: 'ach', unit: 'pts' }];
-    const LB_BUFFS = { exp: { gain: { charisma: 1, strength: 1 }, speed: 0 }, deals: { gain: { strength: 1 }, speed: 0.05 }, kills: { gain: { charisma: 1 }, speed: 0.05 } };
+    const LB_BUFFS = { exp: { gain: { charisma: 1, strength: 1 }, speed: 0 }, deals: { gain: { strength: 1 }, speed: 0.05 }, kills: { gain: { charisma: 1 }, speed: 0.05 }, ach: { gain: { charisma: 1 }, speed: 0 } };
     const LB = { period: 'month', rows: { month: { exp: [], deals: [], kills: [], ach: [] }, all: { exp: [], deals: [], kills: [], ach: [] } }, me: { month: {}, all: {} }, achOff: false,
                  state: { month: 'idle', all: 'idle' }, error: { month: '', all: '' }, at: 0 };
     const londonMonth = (d = new Date()) => { const p = new Intl.DateTimeFormat('en-GB', { timeZone: 'Europe/London', year: 'numeric', month: '2-digit' }).formatToParts(d);
@@ -3478,15 +3492,23 @@
                weaponsV: 2, areaName, restReadyAt, levels: { ...levels }, manaCap: CAP_BASE.mana, energyCap: CAP_BASE.energy, level: hero.level, exp: hero.exp, strengthLevel: hero.level, bags: [...bags], vault: { open: vault.open, bags: [...vault.bags], items: vault.items.map(it => ({ ...it })) }, talents: JSON.parse(JSON.stringify(talents)), ceoCalls, tut, tutV: 3, pixiSeen, tutN, tutQuiz: { ...tutQuiz }, tutReplay, luck: JSON.parse(JSON.stringify(LUCK)), ach: JSON.parse(JSON.stringify(achS)), expBoostLeft: Math.max(0, expBoostUntil - gameTime), discovered: [...discovered], enemies: saveEnemies(), runner: saveRunner(), harvest: saveHarvest(),
                piles: piles.map(p => ({ ...p, gear: p.gear.map(it => ({ ...it })), items: p.items.map(it => ({ ...it })), left: Math.max(0, p.until - gameTime), until: undefined })) };
     }
+    let capNotice = 0;   // the level the hero had before the cap (the window shows once it's safe to open)
     function applySave(s) {
       resetTracker();   // the loaded quests appear without the entrance
       promoWasReady = null;
       Object.assign(CAP_BASE, BASE_CAPS, s.manaCap !== undefined ? { mana: s.manaCap } : {});
       if (s.energyCap !== undefined) CAP_BASE.energy = s.energyCap;   // bought at TradeCorp
       fixTalentOrder(Object.assign(talents, newTalents(), s.talents || {})); ceoCalls = s.ceoCalls || 0;   // before the caps (talents change them)
-      hero.level = Math.min(MAX_LEVEL, s.level || 1); hero.exp = s.exp || 0; recalcCaps();
+      const lvlWas = Math.min(MAX_LEVEL, s.level || 1);
+      hero.level = Math.min(LEVEL_CAP, lvlWas); hero.exp = hero.level >= LEVEL_CAP ? 0 : s.exp || 0; recalcCaps();
       clearLbBuffs(); Object.assign(stats, START_STATS, s.stats || {});
       if (s.strengthLevel === undefined) stats.strength += levelStrength(hero.level) - levelStrength(1);   // saves from before strength grew with level
+      else if (lvlWas > LEVEL_CAP) stats.strength -= levelStrength(lvlWas) - levelStrength(LEVEL_CAP);   // the levels above the cap took their strength with them
+      if (lvlWas > LEVEL_CAP) {   // capped: free talent reset (he has fewer points now), HP/NRG/mana within the new caps, the window once
+        applyTalentChange(() => { Object.assign(talents, newTalents()); });
+        for (const st of ['health', 'energy', 'mana']) stats[st] = Math.min(stats[st], CAPS[st]);
+        capNotice = lvlWas;
+      }
       for (let i = 0; i < 5; i++) officeChips[i] = (s.officeChips && s.officeChips[i]) || null;
       deals = s.deals && s.deals.every(d => d && d.type) ? s.deals : null; dealsDone = s.dealsDone || 0; foodBought = s.foodBought || 0; promotion = s.promotion || 0; kills = s.kills || 0; runCheated = !!s.cheated;
       dripKills = s.dripKills || 0; queenKills = s.queenKills || 0; scavKills = s.scavKills || 0; droneKills = s.droneKills || 0; hloaderKills = s.hloaderKills || 0; hookMisses = s.hookMisses || 0; loaderKills = s.loaderKills || 0; loadingK0 = s.loadingK0 ?? null; g0Kills = s.g0Kills || 0; pistolMisses = s.pistolMisses || 0; infCoreMisses = s.infCoreMisses || 0; toxicKills = s.toxicKills || 0; telePadReadyAt = gameTime + (s.teleLeft || 0); teleCast = null; weaponBought = !!s.weaponBought; rogueDone.clear(); for (const id of s.rogueDone || []) rogueDone.add(id); gridPowered.clear(); for (const k of s.gridPowered || []) gridPowered.add(k); powering = null;
@@ -3665,7 +3687,7 @@
         row('Banana sword', 'into inventory', () => { if (inventory.length >= invSlots()) return 'Inventory full.'; inventory.push({ name: 'Banana sword', kind: 'sword', class: 'equipment' }); return 'Added Banana sword.'; }),
         row('baNano Sword', 'into inventory', () => { if (inventory.length >= invSlots()) return 'Inventory full.'; inventory.push({ name: 'baNano Sword', kind: 'sword', class: 'equipment' }); return 'Added baNano Sword.'; }),
         row('rest cooldown', 'reset', () => { restReadyAt = 0; return 'HomeDome can be used again.'; }),
-        row('level up', `+1 level (now ${hero.level})`, () => { if (hero.level >= MAX_LEVEL) return `Already level ${MAX_LEVEL}.`; gainExp(expNeed(hero.level) - hero.exp); return `Level ${hero.level}: ${freePts()} talent point${freePts() === 1 ? '' : 's'} to spend at TechVersity.`; }),
+        row('level up', `+1 level (now ${hero.level})`, () => { if (hero.level >= LEVEL_CAP) return `Already level ${LEVEL_CAP} (the cap for now).`; gainExp(expNeed(hero.level) - hero.exp); return `Level ${hero.level}: ${freePts()} talent point${freePts() === 1 ? '' : 's'} to spend at TechVersity.`; }),
         row('talents', 'free reset', () => { applyTalentChange(() => { Object.assign(talents, newTalents()); }); return 'All talent points are back (no cost).'; }),
         row('talent timers', 'ReZero ready', () => { rezeroReadyAt = 0; rezeroUntil = 0; return 'ReZero Protocol can save you again.'; }),
         row('take damage', `-25% max HP`, () => { hurtHero(Math.ceil(CAPS.health * 0.25), '#e5484d'); return `Hit for 25% of max HP. Health ${stats.health}/${CAPS.health}.`; }),
@@ -3805,10 +3827,11 @@
     }
     const vesperTalk = () => quests.some(q => q.kind === 'rogue' && rqDef(q.id)?.talkTo === 'vesper');   // the Rogue sent you to her
     const vesperBountyReady = () => vesperTalk() || rogueReady('vesper').length > 0 || rogueOffers('vesper').length > 0;   // hologram up: something to take, finish or hand in
-    const TITLES = { hof: 'Hall of Fame', achievements: 'Achievements', pixi: 'Pixi', sparky: 'Sparky', vesper: 'Vesper', techversity: 'TechVersity · Talents', chef: 'Netizen Chef', intro: 'Controls', rogue: 'Rogue', metro: 'Metro Station', bank: 'CredBank', ripperdoc: 'Ripperdoc Clinic', spelltech: 'MutaTech', shop: 'ATB-Market', work: 'TradeCorp', menu: 'Menu', controls: 'Controls', hero: 'Hero', inventory: 'Inventory', gameover: 'Game over', loot: 'Loot · Drip', rest: 'HomeDome', cheat: 'Cheats (testing)', scrap: 'Scrap Dealer',
+    const TITLES = { capped: 'Potential contained', hof: 'Hall of Fame', achievements: 'Achievements', pixi: 'Pixi', sparky: 'Sparky', vesper: 'Vesper', techversity: 'TechVersity · Talents', chef: 'Netizen Chef', intro: 'Controls', rogue: 'Rogue', metro: 'Metro Station', bank: 'CredBank', ripperdoc: 'Ripperdoc Clinic', spelltech: 'MutaTech', shop: 'ATB-Market', work: 'TradeCorp', menu: 'Menu', controls: 'Controls', hero: 'Hero', inventory: 'Inventory', gameover: 'Game over', loot: 'Loot · Drip', rest: 'HomeDome', cheat: 'Cheats (testing)', scrap: 'Scrap Dealer',
                      map: 'Map', settings: 'Settings', sound: 'Sound', video: 'Video', decals: 'Decal density', restart: 'Restart', throw: 'Throw away', cancelQuest: 'Cancel quest', quests: 'Quests', leaderboard: 'Leaderboard', save: 'Save', load: 'Load game', logout: 'Log out', guest: 'Playing as guest' };
     // windows with a paragraph above their options
     const WINDOW_TEXT = {
+      capped: () => `Some unexplainable force has contained your potential. You are level ${LEVEL_CAP} again, and your talents have been reset: spend your ${freePts()} points at TechVersity. Don't give up: eventually you will grow again.`,
       pixi: '"Hiii! Here\'s what\'s new in the city!"',
       vesper: () => vesperTalk() ? '"The Rogue sent you about the Drips? ...Fine. I\'ve watched them pour out of the slums for weeks. You can tell her I\'m in. Whether YOU are is another question."'
         : !rogueDone.has('slumProblems') ? '"You didn\'t see me. ...No bounties for you yet. Come back when you\'ve got some blood on those fists."'
@@ -4419,6 +4442,7 @@
                      lb_exp: { label: 'Top 1 Exp', icon: 'buffTopExp', color: '#b58cff', symbol: '★' },
                      lb_deals: { label: 'Top 1 Dealer', icon: 'buffTopDeals', color: '#f5c542', symbol: '$' },
                      lb_kills: { label: 'Top 1 Slayer', icon: 'buffTopKills', color: '#e5484d', symbol: '⚔' },
+                     lb_ach: { label: 'Top 1 Achiever', icon: 'buffTopAch', color: '#f5c542', symbol: '★' },
                      injured: { label: 'injured', icon: 'statusInjured', color: '#e5484d', symbol: '♥', healthShare: 0.1, speed: 0.6 },
                      rezero: { label: 'ReZero', icon: 'talentReZero', color: '#4ea1ff', symbol: '⟲' },
                      arcane: { label: 'Arcane Violence', icon: 'talentArcaneViolence', color: '#e5484d', symbol: '✊' },
@@ -4575,8 +4599,9 @@
         const x = P.x || 12 * k, y = Math.max(12 * k, P.y + P.h + 10 * k) + rowsN * (STATE_ICON + STATE_GAP) * k;
         updateTracker(phoneView ? k * TASK_INTRO.phoneScale : k, x, y);   // phones: a smaller box (12 px text)
         const b = taskTracker, now = performance.now();
-        if (b && !(taskIntro.key === b.key && now < introEnd()) && !(trackFly && trackFly.key === b.key)) drawTaskBox(b, x, y, 1);
-        if (trackShrink && now < trackShrink.start) drawTaskBox(trackShrink.box, trackShrink.box.x, trackShrink.box.y, 1);   // waits for the new one's glide
+        const tipA = stateTip ? 0.3 : 1;   // a buff's description is open over it: the tracker fades back
+        if (b && !(taskIntro.key === b.key && now < introEnd()) && !(trackFly && trackFly.key === b.key)) drawTaskBox(b, x, y, 1, tipA);
+        if (trackShrink && now < trackShrink.start) drawTaskBox(trackShrink.box, trackShrink.box.x, trackShrink.box.y, 1, tipA);   // waits for the new one's glide
       }
       const now = performance.now();
       let bottom = Math.round(canvas.height * 0.74);
@@ -4623,6 +4648,7 @@
       }
       dimIcons.set(im, c); return c;
     }
+    let stateTip = null;
     function drawStates() {
       if (mobUI() && !phudEl.offsetHeight) return;   // the plate is hidden (e.g. behind a window): so is its buff row
       const list = heroStates(), P = plateBox(), k = P.k, size = STATE_ICON * k, gap = STATE_GAP * k, perRow = statesPerRow(P);
@@ -4650,7 +4676,7 @@
         ctx.restore();
         if (mouseAim.inside && mouseAim.on && !touchOn() && mouseAim.cx >= x && mouseAim.cx <= x + size && mouseAim.cy >= y && mouseAim.cy <= y + size) hover = { s, x, y, size };
       });
-      if (hover) drawStateTip(hover, k);
+      stateTip = hover ? { hover, k } : null;   // drawn after the quest tracker (in front of it; the tracker dims meanwhile)
     }
     // what a buff / status does (shown while the mouse is over its icon)
     function stateInfo(s) {
@@ -4666,6 +4692,7 @@
         case 'lb_exp': return `#1 in exp this month: ${buffText('exp')} while you hold the spot.`;
         case 'lb_deals': return `#1 in deals this month: ${buffText('deals')} while you hold the spot.`;
         case 'lb_kills': return `#1 in kills this month: ${buffText('kills')} while you hold the spot.`;
+        case 'lb_ach': return `#1 in achievement points this month: ${buffText('ach')} while you hold the spot.`;
         case 'rezero': return `ReZero Protocol saved you: ${T('rezero')}`;
         case 'rezeroCd': return `ReZero Protocol is recharging. ${T('rezero')}`;
         case 'arcane': return `Arcane Violence: ${T('arcane')}`;
@@ -6816,14 +6843,14 @@
       ctx.restore();
     }
     function gainExp(n) {
-      if (!n || hero.level >= MAX_LEVEL) return;
+      if (!n || hero.level >= LEVEL_CAP) return;   // at the cap: no exp at all (the bar stays full)
       n = Math.round(n * expBoost());   // Hall of Fame Exp Booster
       hero.exp += n; lbEarn('exp', n);
       float(`+${n}${G.exp}`, '#b58cff', player.x + 0.5, player.y - 1.1);
       let up = 0;
       const before = hero.level;
-      while (hero.level < MAX_LEVEL && hero.exp >= expNeed(hero.level)) { hero.exp -= expNeed(hero.level); hero.level++; up++; }
-      if (hero.level >= MAX_LEVEL) hero.exp = 0;
+      while (hero.level < LEVEL_CAP && hero.exp >= expNeed(hero.level)) { hero.exp -= expNeed(hero.level); hero.level++; up++; }
+      if (hero.level >= LEVEL_CAP) { hero.exp = 0; if (up) float(`Level ${LEVEL_CAP} is the limit for now`, '#b58cff', player.x + 0.5, player.y - 1.9); }
       if (up) {
         achCheck();
         const capsBefore = { ...CAPS }, strBefore = stats.strength;
@@ -7399,7 +7426,7 @@
         const fps = Math.round((f.length - 1) * 1000 / (f[f.length - 1] - f[0]));
         let worst = 0; for (let i = 1; i < f.length; i++) worst = Math.max(worst, f[i] - f[i - 1]);
         const avg = d.reduce((a, b) => a + b, 0) / d.length;
-        fpsStat.text = `${fps} fps · draw ${avg.toFixed(1)} ms · worst ${Math.round(worst)} ms`;
+        fpsStat.text = `${fps} fps · draw ${avg.toFixed(1)} ms · worst ${Math.round(worst)} ms · ${CANVAS_W.get.call(canvas)}x${CANVAS_H.get.call(canvas)} ${settings.quality}`;
         fpsStat.color = fps >= 55 ? '#9dff5c' : fps >= 30 ? '#ffdc00' : '#ff5c5c'; fpsStat.at = now;
       }
       if (!fpsStat.text) return;
@@ -7413,6 +7440,8 @@
       ctx.restore();
     }
     function frame(now) {
+      frameNo++;
+      if (capNotice && !ui && !anyOpen() && document.getElementById('account')?.hidden !== false) { capNotice = 0; openWindow('capped'); }   // once, after loading
       watchNavigation();
       if (tut >= 1 && tut <= TUT.length && TUT[tut - 1].ev === 'money' && stats.money >= TUT[tut - 1].need) { tutN = 0; tut++; }   // task 3: holds 30$
       tutGuideTick();
@@ -7999,6 +8028,7 @@
       rowRects = []; winFrames = [];
       drawStates();
       drawTutorial();
+      if (stateTip) drawStateTip(stateTip.hover, stateTip.k);   // buff description: in front of the quest tracker
       if (!(ui && ui.kind === 'map')) { drawMinimap(rx, ry); if (!mobUI()) { drawQuestButton(); drawLbButton(); } else { lbBtn = null; if (fillView) drawQuestButton(); else questBtn = null; } }
       if (ui && panelFocused()) {   // a panel was clicked: it's drawn over the window
         ui.noDim = false; drawWindow(); drawPanels(); drawItemMenu();
@@ -8104,14 +8134,37 @@
         ctx.restore();
       }
     }
+    // buildings and NPCs: each picture is shrunk ONCE to the size it's painted at on screen (high quality) and that copy is drawn
+    // every frame at ~1:1, instead of shrinking the big original with 'high' smoothing every frame. Keyed by picture + screen size
+    // (rounded to 5%); a few new copies per frame at most (the rest draw the original until their copy exists).
+    // To switch it off: SPRITE_CACHE.on = false.
+    const SPRITE_CACHE = { on: true, perFrame: 4, budget: 30e6 };   // budget: total cached pixels (~120 MB)
+    const spriteCache = new Map(); let spriteMade = 0, spriteFrame = -1, spritePx = 0, spriteIds = 0, frameNo = 0;
+    function shrunk(im, dw, dh) {
+      if (!SPRITE_CACHE.on) return null;
+      const s = Math.round(ctx.getTransform().a * 20) / 20, pw = Math.round(dw * s), ph = Math.round(dh * s);   // device px per world px
+      if (!im.naturalWidth || pw < 8 || ph < 8 || pw >= im.naturalWidth * 0.95) return null;   // not shrunk (or tiny): the original is fine
+      const key = (im.__sid ||= ++spriteIds) + '|' + pw + 'x' + ph;
+      let c = spriteCache.get(key);
+      if (c) { spriteCache.delete(key); spriteCache.set(key, c); return c; }   // most recently used last
+      if (spriteFrame !== frameNo) { spriteFrame = frameNo; spriteMade = 0; }
+      if (spriteMade >= SPRITE_CACHE.perFrame) return null;
+      spriteMade++;
+      c = document.createElement('canvas'); c.width = pw; c.height = ph;
+      const g = c.getContext('2d'); g.imageSmoothingEnabled = true; g.imageSmoothingQuality = 'high'; g.drawImage(im, 0, 0, pw, ph);
+      spriteCache.set(key, c); spritePx += pw * ph;
+      while (spritePx > SPRITE_CACHE.budget && spriteCache.size > 1) { const [k0, c0] = spriteCache.entries().next().value; spriteCache.delete(k0); spritePx -= c0.width * c0.height; }
+      return c;
+    }
     function drawWall(w) {
       if (w.leaveAt) { const t = (w.leaveAt - performance.now()) / 1000; if (t < 1) { ctx.save(); ctx.globalAlpha *= Math.max(0, t); const l = w.leaveAt; w.leaveAt = null; drawWall(w); w.leaveAt = l; ctx.restore(); return; } }
       const f = foot(w), a = artSize(w);
       if (a) {
         ctx.imageSmoothingQuality = 'high';
         const { x, y } = artXY(w, a);
-        if (w.flip) { ctx.save(); ctx.translate(x + a.dw, y); ctx.scale(-1, 1); ctx.drawImage(a.im, 0, 0, a.dw, a.dh); ctx.restore(); }
-        else ctx.drawImage(a.im, x, y, a.dw, a.dh);
+        const pic = shrunk(a.im, a.dw, a.dh) || a.im;
+        if (w.flip) { ctx.save(); ctx.translate(x + a.dw, y); ctx.scale(-1, 1); ctx.drawImage(pic, 0, 0, a.dw, a.dh); ctx.restore(); }
+        else ctx.drawImage(pic, x, y, a.dw, a.dh);
         if (w === facedBuilding()) {   // interactable: yellow neon outline
           ctx.save(); ctx.globalAlpha = NEON.building.alpha;
           const ol = outlineOf(a.im, 0, 0, a.im.naturalWidth, a.im.naturalHeight, a.dw, a.dh, NEON.building.color);
@@ -10411,7 +10464,7 @@
         ['ATK SPD', `${secs(heroAttackMs())}s`, 'atk'],
         ['HP REG', Math.round(healthRegen()), 'hregen', '/min'], ['MANA REG', `${Math.round(manaRegen())}/min`, 'mregen'],
         [`${G.speed} MOVE SPD`, Math.round((1 + lbSpeed() + equipSum('speed')) * 100), 'spd', '%'],
-        ['LVL', `${hero.level}${hero.level < MAX_LEVEL ? `  (${hero.exp}/${expNeed(hero.level)})` : ' (max)'}`, 'level'],
+        ['LVL', `${hero.level}${hero.level < LEVEL_CAP ? `  (${hero.exp}/${expNeed(hero.level)})` : ' (max for now)'}`, 'level'],
     ];
     function drawHeroPanel() {
       // height grows with the stat rows and the selected item's text, so nothing ever overlaps
@@ -11031,7 +11084,7 @@
       $('ph-name').textContent = heroName || DEFAULT_NAME; $('ph-title').textContent = achS.title || ''; $('ph-title').hidden = !achS.title; $('ph-lvl').textContent = `lvl ${hero.level}`;
       $('ph-hp').style.width = pct(stats.health, CAPS.health); $('ph-hpt').textContent = `${stats.health}/${CAPS.health}`;
       $('ph-mana').style.width = pct(stats.mana, CAPS.mana); $('ph-manat').textContent = `${stats.mana}/${CAPS.mana}`;
-      const need = expNeed(hero.level); $('ph-xp').style.width = need ? pct(hero.exp, need) : '100%';
+      const need = expToNext(hero.level); $('ph-xp').style.width = need ? pct(hero.exp, need) : '100%';
       $('ph-nrg').textContent = kfmt(stats.energy); $('ph-money').textContent = kfmt(stats.money - moneyHeld);   // 14.1K, 2.3M (rounded down)
       $('ph-deals').textContent = kfmt(dealsDone);
       $('ph-money').parentNode.title = `Money: ${stats.money.toLocaleString('en')}`; $('ph-deals').parentNode.title = `Deals made at work: ${dealsDone.toLocaleString('en')}`;
