@@ -84,6 +84,7 @@
                    background: rgba(5, 7, 12, 0.7); border: 1px solid rgba(255, 255, 255, 0.35); border-radius: 8px; opacity: 0.8;
                    font-size: clamp(15px, calc(var(--u) * 5.5), 24px); line-height: 1; }
   .t-menu img { width: 62%; height: auto; aspect-ratio: 1; object-fit: contain; pointer-events: none; }
+  .t-menu button:is([data-code="KeyL"], [data-code="KeyK"]) img { width: 80%; }   /* icon only, no label */
   .t-menu small { font-size: clamp(8px, calc(var(--u) * 2.4), 11px); font-weight: 600; color: #8a8a8a; margin-top: 2px; }
   .touch.busy .t-spell { display: none; }   /* a window or panel is open: spells can't be cast anyway */
   .touch.inv .t-btns { bottom: 33%; }        /* inventory open: lift the buttons above it */
@@ -151,6 +152,8 @@
                      padding: 6px 8px 6px 6px; background: rgba(5, 7, 12, 0.72); border: 1px solid rgba(255, 255, 255, 0.18); border-radius: 10px;
                      font: 600 11px/1.2 ui-monospace, "SF Mono", Menlo, Consolas, monospace; color: #fff; pointer-events: auto; cursor: pointer; touch-action: none; -webkit-tap-highlight-color: transparent; }   /* the whole plate opens the Hero window */
   :is(html.phone, html.fill) .phud.away { display: none; }   /* a window or panel is open */
+  .inv-btn.tut-glow, .t-menu button.tut-glow { box-shadow: 0 0 0 3px #ffdc00, 0 0 16px 5px rgba(255, 220, 0, 0.8); animation: tutGlow 0.9s ease-in-out infinite alternate; }   /* bag: eat / equip now */
+  .ph-title { color: #f5c542; font-size: 10px; font-weight: 600; margin: -1px 0 2px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }   /* chosen achievement title */
   .ph-face.tut-glow { box-shadow: 0 0 0 3px #ffdc00, 0 0 16px 5px rgba(255, 220, 0, 0.8); animation: tutGlow 0.9s ease-in-out infinite alternate; }
   @keyframes tutGlow { from { box-shadow: 0 0 0 2px #ffdc00, 0 0 6px 2px rgba(255, 220, 0, 0.5); } to { box-shadow: 0 0 0 4px #ffdc00, 0 0 20px 6px rgba(255, 220, 0, 0.9); } }
   .ph-face { width: 46px; height: 46px; flex: none; padding: 0; border: 2px solid #00e5ff; border-radius: 8px; background: #1B2233 center / cover no-repeat;
@@ -283,6 +286,7 @@
     <button type="button" class="ph-face" id="ph-face" aria-label="Hero (H)" tabindex="-1"></button>
     <div class="ph-bars">
       <div class="ph-top"><b id="ph-name">Guest</b><span id="ph-lvl">lvl 1</span></div>
+      <div class="ph-title" id="ph-title" hidden></div>
       <div class="ph-bar hp"><i id="ph-hp"></i><span id="ph-hpt"></span></div>
       <div class="ph-bar mana"><i id="ph-mana"></i><span id="ph-manat"></span></div>
       <div class="ph-bar xp"><i id="ph-xp"></i></div>
@@ -295,7 +299,8 @@
       <button type="button" data-code="KeyI" aria-label="Inventory"><img id="t-bag-img" alt=""><small>bag</small></button>
       <button type="button" data-code="KeyM" aria-label="Map">&#x25A6;<small>map</small></button>
       <button type="button" data-code="KeyQ" aria-label="Quests"><img id="t-quest-img" alt=""><small>quests</small></button>
-      <button type="button" data-code="KeyL" aria-label="Leaderboard"><img id="t-lb-img" alt=""><small>top</small></button>
+      <button type="button" data-code="KeyL" aria-label="Leaderboard" title="Leaderboard (L)"><img id="t-lb-img" alt=""></button>
+      <button type="button" data-code="KeyK" aria-label="Achievements" title="Achievements (K)"><img id="t-ach-img" alt="" onerror="this.replaceWith('★')"></button>
       <button type="button" data-code="Escape" aria-label="Menu or back">&#x2630;<small>menu</small></button>
       <button type="button" id="t-fs" aria-label="Full screen" hidden>&#x26F6;&#xFE0E;<small>full</small></button>
     </div>
@@ -627,9 +632,13 @@
     return { exp: Math.round(base * 0.1 * m), money: Math.round(base * 0.04 * m) }; };
   const questTag = (lvl, rarity) => `lvl ${lvl} · ${rarity}`;
   // each level up: max health = round(previous max + 0.8 × new level) (10 at lvl 1, 12 at 2, 14 at 3, 53 at 10, 177 at 20; see heroHealthCap),
-  // +1 mana cap, +10% energy cap (compounding, shown as whole numbers), +0.1% crit chance,
+  // +1 mana cap, +10% energy cap (compounding, shown as whole numbers), base crit 1% → 5% over the 20 levels (levelCrit),
   // strength × 1.12, health regen × 1.06, mana regen × 1.09 (all three kept as fractions, used / shown rounded)
-  const LEVEL_GROWTH = { energy: 0.10 }, LEVEL_CRIT = 0.001, LEVEL_MANA = 1;
+  const LEVEL_GROWTH = { energy: 0.10 }, LEVEL_MANA = 1;
+  // base crit (a "naked" hero: no gear, patches or talents): 1% at level 1 (1 crit in 100 hits) rising evenly to 5% at level 20
+  // (1 in 20), rounded to 0.01%. Charisma, gear and talents add on top (CHSM only counts above the starting 1).
+  const CRIT_BASE = { min: 0.01, max: 0.05 };
+  const levelCrit = L => Math.round((CRIT_BASE.min + (CRIT_BASE.max - CRIT_BASE.min) * (Math.min(L, MAX_LEVEL) - 1) / (MAX_LEVEL - 1)) * 10000) / 10000;
   const LEVEL_MULT = { strength: 1.12, healthRegen: 1.06, manaRegen: 1.09 };
   const levelMult = (key, L) => Math.pow(LEVEL_MULT[key], L - 1);
   const levelStrength = L => Math.round(1 * levelMult('strength', L));   // hero's own strength (1 at lvl 1, 2 at 5, 3 at 10, 9 at 20)
@@ -795,7 +804,7 @@
     // (hit roll each) is slowed by `slow` for `slowMs` and takes dot[0]-dot[1] damage every second, `ticks` times.
     'Magic Nozzle': { mana: 3, cone: true, range: 3.5, halfAngle: 0.6, slow: 0.4, slowMs: 3000, dot: [1, 2], ticks: 3, tickMs: 1000 },   // 1-2 damage per second for 3 s
   };
-  // critical strike (any attack: melee and spells): 0.03% per charisma point, capped at 15%. A crit adds the hero's strength to the damage.
+  // critical strike (any attack: melee and spells): levelCrit + 0.03% per charisma point above the starting 1 (capped at 15%) + talents.
   const CRIT_PER_CHA = 0.0003, CRIT_CAP = 0.15;
   const HERO_MANA_REGEN_MS = 60000;     // hero gets 1 mana back every minute of game time (up to the mana cap)
   const NPC_HEALTH_REGEN_MS = 60000;    // every enemy (all zones) heals 1 health per minute of game time
@@ -858,16 +867,42 @@
   for (const it of [...SHOP_ITEMS, ...LOOT_ITEMS]) { const r = it.rarity || 'common'; if (!it.noPool && SALE.classes.includes(it.class) && SALE_POOL[r] && !SALE_POOL[r].includes(it.name)) SALE_POOL[r].push(it.name); }
   const MAX_QUESTS = 5;   // active quests at the same time (deliveries + the Rogue's quests; her tutorial doesn't count)
   const pick = a => a[Math.floor(Math.random() * a.length)];
+  // ---- bag randomness (20 Oct 2026): every gameplay chance is drawn from a bag of answers, not rolled flat. 25% = a bag of
+  // 4 answers, 1 yes + 3 no; each draw takes one out (after a no: 1 yes in 3 left, 33%), and an empty bag is refilled.
+  // Chances become fractions K/N (the smallest N up to 1000 that fits exactly, else N = 10000), each kind of roll and each
+  // fraction has its own bag (a different chance, e.g. hit chance against another level, is another bag). Saved with the game.
+  //   luckRoll(key, p): yes / no.   luckPick(key, list, weights?): one of a list (each weight = that many answers).
+  //   luckInt(key, a, b): a whole number a..b, each value once per bag.
+  const LUCK = {};   // key -> { y, t } (yes/no) or { left: [counts] } (picks)
+  function luckFrac(p) {
+    for (let N = 1; N <= 1000; N++) { const K = Math.round(p * N); if (Math.abs(K / N - p) < 1e-9) return [K, N]; }
+    return [Math.max(1, Math.round(p * 10000)), 10000];
+  }
+  function luckRoll(key, p) {
+    if (!(p > 0)) return false; if (p >= 1) return true;
+    const [K, N] = luckFrac(p), k = `${key}|${K}/${N}`;
+    let b = LUCK[k]; if (!b || b.t <= 0) b = LUCK[k] = { y: K, t: N };
+    const yes = Math.random() * b.t < b.y; if (yes) b.y--; b.t--;
+    return yes;
+  }
+  function luckPick(key, list, weights = null) {
+    if (!list.length) return undefined;
+    const w = weights || list.map(() => 1), k = `${key}|${w.join(',')}`;
+    let b = LUCK[k]; if (!b || !b.left || b.left.length !== w.length || b.left.every(n => n <= 0)) b = LUCK[k] = { left: w.slice() };
+    let r = Math.random() * b.left.reduce((a, n) => a + n, 0), i = 0;
+    for (; i < b.left.length - 1; i++) { if (r < b.left[i]) break; r -= b.left[i]; }
+    b.left[i]--; return list[i];
+  }
+  const luckInt = (key, a, b) => { if (b <= a) return a; const vals = Array.from({ length: b - a + 1 }, (_, i) => a + i); return luckPick(`${key}:${a}-${b}`, vals); };
   function rollDeal(lvl, cha, foodPrice, force = null, unitOf = null) {   // force: [type, rare] (cheat menu); unitOf(name): full price of 1 (food: today's shop price)
-    let r = Math.random(), roll = DEAL_CHANCES[0];
-    for (const c of DEAL_CHANCES) { if (r < c[2]) { roll = c; break; } r -= c[2]; }
+    const roll = luckPick('deal', DEAL_CHANCES, DEAL_CHANCES.map(c => Math.round(c[2] * 2000)));   // a bag of 2000 deals
     const [type, rare] = force || roll;
     if (type === 'call') {
       const W = rare ? DEAL_W.rare : DEAL_W.common;
-      return { type, rare, energy: rand(lvl, lvl + cha), money: Math.round(lvl * W + Math.random() * cha * W), line: pick(rare ? RARE_CALL_LINES : CALL_LINES) };
+      return { type, rare, energy: luckInt('callEnergy', lvl, lvl + cha), money: Math.round(lvl * W + luckInt('callPay', 0, 10) / 10 * cha * W), line: luckPick(rare ? 'rareLine' : 'callLine', rare ? RARE_CALL_LINES : CALL_LINES) };
     }
     if (type === 'sale') {
-      const item = pick(rare ? SALE_POOL.rare : SALE_POOL.common), def = [...SHOP_ITEMS, ...LOOT_ITEMS].find(it => it.name === item) || {};
+      const item = luckPick(rare ? 'saleRare' : 'saleCommon', rare ? SALE_POOL.rare : SALE_POOL.common), def = [...SHOP_ITEMS, ...LOOT_ITEMS].find(it => it.name === item) || {};
       const unit = Math.max(1, unitOf ? unitOf(item) : item === 'Cheap noodles' ? Math.ceil(foodPrice - 1e-9) : (def.value ?? def.price ?? 1));
       const count = Math.max(1, Math.min(def.stack || 1, Math.floor(lvl * SALE.budgetPerLevel / unit)));
       return { type, rare, item, count, price: unit * count };   // full price; dealCost takes the discount off
@@ -1075,6 +1110,7 @@
       b5: { art: 'block5', artW: 3.2, turned: 'L' },
       b4c: { art: 'block4Capsule', artW: 3.2 }, b5c: { art: 'block5Corp', artW: 3.2, turned: 'R' }, b6m: { art: 'block6Market', artW: 3.4 },
       b4cRuin: { art: 'ruinCapsule', artW: 3.2 }, b5cRuin: { art: 'ruinCorp', artW: 3.2, turned: 'R' }, b6mRuin: { art: 'ruinMarketTower', artW: 3.4 },
+      hof: { art: 'hallOfFame', artW: 2.4, label: 'Hall of Fame', opens: 'hof', color: '#f5c542' },   // Neon Marks booth (achievements)
       cont: { art: 'containerStack', artW: 3.4, turned: 'L' }, bus: { art: 'burntBus', artW: 3.8, turned: 'L' }, b6a: { art: 'block6Abandoned', artW: 3.2, turned: 'R' }, b7: { art: 'block7', artW: 3.4 },
     };
     const PLAN = [   // from city-layout-planner-v2.xlsx
@@ -1087,6 +1123,7 @@
       ['b3', 33, 20, 3, 2], ['ruinApt', 14, 21, 2, 2], ['noodle', 16, 21, 3, 2], ['car', 36, 21, 2, 2], ['billRuinA', 23, 22, 1, 1], ['bill', 42, 22, 1, 1],
       ['b6mRuin', 3, 24, 3, 3], ['workRuin', 10, 25, 2, 2], ['ruinMkt', 12, 25, 2, 2], ['docRuin', 14, 25, 3, 2], ['b3a', 17, 25, 3, 2], ['bankRuin', 22, 25, 3, 2],
       ['ruinNoodle', 25, 25, 3, 2], ['cont', 34, 25, 3, 2], ['cont', 38, 25, 3, 2], ['bus', 42, 25, 3, 2],
+      // ['hof', 19, 16, 2, 1],   // 20 Oct: the Hall of Fame booth, right of the TelePort (hidden for now: uncomment to place it; art + window stay in the code)
     ];
     AREAS['0:0'].walls = PLAN.map(([k, x0, y0, w, h]) => {
       const d = B[k], c = x0 + w / 2, y1 = y0 + h - 1;
@@ -2202,7 +2239,8 @@
     treeDeepB: 'art/world/trees/treeDeepB.webp', treeOvergrowth: 'art/world/trees/treeOvergrowth.webp',
     passageForest: 'art/world/passages/passageForest.png', passageLake: 'art/world/passages/passageLake.png', passageFactory: 'art/world/passages/passageFactory.png',   // passage pictures (straight right edge on the map edge)   // tar puddle flowing in from the right edge (mirrored for the left edge)
     homedome:     'art/buildings/homeDome.png',
-    telePortPylon: 'art/buildings/telePortPylon.webp',   // TelePort pylon (city), faces right; mirrored for the right one   // HomeDome apartments, front view (faces down)
+    telePortPylon: 'art/buildings/telePortPylon.webp',
+    achievements: 'art/ui/achievements.webp', hallOfFame: 'art/buildings/hallOfFame.webp',   // achievements button / banner, Hall of Fame booth   // TelePort pylon (city), faces right; mirrored for the right one   // HomeDome apartments, front view (faces down)
     noodleBar:    'art/buildings/noodleBar.png',   // CaaCaanTeng noodle bar, front view, closed
     charging:     'art/buildings/chargingStation.png',   // hover-car charging station, front view
     food: 'art/items/food/cheapNoodles.png',   // noodle bowl item icon
@@ -2224,7 +2262,8 @@
     loaderIdle: 'art/enemies/overgrownLoader/overgrownLoaderIdle.webp', loaderWalk: 'art/enemies/overgrownLoader/overgrownLoaderWalk.webp', loaderWhip: 'art/enemies/overgrownLoader/overgrownLoaderWhip.webp', loaderSlam: 'art/enemies/overgrownLoader/overgrownLoaderSlam.webp',
     hloaderIdle: 'art/enemies/hackedLoader/hackedLoaderIdle.webp', hloaderIdle2: 'art/enemies/hackedLoader/hackedLoaderIdle2.webp', hloaderWalk: 'art/enemies/hackedLoader/hackedLoaderWalk.webp', hloaderHook: 'art/enemies/hackedLoader/hackedLoaderHook.webp', hloaderSmash: 'art/enemies/hackedLoader/hackedLoaderSmash.webp', hloaderWalk2: 'art/enemies/hackedLoader/hackedLoaderWalk2.webp', hloaderHook2: 'art/enemies/hackedLoader/hackedLoaderHook2.webp', hloaderSmash2: 'art/enemies/hackedLoader/hackedLoaderSmash2.webp',
     hloaderOver: 'art/enemies/hackedLoader/hackedLoaderOvercharge.webp', hloaderHurt: 'art/enemies/hackedLoader/hackedLoaderHurt.webp', hloaderPortrait: 'art/enemies/hackedLoader/hackedLoaderPortrait.webp', hloaderHookHead: 'art/enemies/hackedLoader/hackedLoaderHookHead.webp', winchHook: 'art/items/weapons/winchHook.webp', sporePistol: 'art/items/weapons/sporePistol.webp', motherMk2: 'art/items/weapons/motherMk2.webp', filterChip: 'art/items/loot/filterChip.webp', keycard: 'art/items/loot/keycard.webp', telePad: 'art/items/loot/telePad.webp', specialKeycard: 'art/items/loot/specialKeycard.webp',
-    heroMk2Side: 'art/hero/heroMk2Side.webp', heroMk2Down: 'art/hero/heroMk2Down.webp', heroMk2Up: 'art/hero/heroMk2Up.webp',   // Mothersword MK-II attacks slotOutlines: 'art/ui/slotOutlines.webp',
+    heroMk2Side: 'art/hero/heroMk2Side.webp', heroMk2Down: 'art/hero/heroMk2Down.webp', heroMk2Up: 'art/hero/heroMk2Up.webp',   // Mothersword MK-II attacks
+    slotOutlines: 'art/ui/slotOutlines.webp',   // empty Hero-panel slots
     heroShootSide: 'art/hero/heroShootSide.webp', heroShootDown: 'art/hero/heroShootDown.webp', heroShootUp: 'art/hero/heroShootUp.webp',   // Spore Pistol shots
     heroWinchSide: 'art/hero/heroWinchSide.webp', heroWinchDown: 'art/hero/heroWinchDown.webp', heroWinchUp: 'art/hero/heroWinchUp.webp',   // Winch Hook attacks
     g0Idle: 'art/enemies/specimenG0/specimenG0Idle.webp', g0Lash: 'art/enemies/specimenG0/specimenG0Lash.webp', g0Roots: 'art/enemies/specimenG0/specimenG0Roots.webp', g0Spit: 'art/enemies/specimenG0/specimenG0Spit.webp', g0Uproot: 'art/enemies/specimenG0/specimenG0Uproot.webp', g0Idle2: 'art/enemies/specimenG0/specimenG0Idle2.webp', g0Walk2: 'art/enemies/specimenG0/specimenG0Walk2.webp', g0Lash2: 'art/enemies/specimenG0/specimenG0Lash2.webp', g0Heart: 'art/enemies/specimenG0/specimenG0Heart.webp', g0Hurt: 'art/enemies/specimenG0/specimenG0Hurt.webp', g0Spike: 'art/enemies/specimenG0/specimenG0Spike.webp', g0Portrait: 'art/enemies/specimenG0/specimenG0Portrait.webp', g0Pod: 'art/enemies/specimenG0/specimenG0Pod.webp', specimenTag: 'art/items/loot/specimenTag.webp',
@@ -2523,17 +2562,21 @@
       { ev: 'food', need: 2, task: 'Buy 2 food at the ATB-Market.', target: 'shop',
         tip: 'Energy (\uE101) is what deals cost. Your max energy grows with your level and items; food fills it back up.' },
       { ev: 'money', need: 30, task: 'Take more deals until you have 30\uE100.', target: 'work',
-        tip: 'Charisma (\uE104) is one of your stats: the more charisma you have, the better the deals you get.' },
+        tip: 'Out of energy (\uE101)? Buy food at the ATB-Market: you eat it at once (food in your bag: pick it and press Space). Then take more deals. Charisma (\uE104) gets you better deals.',
+        tipPhone: 'Out of energy (\uE101)? Buy food at the ATB-Market: you eat it at once (food in your bag: tap "bag", tap it, Eat). Then take more deals. Charisma (\uE104) gets you better deals.' },
       { ev: 'smile', task: 'Buy the Smile patch (lvl 1) at the ATB-Market.', target: 'shop',
         tip: 'It is in the Patches tab and gives +1 charisma. More charisma = deals that pay more for the same energy.' },
       { ev: 'rest', task: 'Sleep at HomeDome.', target: 'rest',
-        tip: 'Sleeping saves your game (you can also save any time from the Menu) and brings back health and energy.' },
-      { ev: 'hero', task: 'Open your Hero window: press H or click your hero plate (top left).', target: null,
+        tip: 'Sleeping saves your game (you can also save any time from the Menu) and brings back health and energy.',
+        tipPhone: 'Sleeping saves your game (you can also save any time from the Menu: tap "menu") and brings back health and energy.' },
+      { ev: 'hero', task: 'Open your Hero window: press H or click your hero plate (top left).', taskPhone: 'Open your Hero window: tap your hero plate (top left).', target: null,
         tip: 'It shows your stats: health, energy, mana, strength and charisma. They grow as you level up.' },
       { ev: 'talk', task: 'Go back to the Rogue and talk to her.', target: 'rogue',
         tip: 'She wants to see what you learned.' },
     ];
     const TUT_READY = TUT.length + 1, TUT_DONE = TUT.length + 2;
+    const tutTask = st => phoneView && st.taskPhone || st.task, tutTip = st => phoneView && st.tipPhone || st.tip;   // phones get touch wording
+    const quizText = a => phoneView ? a.replace('Press H or click on my hero', 'Tap my hero plate (top left)') : a;
     const TUT_REWARD = questPay(1, 'legendary'), TUT_PENALTY = { money: 2, exp: 5 };   // each wrong quiz answer takes this off the reward
     const TUT_QUIZ = [
       { q: 'How do you get better deals?', a: ['Take more deals in a row', 'Improve my charisma', 'Eat more noodles first'], right: 1 },
@@ -2568,7 +2611,7 @@
     const tutProgress = () => { const st = TUT[tut - 1]; if (!st) return '';
       return st.ev === 'money' ? ` (${Math.min(stats.money, st.need)}/${st.need}${G.money})` : st.need > 1 ? ` (${tutN}/${st.need})` : ''; };
     let walkedOnce = false;   // this visit: has the hero taken a step yet? (the walking hint stays until he has)
-    let tut = saved.tut ?? 0;
+    let tut = saved.tut ?? 0, tutReplay = !!saved.tutReplay;   // tutReplay: replayed from the Menu (no second reward)
     let hintText = '', hintUntil = 0;   // a short line at the top of the screen (real time)
     const showHint = (text, ms = 8000) => { hintText = text; hintUntil = performance.now() + ms; };
     capMult = talentHpMult; recalcCaps();
@@ -3144,6 +3187,9 @@
       if (ui.kind === 'menu') return [
         { left: 'continue', right: '', act() { ui = null; } },
         { left: 'restart', right: '', act() { openWindow('restart', 1, fromHere()); } },
+        tut >= 1 && tut <= TUT_READY ? { left: 'skip tutorial', right: 'no reward', act() { tut = TUT_DONE; tutReplay = false; return 'Tutorial skipped. You can replay it from this Menu any time.'; } }
+          : { left: tut === 0 ? 'start tutorial' : 'replay tutorial', right: tut === 0 ? '' : 'no second reward', act() {
+              tutReplay = tut !== 0; tut = 1; tutN = 0; tutQuiz = { i: 0, wrong: 0 }; ui = null; showHint(`Rogue's lessons: ${tutTask(TUT[0])}`); } },
         { left: 'save', right: account ? '' : 'account needed', gapBefore: true, act() { account ? openSlots('save') : openWindow('guest', 0, fromHere()); } },
         { left: 'load game', right: account ? '' : 'account needed', act() { account ? openSlots('load') : openWindow('guest', 0, fromHere()); } },
         { left: 'settings', right: '', gapBefore: true, act() { openWindow('settings', 0, fromHere()); } },
@@ -3240,17 +3286,18 @@
         if (tut <= TUT.length) return [{ left: 'got it', right: '', act() { ui = null; } }];
         if (tut === TUT_READY && tutQuiz.i < TUT_QUIZ.length) {   // the quiz: one try per question
           const Q = TUT_QUIZ[tutQuiz.i];
-          return Q.a.map((ans, k) => ({ left: ans, right: '', act() {
+          return Q.a.map((ans, k) => ({ left: quizText(ans), right: '', act() {
             const ok = k === Q.right; if (!ok) tutQuiz.wrong++;
             tutQuiz.i++; ui.cursor = 0;
-            return ok ? 'Right!' : `Not quite: "${Q.a[Q.right]}". (-${TUT_PENALTY.exp}${G.exp}, -${TUT_PENALTY.money}${G.money} from your reward)`;
+            return ok ? 'Right!' : `Not quite: "${quizText(Q.a[Q.right])}".${tutReplay ? '' : ` (-${TUT_PENALTY.exp}${G.exp}, -${TUT_PENALTY.money}${G.money} from your reward)`}`;
           } }));
         }
-        if (tut === TUT_READY) { const r = tutReward(); return [{ left: 'complete quest', right: `+${r.money}${G.money} +${r.exp}${G.exp}`, act() {
-          coinBurst(coinOrigin(14, 30), r.money);
-          tut = TUT_DONE; stats.money += r.money; gainExp(r.exp); renderStats();
-          ui = null; showHint(`Quest complete: Rogue's lessons. +${r.money}${G.money} and +${r.exp}${G.exp}.`);
-          float(`+${r.money}${G.money} +${r.exp}${G.exp}`, '#9b5cff', player.x + 0.5, player.y - 1.2);
+        if (tut === TUT_READY) { const r = tutReplay ? { money: 0, exp: 0 } : tutReward(); return [{ left: 'complete quest', right: tutReplay ? 'replay: no reward' : `+${r.money}${G.money} +${r.exp}${G.exp}`, act() {
+          if (r.money) coinBurst(coinOrigin(14, 30), r.money);
+          tut = TUT_DONE; tutReplay = false; stats.money += r.money; gainExp(r.exp); renderStats();
+          ui.cursor = 0; showHint(r.money ? `Quest complete: Rogue's lessons. +${r.money}${G.money} and +${r.exp}${G.exp}.` : 'Tutorial replayed.');
+          if (r.money) float(`+${r.money}${G.money} +${r.exp}${G.exp}`, '#9b5cff', player.x + 0.5, player.y - 1.2);
+          return '"That\'s the basics. Now some real work: my first job for you is right below. Take it."';   // the window stays open on her quest offer
         } }]; }
         return npcQuestRows('rogue');
       }
@@ -3286,13 +3333,15 @@
         { left: 'Play tutorial (recommended)', right: '', act() { tut = 0; tutN = 0; tutQuiz = { i: 0, wrong: 0 }; afterLoading(() => { ui = { kind: 'intro', cursor: 0, msg: '' }; }); } },
         { left: 'No, I know my way.', right: '', act() { tut = TUT_DONE; afterLoading(() => { ui = null; }); } }];
       if (ui.kind === 'intro') return [{ left: 'got it', right: '', act() { endIntro(); } }];
+      if (ui.kind === 'achievements') return achRows();
+      if (ui.kind === 'hof') return hofRows();
       if (ui.kind === 'controls') return (phoneView ? PHONE_CONTROLS : CONTROLS).map(([key, what]) => ({ left: key, right: what, act() {} }));
       if (ui.kind === 'leaderboard') {   // period switch, the top LB_TOP, then your own place if you're further down
         const per = LB.period, tab = LB_TABS[tabOf()], list = LB.rows[per][tab.key] || [], me = LB.me[per][tab.key];
         const out = [{ left: per === 'month' ? `This month · ${monthName(londonMonth())}` : 'All time', right: per === 'month' ? 'Space: all time' : 'Space: this month',
                        act() { LB.period = LB.period === 'month' ? 'all' : 'month'; ui.cursor = 0; return ''; } }];
         list.forEach((e, i) => out.push({ lb: e, rank: i + 1, tab, period: per, left: e.hero_name, right: '', act() { return ''; } }));
-        if (!list.length) out.push({ lbNote: LB.state[per] === 'loading' || LB.state[per] === 'idle' ? 'Loading…' : LB.state[per] === 'error' ? `Can't load the leaderboard: ${LB.error[per]}` : per === 'month' ? 'Nobody has scored this month yet. Be the first!' : 'Nobody here yet. Be the first!', left: '', right: '', act() { return ''; } });
+        if (!list.length) out.push({ lbNote: tab.key === 'ach' && LB.achOff ? 'Top Achievers isn’t set up on the server yet (run achievements.sql in Supabase).' : LB.state[per] === 'loading' || LB.state[per] === 'idle' ? 'Loading…' : LB.state[per] === 'error' ? `Can't load the leaderboard: ${LB.error[per]}` : per === 'month' ? 'Nobody has scored this month yet. Be the first!' : 'Nobody here yet. Be the first!', left: '', right: '', act() { return ''; } });
         if (me) out.push({ lbMe: me, tab, left: '', right: '', act() { return ''; } });
         return out;
       }
@@ -3300,6 +3349,7 @@
     }
     function newGame() {
       Object.assign(talents, newTalents()); ceoCalls = 0;
+      Object.assign(achS, { done: {}, kills: {}, zones: [], harvests: 0, critRun: 0, points: 0, marks: 0, title: '' }); achQueue.length = 0; expBoostUntil = 0;
       officeChips.fill(null); resetTracker(); promoWasReady = null; clearLbBuffs(); Object.assign(stats, START_STATS); dealsDone = 0; foodBought = 0; promotion = 0; kills = 0; dripKills = 0; queenKills = 0; scavKills = 0; droneKills = 0; hloaderKills = 0; hookMisses = 0; loaderKills = 0; loadingK0 = null; g0Kills = 0; pistolMisses = 0; infCoreMisses = 0; toxicKills = 0; telePadReadyAt = 0; teleCast = null; weaponBought = false; rogueDone.clear(); gridPowered.clear(); powering = null; runCheated = false; Object.assign(prices, startPrices());
       discovered.clear();
       quests.length = 0;
@@ -3325,17 +3375,18 @@
     // you're further down, your own place under it. The #1 of each MONTHLY list gets that list's buff while they hold the spot.
     const LB_TOP = 10;
     const LB_TABS = [{ key: 'exp', name: 'Top Exp', col: 'exp_total', mcol: 'exp', unit: 'exp' }, { key: 'deals', name: 'Top Dealers', col: 'deals', mcol: 'deals', unit: G.deals },
-                     { key: 'kills', name: 'Top Slayers', col: 'kills', mcol: 'kills', unit: 'slain' }];
+                     { key: 'kills', name: 'Top Slayers', col: 'kills', mcol: 'kills', unit: 'slain' }, { key: 'ach', name: 'Top Achievers', col: 'ach_points', mcol: 'ach', unit: 'pts' }];
     const LB_BUFFS = { exp: { gain: { charisma: 1, strength: 1 }, speed: 0 }, deals: { gain: { strength: 1 }, speed: 0.05 }, kills: { gain: { charisma: 1 }, speed: 0.05 } };
-    const LB = { period: 'month', rows: { month: { exp: [], deals: [], kills: [] }, all: { exp: [], deals: [], kills: [] } }, me: { month: {}, all: {} },
+    const LB = { period: 'month', rows: { month: { exp: [], deals: [], kills: [], ach: [] }, all: { exp: [], deals: [], kills: [], ach: [] } }, me: { month: {}, all: {} }, achOff: false,
                  state: { month: 'idle', all: 'idle' }, error: { month: '', all: '' }, at: 0 };
     const londonMonth = (d = new Date()) => { const p = new Intl.DateTimeFormat('en-GB', { timeZone: 'Europe/London', year: 'numeric', month: '2-digit' }).formatToParts(d);
       return p.find(x => x.type === 'year').value + '-' + p.find(x => x.type === 'month').value; };   // 'YYYY-MM'
     const monthName = key => { const [y, m] = key.split('-').map(Number); return new Date(Date.UTC(y, m - 1, 15)).toLocaleString('en-GB', { month: 'long', year: 'numeric', timeZone: 'UTC' }); };
     // this month's earnings not sent yet (exp gained, deals done, enemies slain); added on the server with the next save
-    const lbPending = { month: londonMonth(), exp: 0, deals: 0, kills: 0 };
+    const lbPending = { month: londonMonth(), exp: 0, deals: 0, kills: 0, ach: 0 };
+    let bossSrc = null;   // the boss whose attack is running right now (hurtHero marks it: "Untouchable")
     function lbEarn(k, n) {
-      const m = londonMonth(); if (m !== lbPending.month) Object.assign(lbPending, { month: m, exp: 0, deals: 0, kills: 0 });   // a new month: last month's unsent bits are dropped
+      const m = londonMonth(); if (m !== lbPending.month) Object.assign(lbPending, { month: m, exp: 0, deals: 0, kills: 0, ach: 0 });   // a new month: last month's unsent bits are dropped
       if (!runCheated) lbPending[k] += n;
     }
     const lbActive = {};   // buff key → true while applied to stats
@@ -3343,6 +3394,7 @@
     const buffText = k => [...Object.entries(LB_BUFFS[k].gain).map(([st, n]) => `+${n} ${STAT_SHORT[st] || st}`), ...(LB_BUFFS[k].speed ? [`+${LB_BUFFS[k].speed * 100}% ${G.speed}`] : [])].join(' ');
     const totalExp = () => EXP_NEED.slice(0, hero.level - 1).reduce((a, b) => a + b, 0) + hero.exp;
     function setLbBuff(k, on) {
+      if (on) achAward('u:top1');
       if (!!lbActive[k] === on) return;
       for (const [st, n] of Object.entries(LB_BUFFS[k].gain)) stats[st] += on ? n : -n;
       lbActive[k] = on;
@@ -3358,19 +3410,25 @@
     async function loadLbPeriod(period) {
       const month = londonMonth(), table = period === 'month' ? 'leaderboard_monthly' : 'leaderboard';
       const q = () => { let x = sb.from(table); return x; };
-      const sel = period === 'month' ? 'user_id, hero_name, picture, level, exp, deals, kills' : 'user_id, hero_name, picture, level, exp_total, deals, kills';
+      const sel0 = period === 'month' ? 'user_id, hero_name, picture, level, exp, deals, kills' : 'user_id, hero_name, picture, level, exp_total, deals, kills';
+      const tabs = () => LB.achOff ? LB_TABS.filter(t => t.key !== 'ach') : LB_TABS;
+      let sel = sel0 + (LB.achOff ? '' : period === 'month' ? ', ach, title' : ', ach_points, title');
       const scope = x => period === 'month' ? x.eq('month', month) : x;
       try {
         if (!LB.at) LB.state[period] = 'loading';
-        const res = await Promise.all(LB_TABS.map(t => { const col = period === 'month' ? t.mcol : t.col;
+        const fetchTop = () => Promise.all(tabs().map(t => { const col = period === 'month' ? t.mcol : t.col;
           return scope(q().select(sel)).gt(col, 0).order(col, { ascending: false }).order('updated_at', { ascending: true }).limit(LB_TOP); }));
-        const bad = res.find(r => r.error); if (bad) throw bad.error;
-        LB_TABS.forEach((t, i) => LB.rows[period][t.key] = res[i].data || []);
+        let res = await fetchTop(), bad = res.find(r => r.error);
+        if (bad && !LB.achOff && /\bach\b|ach_points|title/.test(bad.error.message || '') && /does not exist|schema cache|Could not find/.test(bad.error.message || '')) {   // server not updated yet: the other lists still work
+          LB.achOff = true; sel = sel0; LB.rows[period].ach = []; res = await fetchTop(); bad = res.find(r => r.error);
+        }
+        if (bad) throw bad.error;
+        tabs().forEach((t, i) => LB.rows[period][t.key] = res[i].data || []);
         LB.me[period] = {};
         if (account) {   // your own place, when you're not in the top LB_TOP
           const mine = await scope(q().select(sel)).eq('user_id', account.id).maybeSingle();
           if (mine.error) throw mine.error;
-          if (mine.data) await Promise.all(LB_TABS.map(async t => {
+          if (mine.data) await Promise.all(tabs().map(async t => {
             const col = period === 'month' ? t.mcol : t.col, v = Number(mine.data[col]) || 0;
             if (!v || LB.rows[period][t.key].some(e => e.user_id === account.id)) return;
             const [above, all] = await Promise.all([scope(q().select('user_id', { count: 'exact', head: true })).gt(col, v), scope(q().select('user_id', { count: 'exact', head: true })).gt(col, 0)]);
@@ -3397,7 +3455,12 @@
       const send = { ...lbPending };
       const m = await sb.rpc('submit_monthly', { p_month: send.month, p_name: heroName, p_level: hero.level, p_exp: send.exp, p_deals: send.deals, p_kills: send.kills, p_picture: 'heroPortrait' });
       if (m.error) console.warn('monthly leaderboard:', m.error.message);
-      else if (lbPending.month === send.month) { lbPending.exp -= send.exp; lbPending.deals -= send.deals; lbPending.kills -= send.kills; }   // sent: only what came in since stays pending
+      else {
+        if (lbPending.month === send.month) { lbPending.exp -= send.exp; lbPending.deals -= send.deals; lbPending.kills -= send.kills; }   // sent: only what came in since stays pending
+        const a = await sb.rpc('submit_achievements', { p_month: send.month, p_total: achS.points, p_gain: send.ach, p_title: achS.title || '' });   // after the rows above exist
+        if (a.error) console.warn('achievements leaderboard:', a.error.message);
+        else if (lbPending.month === send.month) lbPending.ach -= send.ach;
+      }
       refreshLeaderboard();
     }
     setInterval(() => { if (account) refreshLeaderboard(); }, 3 * 60 * 1000);
@@ -3412,7 +3475,7 @@
     function snapshot() {
       return { x: player.x, y: player.y, fx: facing.x, fy: facing.y, stats: statsNoBuffs(), deals: deals.map(({ boost, boostUntil, boostMs, ...d }) => d), prices: { ...prices }, dealsDone, foodBought, itemsV2: true, questsV2: true, droneKills, hloaderKills, hookMisses, loaderKills, loadingK0, g0Kills, pistolMisses, infCoreMisses, toxicKills, teleLeft: Math.max(0, telePadReadyAt - gameTime), officeChips: [...officeChips], sets: [...activeSets], promotion, kills, dripKills, queenKills, scavKills, weaponBought, rogueDone: [...rogueDone], gridPowered: [...gridPowered], cheated: runCheated, quests: quests.map(q => q.kind === 'delivery' ? { ...q, left: Math.max(0, q.until - gameTime) } : { ...q }),
                inventory: inventory.map(it => ({ ...it })), equipped: equipped.map(it => ({ ...it })), skills: [...skills],
-               weaponsV: 2, areaName, restReadyAt, levels: { ...levels }, manaCap: CAP_BASE.mana, energyCap: CAP_BASE.energy, level: hero.level, exp: hero.exp, strengthLevel: hero.level, bags: [...bags], vault: { open: vault.open, bags: [...vault.bags], items: vault.items.map(it => ({ ...it })) }, talents: JSON.parse(JSON.stringify(talents)), ceoCalls, tut, tutV: 3, pixiSeen, tutN, tutQuiz: { ...tutQuiz }, discovered: [...discovered], enemies: saveEnemies(), runner: saveRunner(), harvest: saveHarvest(),
+               weaponsV: 2, areaName, restReadyAt, levels: { ...levels }, manaCap: CAP_BASE.mana, energyCap: CAP_BASE.energy, level: hero.level, exp: hero.exp, strengthLevel: hero.level, bags: [...bags], vault: { open: vault.open, bags: [...vault.bags], items: vault.items.map(it => ({ ...it })) }, talents: JSON.parse(JSON.stringify(talents)), ceoCalls, tut, tutV: 3, pixiSeen, tutN, tutQuiz: { ...tutQuiz }, tutReplay, luck: JSON.parse(JSON.stringify(LUCK)), ach: JSON.parse(JSON.stringify(achS)), expBoostLeft: Math.max(0, expBoostUntil - gameTime), discovered: [...discovered], enemies: saveEnemies(), runner: saveRunner(), harvest: saveHarvest(),
                piles: piles.map(p => ({ ...p, gear: p.gear.map(it => ({ ...it })), items: p.items.map(it => ({ ...it })), left: Math.max(0, p.until - gameTime), until: undefined })) };
     }
     function applySave(s) {
@@ -3451,7 +3514,10 @@
       skills.length = 0; skills.push(...(s.skills || []).map(newName));
       if (!deals) deals = newDeals();
       piles.length = 0; for (const p of s.piles || []) piles.push({ ...pileOf(p), until: gameTime + (p.left || 0) });
-      tut = s.tut ?? 0; pixiSeen = s.pixiSeen ?? null;
+      for (const k in LUCK) delete LUCK[k]; Object.assign(LUCK, s.luck || {});
+      { const a = s.ach || {}; Object.assign(achS, { done: a.done || {}, kills: a.kills || {}, zones: a.zones || [], harvests: a.harvests || 0, critRun: a.critRun || 0, points: a.points || 0, marks: a.marks || 0, title: a.title || '' }); achQueue.length = 0; }
+      expBoostUntil = gameTime + (s.expBoostLeft || 0);   // the bags as they were
+      tut = s.tut ?? 0; tutReplay = !!s.tutReplay; pixiSeen = s.pixiSeen ?? null;
       if (s.tutV !== 3) { if (tut >= (s.tutV === 2 ? 6 : 5)) tut = TUT_DONE; else if (tut > 0) tut = 1; }   // older, shorter tutorials: finished stays finished, running restarts
       tutN = s.tutV === 3 ? s.tutN || 0 : 0; tutQuiz = s.tutV === 3 && s.tutQuiz ? { ...s.tutQuiz } : { i: 0, wrong: 0 };
       restReadyAt = s.restReadyAt || 0; rootedUntil = 0; slowUntil = 0; poisonUntil = 0; floaters.length = 0; closePanels();
@@ -3651,6 +3717,8 @@
           const q = drips.find(d => d.kind === 'g0' && !d.dead); if (!q) return 'It is not alive in this zone.';
           q.hp = Math.floor(q.maxHp * 0.51) + 1; return `Specimen G-0 at ${q.hp}/${q.maxHp}.`;
         }),
+        row('Neon Marks', '+10', () => { achS.marks += 10; return `Neon Marks: ${achS.marks}.`; }),
+        row('achievement', 'earn a random one', () => { const left = ACH.filter(a => !achS.done[a.id]); if (!left.length) return 'All earned.'; const a = left[Math.floor(Math.random() * left.length)]; achAward(a); return `Earned: ${a.name}.`; }),
         row('Tele-pad', 'into inventory + recharge', () => { telePadReadyAt = 0; if (hasTelePad()) return 'Tele-pad recharged.'; if (inventory.length >= invSlots()) return 'Inventory full.'; inventory.push({ name: 'Tele-pad', count: 1 }); rogueDone.add('item:telePad'); return 'Added the Tele-pad.'; }),
         row('Specimen Tag', 'into inventory (starts Chain 3)', () => { if (inventory.length >= invSlots()) return 'Inventory full.'; inventory.push({ name: 'Specimen Tag', count: 1 }); return 'Added the Specimen Tag.'; }),
         row('Keycard', 'into inventory (opens the labs)', () => { if (inventory.length >= invSlots()) return 'Inventory full.'; inventory.push({ name: 'Keycard', count: 1 }); return 'Added the Keycard.'; }),
@@ -3737,7 +3805,7 @@
     }
     const vesperTalk = () => quests.some(q => q.kind === 'rogue' && rqDef(q.id)?.talkTo === 'vesper');   // the Rogue sent you to her
     const vesperBountyReady = () => vesperTalk() || rogueReady('vesper').length > 0 || rogueOffers('vesper').length > 0;   // hologram up: something to take, finish or hand in
-    const TITLES = { pixi: 'Pixi', sparky: 'Sparky', vesper: 'Vesper', techversity: 'TechVersity · Talents', chef: 'Netizen Chef', intro: 'Controls', rogue: 'Rogue', metro: 'Metro Station', bank: 'CredBank', ripperdoc: 'Ripperdoc Clinic', spelltech: 'MutaTech', shop: 'ATB-Market', work: 'TradeCorp', menu: 'Menu', controls: 'Controls', hero: 'Hero', inventory: 'Inventory', gameover: 'Game over', loot: 'Loot · Drip', rest: 'HomeDome', cheat: 'Cheats (testing)', scrap: 'Scrap Dealer',
+    const TITLES = { hof: 'Hall of Fame', achievements: 'Achievements', pixi: 'Pixi', sparky: 'Sparky', vesper: 'Vesper', techversity: 'TechVersity · Talents', chef: 'Netizen Chef', intro: 'Controls', rogue: 'Rogue', metro: 'Metro Station', bank: 'CredBank', ripperdoc: 'Ripperdoc Clinic', spelltech: 'MutaTech', shop: 'ATB-Market', work: 'TradeCorp', menu: 'Menu', controls: 'Controls', hero: 'Hero', inventory: 'Inventory', gameover: 'Game over', loot: 'Loot · Drip', rest: 'HomeDome', cheat: 'Cheats (testing)', scrap: 'Scrap Dealer',
                      map: 'Map', settings: 'Settings', sound: 'Sound', video: 'Video', decals: 'Decal density', restart: 'Restart', throw: 'Throw away', cancelQuest: 'Cancel quest', quests: 'Quests', leaderboard: 'Leaderboard', save: 'Save', load: 'Load game', logout: 'Log out', guest: 'Playing as guest' };
     // windows with a paragraph above their options
     const WINDOW_TEXT = {
@@ -3757,12 +3825,13 @@
       chef: () => { const q = quests.find(q => q.kind === 'delivery' && q.dest === areaName);
         return q ? `"TradeCorp sent you? Finally! My customers have been waiting. Hand it over before it gets cold." (${clockText(q.until - gameTime)} left)`
           : '"Nothing on order today, hon. Come back when TradeCorp sends something my way."'; },
+      hof: () => `The hologram flickers on. "Welcome to the Hall of Fame. Neon Marks only: you have ${achS.marks}. Earn more with achievements (${phoneView ? 'the medal button' : 'K'})."`,
       intro: () => phoneView ? 'Move: drag the joystick\nInteract: tap A\nClose a window: tap ✕'
         : 'Move: W A S D\nInteract: Space\nClose a window: Esc or X',
       rogue: () => tut === TUT_READY && tutQuiz.i < TUT_QUIZ.length ? `"Let's see what stuck. Question ${tutQuiz.i + 1} of ${TUT_QUIZ.length}: ${TUT_QUIZ[tutQuiz.i].q}"`
         : tut === TUT_READY ? `"${tutQuiz.wrong ? `${TUT_QUIZ.length - tutQuiz.wrong} of ${TUT_QUIZ.length} right. Not bad.` : 'All three right. Top of the class!'} Here's your pay. And if you forget a key, Menu → Controls lists them all."`
         : tut === 0 ? '"New around here? Top of my class at TechVersity, and I don\'t keep what I learned to myself. Out here, knowing things keeps you alive. Want me to show you how the city works?"'
-        : tut <= TUT.length ? `"${TUT[tut - 1].task}${tutProgress()} ${TUT[tut - 1].tip}" (task ${tut} of ${TUT.length})`
+        : tut <= TUT.length ? `"${tutTask(TUT[tut - 1])}${tutProgress()} ${tutTip(TUT[tut - 1])}" (task ${tut} of ${TUT.length})`
         : rogueReady().length ? '"Done already? Show me."' : rogueOffers().length ? '"I\'ve got work for someone like you."'
         : '"You learn fast. Come back soon: I\'ll have real work for someone like you."',
       restart: 'Are you sure?',
@@ -3782,7 +3851,7 @@
       ['tele-pad button', 'teleport back to the city (hold still 3 s)'],
       ['tap your hero plate (top left)', 'hero stats and equipment'],
       ['tap the minimap', 'world map'],
-      ['top buttons', 'bag, quests, top, menu'],
+      ['top buttons', 'bag, quests, trophy (leaderboard), medal (achievements), menu'],
       ['hold an item / quest', 'throw away / cancel'],
       ['✕', 'close a window'],
     ];
@@ -3813,6 +3882,7 @@
       ['T', 'Tele-pad: hold still 3 s to teleport back to the city (20 min recharge)'],
       ['right-click / E (hold)', 'shoot the ranged weapon (Spore Pistol) toward the cursor or the target; 1 NRG a shot'],
       ['Q (or the quest icon)', 'active quests'],
+      ['K (or the medal)', 'achievements: kill tiers, bosses, exploration, unique ones, titles (Space on a title shows it)'],
       ['L (or the trophy)', 'leaderboard: Top Exp, Top Dealers, Top Slayers; this month or all time (Space on the top row)'],
       ['click the hero', 'hero stats (not in combat: then it swings; H always works)'],
       ['A / D (TradeCorp)', 'switch tab: My Office, Deals, Boss'],
@@ -3827,7 +3897,8 @@
 
     // windows opened from another window remember it: Esc (or "no") goes back there instead of closing everything
     // windows with browser-like tabs (A/D or a click); start: the tab shown when the window opens
-    const WINDOW_TABS = { leaderboard: LB_TABS, shop: SHOP_TABS, cheat: [{ key: 'hero', name: 'Hero' }, { key: 'items', name: 'Items' }, { key: 'world', name: 'World' }], work: Object.assign([{ key: 'office', name: 'My Office' }, { key: 'deals', name: 'Deals' }, { key: 'boss', name: 'My Boss' }], { start: 1 }),
+    const ACH_TABS = [{ key: 'kills', name: 'Kills' }, { key: 'bosses', name: 'Bosses' }, { key: 'explore', name: 'Exploration' }, { key: 'unique', name: 'Unique' }, { key: 'titles', name: 'Titles' }];   // the Achievements window's tabs (the window itself: search 'achievements (20 Oct')
+    const WINDOW_TABS = { achievements: ACH_TABS, leaderboard: LB_TABS, shop: SHOP_TABS, cheat: [{ key: 'hero', name: 'Hero' }, { key: 'items', name: 'Items' }, { key: 'world', name: 'World' }], work: Object.assign([{ key: 'office', name: 'My Office' }, { key: 'deals', name: 'Deals' }, { key: 'boss', name: 'My Boss' }], { start: 1 }),
                           bank: [{ key: 'vault', name: 'Vault' }, { key: 'exchange', name: 'Exchange' }] };
     const tabOf = () => ui.tab ?? (WINDOW_TABS[ui.kind].start || 0);
     function switchShopTab(i) {
@@ -3901,7 +3972,8 @@
         if (stats.energy < cost) return 'Not enough energy for that call. Eat something.';
         const boosted = boostLeft(d) > 0 ? d.boost : 0;   // Streak chip bonus, if taken in time
         const pay = Math.round(d.money * (1 + (tal('hustler', 0) ? [0.05, 0.1, 0.15, 0.2][tal('hustler', 0) - 1] : 0))) + boosted;   // Side Hustle (+ Streak)
-        streakNext = boosted ? boosted + 1 : 1;   // the next boost: one more after a boosted call, else back to +1
+        streakNext = boosted ? boosted + 1 : 1;
+        if (boosted >= 10) achAward('u:streak10');   // the next boost: one more after a boosted call, else back to +1
         coinBurst(dealCoinAt(d), pay, d.rare ? 3 : 1);
         if (boosted) {   // a streak's click climbs a major scale, one note per boosted call (7 at most): the plain click is swapped for a higher one
           if (lastClick && performance.now() - lastClick.at < 80) { try { lastClick.src.stop(); } catch (e) {} lastClick = null; }
@@ -3909,7 +3981,7 @@
         }   // a call's pay flies from its coin to the plate: 1 coin, 3 for a rare call
         stats.energy -= cost; stats.money += pay; d.paid = pay; d.spent = cost;
         let refund = 0;
-        if (cost && tal('hustler', 1) && Math.random() < [0.03, 0.06, 0.09, 0.12][tal('hustler', 1) - 1]) { refund = Math.max(1, Math.round(cost * 0.4)); stats.energy = capped('energy', stats.energy + refund); }   // Commission
+        if (cost && tal('hustler', 1) && luckRoll('commission', [0.03, 0.06, 0.09, 0.12][tal('hustler', 1) - 1])) { refund = Math.max(1, Math.round(cost * 0.4)); stats.energy = capped('energy', stats.energy + refund); }   // Commission
         ceoCalls = free ? 0 : ceoCalls + 1;
         d.talentNote = (free ? ' Free call (CEO Mindset)!' : '') + (refund ? ` Commission: +${refund} ${G.energy} back.` : '');
       } else if (d.type === 'sale') {
@@ -3929,7 +4001,7 @@
       deals = newDeals();
       if (d.type === 'call' && hasChip('streak')) {   // Streak chip: one random call among the new deals gets the bonus
         const calls = deals.filter(n => n.type === 'call');
-        if (calls.length) { const b = calls[Math.floor(Math.random() * calls.length)]; b.boost = streakNext; b.boostMs = streakMs(streakNext); b.boostUntil = performance.now() + b.boostMs; }
+        if (calls.length) { const b = calls[luckInt('streakCall', 0, calls.length - 1)]; b.boost = streakNext; b.boostMs = streakMs(streakNext); b.boostUntil = performance.now() + b.boostMs; }
       }
       const note = promoReadyAny() ? ' A promotion is ready (My Boss).' : '';
       return (d.type === 'call' ? `Call done: -${d.spent} ${G.energy}, +${d.paid}${G.money}, +${exp}${G.exp}.${d.talentNote || ''} New deals.` : d.type === 'sale' ? `Bought ${d.count} ${d.item} for ${dealCost(d)}${G.money}. New deals.`
@@ -3970,7 +4042,7 @@
       ctx.restore();
     }
     function makeDelivery(rare) {
-      const dest = CHEF_ZONES[Math.floor(Math.random() * CHEF_ZONES.length)], sum = zoneSum(dest);
+      const dest = luckPick('delivery', CHEF_ZONES), sum = zoneSum(dest);
       return { kind: 'delivery', name: rare ? 'Priority delivery' : 'Scheduled delivery', rare, from: 'TradeCorp', dest, sum,
                item: rare ? 'Dumplings' : 'Beef brisket', until: gameTime + sum * 30000, desc: '' };
     }
@@ -4006,9 +4078,72 @@
       }
     }
     // the running tutorial as a quest-list entry (null when it isn't running)
-    const tutQuest = () => tut >= 1 && tut <= TUT.length ? { name: `Rogue's lessons ${tut}/${TUT.length}`, desc: `${TUT[tut - 1].task}${tutProgress()} ${TUT[tut - 1].tip}`,
+    const tutQuest = () => tut >= 1 && tut <= TUT.length ? { name: `Rogue's lessons ${tut}/${TUT.length}`, desc: `${tutTask(TUT[tut - 1])}${tutProgress()} ${tutTip(TUT[tut - 1])}`,
       from: 'Rogue', lvl: 1, rarity: 'legendary', tut: true }
       : tut === TUT_READY ? { name: `Rogue's lessons ${TUT.length}/${TUT.length}`, desc: tutQuiz.i < TUT_QUIZ.length ? 'Answer the Rogue\'s questions.' : 'Talk to the Rogue to get your reward.', from: 'Rogue', lvl: 1, rarity: 'legendary', tut: true } : null;
+    const tutHasFood = () => inventory.some(it => (itemDef(it.name) || {}).class === 'food');
+    const minDealCost = () => Math.min(...deals.filter(d => d.type === 'call').map(d => dealCost(d)), 99);
+    const tutOutOfEnergy = () => tut >= 1 && tut <= TUT.length && TUT[tut - 1].ev === 'money' && stats.money < TUT[tut - 1].need && stats.energy < Math.min(minDealCost(), 99);   // task 3: can't afford any call
+    // after the tutorial, until Vesper's Drip Cleanup is accepted: the arrow leads the way to the first fight
+    function guideTarget() {
+      if (tut !== TUT_DONE || rogueDone.has('dripCleanup') || quests.some(q => q.kind === 'rogue' && q.id === 'dripCleanup')) return null;
+      const active = id => quests.find(q => q.kind === 'rogue' && q.id === id);
+      for (const id of ['slums', 'weapon']) { const q = active(id); if (q && rqComplete(q)) return GIVERS[giverOf(id)] === GIVERS.vesper ? 'vesper' : 'rogue'; }   // ready: hand it in
+      if (active('slumProblems')) return 'vesper';
+      if (active('weapon')) return inventory.some(it => (itemDef(it.name) || {}).kind === 'sword') ? null : 'shop';   // a sword in the bag: equip it (hint)
+      if (active('slums')) return null;   // the slums are east of the city
+      if (rogueDone.has('weapon')) return 'vesper';   // her Drip Cleanup offer
+      if (rogueDone.has('slumProblems')) return 'vesper';
+      return rogueOffers().length ? 'rogue' : null;
+    }
+    const tutTarget = () => tut === TUT_READY ? 'rogue' : tut >= 1 && tut <= TUT.length ? (tutOutOfEnergy() && !tutHasFood() ? 'shop' : TUT[tut - 1].target) : guideTarget();
+    let tutEnergyWarned = false, guideHints = new Set();
+    function tutGuideTick() {
+      if (stats.money >= 10000) achAward('u:rich');   // one-time hints at the moments a new player gets stuck; the bag button glows when he should eat / equip
+      const out = tutOutOfEnergy();
+      if (out && !tutEnergyWarned) { tutEnergyWarned = true; showHint(tutHasFood() ? (phoneView ? 'Out of energy! Tap "bag", tap your food and pick Eat. Then take more deals.' : 'Out of energy! Open your bag (I), pick your food and press Space to eat it. Then take more deals.') : 'Out of energy! Buy food at the ATB-Market (follow the arrow): it fills your energy right away. Then take more deals.'); }
+      if (!out) tutEnergyWarned = false;
+      const swordInBag = tut === TUT_DONE && quests.some(q => q.kind === 'rogue' && q.id === 'weapon') && !inSlot(0) && inventory.some(it => (itemDef(it.name) || {}).kind === 'sword');
+      if (swordInBag && !guideHints.has('equip')) { guideHints.add('equip'); showHint(phoneView ? 'Equip your sword: tap "bag", tap the sword and pick Equip.' : 'Equip your sword: open your bag (I), pick the sword and press Space.'); }
+      if (tut === TUT_DONE && quests.some(q => q.kind === 'rogue' && q.id === 'dripCleanup') && !guideHints.has('fight')) { guideHints.add('fight');
+        showHint(phoneView ? 'Drips live in the slums, east of the city. Walk up to one and tap A to attack. Eat food to heal.' : 'Drips live in the slums, east of the city. Walk up to one and press Space (or click it) to attack. Eat food to heal.'); }
+      const glow = ((out && tutHasFood()) || swordInBag) && !panels.inventory;
+      document.getElementById('inv-btn').classList.toggle('tut-glow', glow);
+      const pb = touchEl.querySelector('button[data-code="KeyI"]'); if (pb) pb.classList.toggle('tut-glow', glow);
+    }
+    // inside windows / the bag: a pulsing gold frame on the tab, row or slot to use next
+    function tutPointerRect() {
+      const ev = tut >= 1 && tut <= TUT.length ? TUT[tut - 1].ev : null, out = tutOutOfEnergy(), g = guideTarget();
+      const tabRect = (tabs, key) => { const i = tabs.findIndex(t => t.key === key); return i === tabOf() ? null : rowRects.find(r => r.tab === i) || null; };
+      const rowRect = pred => { const i = rows().findIndex(pred); return i < 0 ? null : rowRects.find(r => r.i === i && !r.panel && r.tab == null) || null; };
+      if (panels.inventory && (out && tutHasFood() || (tut === TUT_DONE && quests.some(q => q.kind === 'rogue' && q.id === 'weapon') && !inSlot(0)))) {   // the food / the sword in the bag
+        const want = out ? (it => (itemDef(it.name) || {}).class === 'food') : (it => (itemDef(it.name) || {}).kind === 'sword');
+        const i = inventory.findIndex(want); if (i >= 0) { const r = rowRects.find(q => q.panel === 'inventory' && q.i === i); if (r) return r; }
+      }
+      if (!ui) return null;
+      const gt = tutGlowTarget();   // the older golden outline (best call, noodles, Smile, sleep) already marks it: only add the arrow, on the same thing
+      if (gt) { const r = rowRects.find(b => !b.panel && (gt.tab != null ? b.tab === gt.tab : b.tab == null && b.i === gt.row)); return r ? { ...r, arrowOnly: true } : null; }
+      if (ui.kind === 'work') return null;
+      if (ui.kind === 'shop') {
+        const want = ev === 'food' || (ev === 'money' && out && !tutHasFood()) ? ['food', FOOD] : ev === 'smile' ? ['patches', 'Smile'] : g === 'shop' ? ['weapons', 'Banana sword'] : null;
+        if (want) return tabRect(SHOP_TABS, want[0]) || rowRect(r => r.shopItem && r.shopItem.it.name === want[1]);
+      }
+      if (ui.kind === 'rest' && ev === 'rest') return rowRects.find(r => r.i === 0 && !r.panel && r.tab == null) || null;
+      if (ui.kind === 'rogue' && tut === TUT_DONE && g === 'rogue') return rowRect(r => r.rq && r.rq.mode !== 'talk');
+      if (ui.kind === 'vesper' && g === 'vesper') return rowRect(r => !!r.rq);
+      return null;
+    }
+    function drawTutPointer() {
+      const r = tutPointerRect(); if (!r) return;
+      const t = performance.now(), p = 0.5 + 0.5 * Math.sin(t / 220), bob = Math.sin(t / 300) * 5;
+      ctx.save(); ctx.setTransform(1, 0, 0, 1, 0, 0);
+      if (!r.arrowOnly) { ctx.shadowColor = 'rgba(255, 220, 0, 0.9)'; ctx.shadowBlur = 10 + 8 * p; ctx.strokeStyle = `rgba(255, 220, 0, ${0.7 + 0.3 * p})`; ctx.lineWidth = 4;
+        rr(r.x - 4, r.y - 4, r.w + 8, r.h + 8, 10); ctx.stroke(); }
+      ctx.shadowBlur = 0; const ax = r.x + r.w / 2, ay = r.y - 10 + bob;   // a little arrow above it
+      ctx.fillStyle = '#ffdc00'; ctx.strokeStyle = '#000'; ctx.lineWidth = 3;
+      ctx.beginPath(); ctx.moveTo(ax - 13, ay - 18); ctx.lineTo(ax + 13, ay - 18); ctx.lineTo(ax, ay); ctx.closePath(); ctx.stroke(); ctx.fill();
+      ctx.restore();
+    }
     const tutAt = ev => tut >= 1 && tut <= TUT.length && TUT[tut - 1].ev === ev;   // the running tutorial task is this one
     function tutEvent(ev) {
       if (tut < 1 || tut > TUT.length || TUT[tut - 1].ev !== ev) return;
@@ -4290,6 +4425,7 @@
                      overclock: { label: 'Overclock', icon: 'talentSystemOverclock', color: '#e5484d', symbol: '⚡' },
                      poison: { label: 'poisoned', icon: 'statusPoison', color: '#9dff5c', symbol: '☠' },
                      rezeroCd: { label: 'ReZero recharging', icon: 'talentReZero', color: '#6f7d99', symbol: '⟲', dim: true },
+                     expBoost: { label: 'Exp Booster', icon: 'achievements', color: '#f5c542', symbol: '★' },
                      telePad: { label: 'Tele-pad recharging', icon: 'telePad', color: '#6f7d99', symbol: '⌁', dim: true },
                      ceo: { label: 'free call ready', icon: 'talentCeoMindset', color: '#9dff5c', symbol: '☎' } };
     const heroStates = () => {
@@ -4303,6 +4439,7 @@
       if (gameTime < avUntil) s.push({ key: 'arcane', left: (avUntil - gameTime) / 1000 });
       if (ocActive()) s.push({ key: 'overclock', left: (ocUntil - gameTime) / 1000, count: ocStacks });
       if (ceoFree()) s.push({ key: 'ceo' });
+      if (gameTime < expBoostUntil) s.push({ key: 'expBoost', left: (expBoostUntil - gameTime) / 1000 });
       if (gameTime < telePadReadyAt && hasTelePad()) s.push({ key: 'telePad', left: (telePadReadyAt - gameTime) / 1000 });
       for (const k in LB_BUFFS) if (lbActive[k]) s.push({ key: 'lb_' + k });   // leaderboard Top-1 buffs, while they last
       return s;
@@ -4346,7 +4483,7 @@
     function trackEntries() {
       const out = [];
       if (tut >= 1 && tut <= TUT_READY) out.push({ key: 'tut', t1: tut === TUT_READY ? 'Rogue · quiz' : `Rogue · task ${tut}/${TUT.length}`,
-        t2: tut === TUT_READY ? 'Talk to the Rogue.' : TUT[tut - 1].task + tutProgress(), border: '#9b5cff', c1: '#b58cff', c2: '#fff' });
+        t2: tut === TUT_READY ? 'Talk to the Rogue.' : tutTask(TUT[tut - 1]) + tutProgress() + (tutOutOfEnergy() ? (tutHasFood() ? (phoneView ? ' Out of energy: tap "bag" and eat.' : ' Out of energy: eat food from your bag (I).') : ' Out of energy: buy food at the ATB-Market, then come back.') : ''), border: '#9b5cff', c1: '#b58cff', c2: '#fff' });
       for (const q of quests) {
         if (q.kind === 'rogue') { const r = rqDef(q.id); if (!r) continue; const GV = GIVERS[giverOf(q.id)], done = rqComplete(q), n = Math.min(r.need, r.prog(q));
           out.push({ key: trackKey(q), t1: `${GV.who} · ${q.name}`, t2: done ? `Done! Hand it in to ${GV.name}.` : rqGoal(r, q) + (r.need > 1 ? ` (${n}/${r.need})` : ''),
@@ -4523,6 +4660,7 @@
         case 'root': return "You're stuck in place and can't move.";
         case 'slowed': return `You walk ${Math.round(slowAmt * 100)}% slower.`;
         case 'injured': return `HP at ${Math.round(STATES.injured.healthShare * 100)}% or less: you walk ${Math.round((1 - STATES.injured.speed) * 100)}% slower.`;
+        case 'expBoost': return 'Hall of Fame Exp Booster: +50% exp from everything.';
         case 'telePad': return 'The Tele-pad is recharging: it can take you back to the city again when this runs out.';
         case 'poison': return `You lose ${Math.round(SPORE.poisonPct * 100)}% of your max HP every second, and your HP doesn't regenerate.`;
         case 'lb_exp': return `#1 in exp this month: ${buffText('exp')} while you hold the spot.`;
@@ -4882,7 +5020,7 @@
       if (drip.dead) return;
       while (drip.dot && t >= drip.dot.next) {   // magic tar damage over time
         const sp = drip.dot.spell;
-        spellHit(rand(sp.dot[0], sp.dot[1]));
+        spellHit(luckInt('spellDot', sp.dot[0], sp.dot[1]));
         if (drip.dead) return;
         if (--drip.dot.left <= 0) drip.dot = null; else drip.dot.next += sp.tickMs;
       }
@@ -4898,9 +5036,9 @@
       if (drip.kind === 'crawler') { updateCrawler(dt); return; }
       if (drip.kind === 'runner') { updateRunner(dt); return; }
       if (drip.kind === 'loader') { updateLoader(dt); return; }
-      if (drip.kind === 'queen') { updateQueen(dt); return; }
-      if (drip.kind === 'hloader') { updateHackedLoader(dt); return; }
-      if (drip.kind === 'g0') { updateG0(dt); return; }
+      if (drip.kind === 'queen') { bossSrc = drip; updateQueen(dt); bossSrc = null; return; }   // bossSrc: her own attacks (Untouchable)
+      if (drip.kind === 'hloader') { bossSrc = drip; updateHackedLoader(dt); bossSrc = null; return; }
+      if (drip.kind === 'g0') { bossSrc = drip; updateG0(dt); bossSrc = null; return; }
       const d = drip;
       if (!d.aggro && feetGap(d) <= DRIP.aggro && stats.health > 0) { d.aggro = true; d.returning = false; d.manaT = t; }
       if (d.aggro && (feetGap(d) > DRIP.leash || stats.health <= 0)) { d.aggro = false; d.returning = true; d.cast = null; d.hitAt = 0; }   // gives up
@@ -4980,7 +5118,7 @@
         d.greed = null; d.fleeUntil = 0;
         if (gap > S.leash || stats.health <= 0) { d.aggro = false; d.returning = true; d.hitAt = 0; return; }   // gives up
         faceHero(d);
-        if (d.hitAt && t >= d.hitAt) { d.hitAt = 0; if (swingLands(d) && stats.health > 0) hurtHero(npcDamage(S.atkMult[0] + Math.random() * (S.atkMult[1] - S.atkMult[0])), '#e5484d'); }
+        if (d.hitAt && t >= d.hitAt) { d.hitAt = 0; if (swingLands(d) && stats.health > 0) hurtHero(npcDamage(S.atkMult[0] + luckInt('scavHit', 0, 4) / 4 * (S.atkMult[1] - S.atkMult[0])), '#e5484d'); }   // 5 damage steps in a bag
         const reach = meleeReaches(d);
         if (reach && t >= d.nextAttack && !d.hitAt) { lockSwing(d); d.attackStart = t; d.hitAt = t + S.windupMs; d.nextAttack = t + S.attackMs; }
         if (reach || foeHeld(d) || d.hitAt || t - d.attackStart < 800) return;   // swinging, stuck in tar, or finishing the swing
@@ -5459,7 +5597,7 @@
       d.stage = 2; d.burstAt = t; d.nextIgnite = t + QUEEN.firstIgniteMs; d.nextSummon = t + 5000; d.nextAttack = t + 800;
     }
     function queenPuddles(d) {   // Pump & Ignite: oil puddles (puddleR circles), one right under the hero, the rest within 3 m of him
-      const t = gameTime, n = rand(QUEEN.puddles[0], QUEEN.puddles[1]), got = [[hpos.x, hpos.y]], qc = foeGC(d), R = QUEEN.puddleR;
+      const t = gameTime, n = luckInt('queenPuddles', QUEEN.puddles[0], QUEEN.puddles[1]), got = [[hpos.x, hpos.y]], qc = foeGC(d), R = QUEEN.puddleR;
       for (let k = 0; k < 200 && got.length < n; k++) {
         const ang = Math.random() * Math.PI * 2, r = 1.3 + Math.random() * 1.7, x = hpos.x + Math.cos(ang) * r, y = hpos.y + Math.sin(ang) * r;
         if (circleHitsTiles(x + 0.5, y + 0.5, R * 0.5) || Math.hypot(x + 0.5 - qc.x, y + 0.5 - qc.y) < foeGr(d) + R || got.some(([gx, gy]) => Math.hypot(gx - x, gy - y) < 2 * R + 0.2)) continue;
@@ -5493,7 +5631,7 @@
       if (!d.aggro) { heal(); if (gap > Q.aggro || stats.health <= 0) return; d.aggro = true; }
       d.healT = 0;
       if (!d.woke) {   // wakes up: the pump display flickers on
-        d.woke = true; d.nextSpray = t + 2500; d.nextSummon = t + Q.firstSummonMs; d.nextAttack = t + 500; d.nextIgnite = t + Q.firstIgniteMs;
+        d.woke = true; achBossWake(d); d.nextSpray = t + 2500; d.nextSummon = t + Q.firstSummonMs; d.nextAttack = t + 500; d.nextIgnite = t + Q.firstIgniteMs;
         float('PUMP QUEEN', '#ff9a2e', d.x + 1, d.y - Q.headY - 0.6);
       }
       const f = heroFeet();
@@ -5568,7 +5706,7 @@
       if (d.returning) { heal(); if (goHome(d, dt)) { d.returning = false; d.woke = false; } return; }
       if (!d.aggro) { heal(); if (gap > H.aggro || stats.health <= 0) return; d.aggro = true; }
       d.healT = 0;
-      if (!d.woke) { d.woke = true; d.nextHook = t + H.firstHookMs; d.nextAttack = t + 400; d.nextWave = t + H.firstWaveMs; float('HACKED LOADER', '#ffb020', d.x + 1, d.y - H.headY - 0.6); }
+      if (!d.woke) { d.woke = true; achBossWake(d); d.nextHook = t + H.firstHookMs; d.nextAttack = t + 400; d.nextWave = t + H.firstWaveMs; float('HACKED LOADER', '#ffb020', d.x + 1, d.y - H.headY - 0.6); }
       if (homeDist(d, f.x, f.y) > H.leash || stats.health <= 0) { d.aggro = false; d.returning = true; return; }
       if (d.stage === 1 && d.hp <= d.maxHp / 2) { hloaderOvercharge(d); return; }
       faceHero(d);
@@ -5673,7 +5811,7 @@
       if (d.returning) { heal(); if (goHome(d, dt)) { d.returning = false; d.woke = false; } return; }
       if (!d.aggro) { heal(); if (gap > H.aggro || stats.health <= 0) return; d.aggro = true; }
       d.healT = 0;
-      if (!d.woke) { d.woke = true; d.nextBurst = t + H.firstBurstMs; d.nextSpit = t + H.firstSpitMs; d.nextLash = t + 500; d.nextLunge = t + H.firstLungeMs; d.nextHeart = t + H.firstHeartMs; d.nextSummon = t + H.firstSummonMs;
+      if (!d.woke) { d.woke = true; achBossWake(d); d.nextBurst = t + H.firstBurstMs; d.nextSpit = t + H.firstSpitMs; d.nextLash = t + 500; d.nextLunge = t + H.firstLungeMs; d.nextHeart = t + H.firstHeartMs; d.nextSummon = t + H.firstSummonMs;
         float('SPECIMEN G-0', '#c86bff', d.x + 1, d.y - H.headY - 0.6); }
       if (homeDist(d, f.x, f.y) > H.leash || stats.health <= 0) { d.aggro = false; d.returning = st === 2; return; }
       if (st === 1 && d.hp <= d.maxHp / 2) { g0Uproot(d); return; }
@@ -5748,7 +5886,7 @@
         if (!s.hit && stats.health > 0 && ellEllDist(heroOval(), foeBody(d), 0) <= 0) {
           s.hit = true;
           hurtHero(npcDamage(D.ramMult), '#00e5ff');   // 15% of a same-level hero's max HP
-          if (stats.health > 0 && Math.random() < D.slowChance) {
+          if (stats.health > 0 && luckRoll('droneSlow', D.slowChance)) {
             slowAmt = t < slowUntil ? Math.max(slowAmt, D.slow) : D.slow; slowUntil = Math.max(slowUntil, t + D.slowMs);   // refreshes, doesn't stack
             float('slowed!', '#4ea1ff', player.x + 0.5, player.y - 1.1);
           }
@@ -5796,7 +5934,7 @@
     function dripStrikes() {
       if (!swingLands(drip) || stats.health <= 0) return;
       const [lo, hi] = DRIP.atkMult;   // 10–12% of a same-level hero's max HP
-      hurtHero(npcDamage(lo + Math.random() * (hi - lo)), '#e5484d');
+      hurtHero(npcDamage(lo + luckInt('dripHit', 0, 4) / 4 * (hi - lo)), '#e5484d');   // 5 damage steps in a bag
     }
     // enemy levels: every enemy in a zone has that zone's level.
     // Damage = round(hero's max HP at the enemy's level × the attack's multiplier × level factor). Level factor: same level 100%,
@@ -5806,7 +5944,8 @@
     const levelDmgFactor = diff => diff >= 0 ? 1 + 0.2 * diff : Math.max(0, 1 - 0.3 * -diff);
     const npcDamage = (mult, lvl = npcLevel()) => Math.round(heroHealthCap(10, lvl) * mult * levelDmgFactor(lvl - hero.level));
     // an enemy's hit lands on the hero (0 damage: a grey "0", no blink)
-    function hurtHero(dmg, color, dot = false) {   // dot: a damage-over-time tick (poison, burning, tar, fuel): lighter feedback
+    function hurtHero(dmg, color, dot = false) {
+      if (bossSrc) bossSrc.hitHero = true;   // dot: a damage-over-time tick (poison, burning, tar, fuel): lighter feedback
       harvesting = null; powering = null;   // any hit stops a harvest or a node restore
       if (dmg <= 0) { float('0', '#8a8a8a', player.x + 0.5, player.y - 0.6); return; }
       const pc = tal('chrome', 0);   // Pain Correction
@@ -5831,7 +5970,7 @@
     const HIT_BASE = 0.97, HIT_PER_LVL = 0.1, HIT_PER_PT = 0.0001, HIT_CAP = 300;
     const hitPts = () => Math.min(HIT_CAP, Math.max(0, equipSum('hit')));
     const hitChance = (enemyLvl = npcLevel()) => enemyLvl < hero.level ? 1 : Math.max(0, Math.min(1, HIT_BASE + HIT_PER_PT * hitPts() - HIT_PER_LVL * (enemyLvl - hero.level)));
-    const heroHits = () => Math.random() < hitChance();   // every enemy in a fight lives in the hero's zone, so has its level
+    const heroHits = () => luckRoll('hit', hitChance());   // every enemy in a fight lives in the hero's zone, so has its level
     function heroMissed(d) { d.aggro = true; d.returning = false; float('miss', '#8a8a8a', d.x + (foeSize(d) === 2 ? 1 : 0.5), d.y - foeHeadY(d)); }
     // ---- harvesting (HARVEST) ----
     let harvestNodes = [], harvesting = null, spaceDown = false;   // harvesting: { node, start, x, y }
@@ -5841,7 +5980,7 @@
         const ids = Object.keys(ZONE_LIST).filter(id => K.zones.includes(ZONE_LIST[id]) && AREAS[id]);
         for (let i = 0; i < ids.length; i += K.per) {
           const zones = ids.slice(i, i + K.per);
-          harvestNodes.push({ id: `${K.key}:${zones[0]}`, K, zones, zone: zones[Math.floor(Math.random() * zones.length)], x: null, y: null, readyAt: 0, prev: null });
+          harvestNodes.push({ id: `${K.key}:${zones[0]}`, K, zones, zone: luckPick('harvest:' + K.key, zones), x: null, y: null, readyAt: 0, prev: null });
         }
       }
     }
@@ -5891,9 +6030,10 @@
       if (gameTime - h.start < HARVEST.holdMs) return;
       harvesting = null;
       if (addItem(n.K.item, 1)) { float(hasBag() ? 'bag full' : 'no bag', '#e5484d', player.x + 0.5, player.y - 1.2); return; }
+      achS.harvests++; achCheck();
       float(`+1 ${n.K.item}`, rarityOf(n.K.item) === 'common' ? '#9dff5c' : rarityColor(n.K.item), n.x + 0.5, n.y - 0.6); itemSfx(n.K.item); renderStats();
       n.prev = { zone: n.zone, x: n.x, y: n.y }; n.readyAt = gameTime + n.K.cooldownMs;
-      n.zone = n.zones[Math.floor(Math.random() * n.zones.length)]; n.x = n.y = null;   // regrows on another tile (maybe the paired zone)
+      n.zone = luckPick('harvest:' + n.K.key, n.zones); n.x = n.y = null;   // regrows on another tile (maybe the paired zone)
       if (n.zone === areaName) placeNode(n);
     }
     // ---- grid nodes (Sparky's Gridlock): hold Space (phones: hold A; mouse: hold the button) on an offline node for NODE_HOLD_MS
@@ -5909,6 +6049,201 @@
         w.art = on ? (on2 ? 'gridNodeOn2' : 'gridNodeOn') : 'gridNodeOff';
         w.label = on ? 'Grid Node (online)' : 'Grid Node (offline)'; w.opens = on ? null : 'node';
       }
+    }
+    // ---- achievements (20 Oct 2026, claude/achievements-notes.md) ----------------------------------------------------------
+    // Kill tiers per enemy (10/50/100/500/1000), boss tiers (1/5/10/25/50), exploration (each region's first visit, zone counts),
+    // unique ones (hidden until earned). Each gives points (leaderboard "Top Achievers"), some give Neon Marks (rare currency, spent
+    // at the Hall of Fame booth) and titles (pick one: shown on the hero plate and the leaderboard). Old saves start with none.
+    const ROMAN = ['I', 'II', 'III', 'IV', 'V'], TIER_COLOR = ['#cd7f32', '#c0c7d1', '#ffd700', '#8fe9ff', '#ff5fd2'];
+    const KILL_ACH = [
+      { kind: 'drip', name: 'Drip', many: 'Drips', t3: 'Drip Hunter', t5: 'Oil Baron' },
+      { kind: 'scav', name: 'Scav', many: 'Scavs', t3: 'Scav Bane', t5: 'Junk King' },
+      { kind: 'toxicScav', name: 'Toxic Scav', many: 'Toxic Scavs', t3: 'Hazmat Hunter', t5: 'Plague Doctor' },
+      { kind: 'drone', name: 'Mav-1K', many: 'Mav-1K drones', t3: 'Drone Swatter', t5: 'Skybreaker' },
+      { kind: 'spore', name: 'Sporeling', many: 'Sporelings', t3: 'Spore Picker', t5: 'Fungus Bane' },
+      { kind: 'loader', name: 'Overgrown Loader', many: 'Overgrown Loaders', t3: 'Loader Wrecker', t5: 'Iron Lumberjack' },
+      { kind: 'crawler', name: 'Scrap Crawler', many: 'Scrap Crawlers', t3: 'Bug Squasher', t5: 'Exterminator' },
+      { kind: 'runner', name: 'Dispatch Runner', many: 'Dispatch Runners', t3: 'Mail Thief', t5: 'Return to Sender' },
+    ];
+    const KILL_TIERS = [10, 50, 100, 500, 1000], KILL_PTS = [10, 25, 50, 100, 200], KILL_MARKS = [0, 0, 1, 2, 5];
+    const BOSS_ACH = [
+      { kind: 'queen', name: 'Pump Queen', t1: 'Queenslayer', t5: 'Queen\'s Nightmare' },
+      { kind: 'hloader', name: 'Hacked Loader', t1: 'Hackbreaker', t5: 'System Purge' },
+      { kind: 'g0', name: 'Specimen G-0', t1: 'Weedkiller', t5: 'Root Canal' },
+    ];
+    const BOSS_TIERS = [1, 5, 10, 25, 50], BOSS_PTS = [50, 50, 100, 150, 300], BOSS_MARKS = [2, 1, 2, 3, 8];
+    const REGIONS = ['slums', 'lake', 'factoryIn', 'factory', 'greaser', 'forest', 'deepForest', 'wasteland', 'pit', 'grid', 'overgrowth', 'labs', 'breach'];
+    const ZONE_STEPS = [10, 25, 50, Object.keys(ZONE_LIST).length], ZONE_PTS = [10, 25, 50, 150], ZONE_MARKS = [0, 0, 1, 5];
+    const achS = (() => { const a = saved.ach || {}; return { done: a.done || {}, kills: a.kills || {}, zones: a.zones || [], harvests: a.harvests || 0, critRun: a.critRun || 0, points: a.points || 0, marks: a.marks || 0, title: a.title || '' }; })();
+    const ACH = [];
+    for (const k of KILL_ACH) KILL_TIERS.forEach((n, i) => ACH.push({ id: `kill:${k.kind}:${i}`, tab: 'kills', group: k.kind, tier: i, name: `${k.name} ${ROMAN[i]}`, desc: `Kill ${n.toLocaleString('en')} ${k.many}.`,
+      need: n, prog: () => achS.kills[k.kind] || 0, pts: KILL_PTS[i], marks: KILL_MARKS[i], title: i === 2 ? k.t3 : i === 4 ? k.t5 : null }));
+    for (const b of BOSS_ACH) BOSS_TIERS.forEach((n, i) => ACH.push({ id: `boss:${b.kind}:${i}`, tab: 'bosses', group: b.kind, tier: i, name: `${b.name} ${ROMAN[i]}`, desc: n === 1 ? `Kill the ${b.name}.` : `Kill the ${b.name} ${n} times.`,
+      need: n, prog: () => achS.kills[b.kind] || 0, pts: BOSS_PTS[i], marks: BOSS_MARKS[i], title: i === 0 ? b.t1 : i === 4 ? b.t5 : null }));
+    ZONE_STEPS.forEach((n, i) => ACH.push({ id: `zones:${i}`, tab: 'explore', group: 'zones', tier: i, name: i === 3 ? 'Every corner' : `Explorer ${ROMAN[i]}`, desc: i === 3 ? `Discover all ${n} zones.` : `Discover ${n} zones.`,
+      need: n, prog: () => achS.zones.length, pts: ZONE_PTS[i], marks: ZONE_MARKS[i], title: i === 3 ? 'Cartographer' : null }));
+    for (const r of REGIONS) ACH.push({ id: `region:${r}`, tab: 'explore', group: 'region', name: `First steps: ${ZONE_TYPES[r].name}`, desc: `Enter the ${ZONE_TYPES[r].name} for the first time.`, pts: 10, marks: 0 });
+    const UNIQUE_ACH = [
+      { id: 'u:die', name: 'Lights Out', desc: 'Die for the first time.', pts: 10, marks: 0 },
+      { id: 'u:teleport', name: 'Beam Me Home', desc: 'Teleport with the Tele-pad.', pts: 10, marks: 0 },
+      { id: 'u:crit3', name: 'Hot Streak', desc: 'Land 3 crits in a row.', pts: 25, marks: 0 },
+      { id: 'u:harvest100', name: 'Green Thumb', desc: 'Harvest 100 glowing piles.', pts: 50, marks: 1, need: 100, prog: () => achS.harvests },
+      { id: 'u:lvl10', name: 'Double Digits', desc: 'Reach level 10.', pts: 50, marks: 1, need: 10, prog: () => hero.level },
+      { id: 'u:lvl20', name: 'Legend', desc: 'Reach level 20.', pts: 150, marks: 5, need: 20, prog: () => hero.level, title: 'Legend' },
+      { id: 'u:flawless', name: 'Untouchable', desc: 'Kill a boss without it hitting you even once.', pts: 100, marks: 5 },
+      { id: 'u:pistolG0', name: 'Pest Control', desc: 'Kill Specimen G-0 using only the Spore Pistol.', pts: 100, marks: 3 },
+      { id: 'u:rich', name: 'Ten Grand', desc: 'Hold 10,000$ at once.', pts: 50, marks: 1, need: 10000, prog: () => stats.money },
+      { id: 'u:streak10', name: 'On a Roll', desc: 'Keep a TradeCorp Streak going for 10 calls.', pts: 50, marks: 1 },
+      { id: 'u:top1', name: 'Number One', desc: 'Be #1 on a monthly leaderboard.', pts: 100, marks: 5 },
+    ];
+    for (const u of UNIQUE_ACH) ACH.push({ ...u, tab: 'unique', hidden: true });
+    const achDef = id => ACH.find(a => a.id === id);
+    const achDone = id => !!achS.done[id];
+    const achQueue = [];   // earned, waiting for their banner: { a, at }
+    function achAward(id) {
+      const a = typeof id === 'string' ? achDef(id) : id;
+      if (!a || achS.done[a.id]) return;
+      achS.done[a.id] = Date.now(); achS.points += a.pts; achS.marks += a.marks || 0;
+      lbEarn('ach', a.pts);
+      achQueue.push({ a, at: null });
+    }
+    function achCheck() { for (const a of ACH) if (a.need && !achS.done[a.id] && a.prog() >= a.need) achAward(a); }
+    function achKill(kind) { if (!KILL_ACH.some(k => k.kind === kind) && !BOSS_ACH.some(b => b.kind === kind)) return; achS.kills[kind] = (achS.kills[kind] || 0) + 1; achCheck(); }
+    function achZone(id) {
+      if (!achS.zones.includes(id)) { achS.zones.push(id); achCheck(); }
+      const t = ZONE_LIST[id]; if (REGIONS.includes(t)) achAward(`region:${t}`);
+    }
+    function achCrit(crit) { achS.critRun = crit ? achS.critRun + 1 : 0; if (achS.critRun >= 3) achAward('u:crit3'); }
+    const achTitles = () => ACH.filter(a => a.title && achS.done[a.id]).map(a => a.title);
+    const achCount = () => Object.keys(achS.done).filter(id => achDef(id)).length;
+    function withBoss(kind, fn) { bossSrc = drips.find(d => d.kind === kind && !d.dead) || null; fn(); bossSrc = null; }
+    function achBossWake(d) {   // a fresh fight (full HP) starts clean; walking off and coming back keeps the marks, a boss loaded hurt counts as hit
+      if (d.hp >= d.maxHp) { d.hitHero = false; d.nonPistol = false; d.pistolHit = false; }
+      else if (d.hitHero === undefined) { d.hitHero = true; d.nonPistol = true; d.pistolHit = false; }
+    }
+    function achBossDied(d) {
+      if (d.hitHero === false) achAward('u:flawless');
+      if (d.kind === 'g0' && d.pistolHit && !d.nonPistol) achAward('u:pistolG0');
+    }
+    // the banner: slides down from the top, holds, slides back up; one at a time
+    const ACH_BANNER = { inMs: 350, holdMs: 3000, outMs: 350 };
+    function drawAchBanner() {
+      const q = achQueue[0]; if (!q) return;
+      const now = performance.now(); if (q.at == null) { q.at = now; playSfx('questComplete'); }
+      const t = now - q.at, total = ACH_BANNER.inMs + ACH_BANNER.holdMs + ACH_BANNER.outMs;
+      if (t > total) { achQueue.shift(); return; }
+      const k = t < ACH_BANNER.inMs ? t / ACH_BANNER.inMs : t > ACH_BANNER.inMs + ACH_BANNER.holdMs ? 1 - (t - ACH_BANNER.inMs - ACH_BANNER.holdMs) / ACH_BANNER.outMs : 1, e = 1 - (1 - k) ** 3;
+      const a = q.a, w = Math.min(canvas.width - 40, 640), h = 110, x = (canvas.width - w) / 2, y = -h + e * (h + 90);   // ends under the top buttons
+      ctx.save(); ctx.setTransform(1, 0, 0, 1, 0, 0);
+      ctx.shadowColor = 'rgba(255, 210, 60, 0.7)'; ctx.shadowBlur = 24;
+      ctx.fillStyle = '#120f04'; rr(x, y, w, h, 16); ctx.fill(); ctx.shadowBlur = 0;
+      ctx.strokeStyle = '#f5c542'; ctx.lineWidth = 3; rr(x + 1.5, y + 1.5, w - 3, h - 3, 15); ctx.stroke();
+      const ic = ART.achievements, s = 74;
+      if (ready(ic)) { ctx.imageSmoothingQuality = 'high'; ctx.drawImage(ic, x + 20, y + (h - s) / 2, s, s); }
+      else { ctx.fillStyle = a.tier != null ? TIER_COLOR[a.tier] : '#f5c542'; ctx.font = '700 54px ' + MONO; ctx.textAlign = 'center'; ctx.textBaseline = 'middle'; ctx.fillText('★', x + 20 + s / 2, y + h / 2 + 2); }
+      ctx.textAlign = 'left'; ctx.textBaseline = 'middle';
+      ctx.fillStyle = '#f5c542'; ctx.font = '700 16px ' + MONO; ctx.fillText('ACHIEVEMENT UNLOCKED', x + 112, y + 26);
+      ctx.fillStyle = '#fff'; ctx.font = '700 28px ' + MONO; ctx.fillText(a.name, x + 112, y + 56);
+      const bits = [`+${a.pts} pts`, ...(a.marks ? [`+${a.marks} Neon Mark${a.marks > 1 ? 's' : ''}`] : []), ...(a.title ? [`title: ${a.title}`] : [])];
+      ctx.fillStyle = '#cfcfcf'; ctx.font = '18px ' + MONO; ctx.fillText(bits.join(' · '), x + 112, y + 86);
+      ctx.restore();
+    }
+    // the Achievements window (K, the medal button): tabs Kills / Bosses / Exploration / Unique / Titles, cards in two columns
+    function achRows() {
+      const tab = ACH_TABS[tabOf()].key, nop = () => '';
+      if (tab === 'titles') {
+        const list = achTitles();
+        return [{ title: '', left: 'no title', act() { achS.title = ''; renderStats(); return 'No title shown.'; } },
+                ...list.map(t => ({ title: t, left: t, act() { achS.title = t; renderStats(); return `Title: ${t}.`; } }))];
+      }
+      if (tab === 'kills' || tab === 'bosses') return (tab === 'kills' ? KILL_ACH : BOSS_ACH).map(k => ({ group: k.kind, label: k.name, tiers: ACH.filter(a => a.group === k.kind), left: k.name, act: nop }));
+      if (tab === 'explore') return [{ group: 'zones', label: 'Zones discovered', tiers: ACH.filter(a => a.group === 'zones'), left: 'zones', act: nop }, ...ACH.filter(a => a.group === 'region').map(a => ({ single: a, left: a.name, act: nop }))];
+      return ACH.filter(a => a.tab === 'unique').map(a => ({ single: a, left: a.name, act: nop }));
+    }
+    function drawAchCard(r, x, y, w, h, sel) {
+      ctx.fillStyle = sel ? '#1a1708' : '#0f1420'; rr(x, y, w, h, 12); ctx.fill();
+      ctx.strokeStyle = sel ? '#f5c542' : '#2a3350'; ctx.lineWidth = 2; rr(x + 1, y + 1, w - 2, h - 2, 11); ctx.stroke();
+      ctx.textAlign = 'left'; ctx.textBaseline = 'middle';
+      if (r.title !== undefined) {   // a title to pick
+        const on = achS.title === r.title;
+        ctx.fillStyle = on ? '#f5c542' : '#fff'; ctx.font = `${on ? 700 : 600} 22px ${MONO}`; ctx.fillText(r.title || 'no title', x + 20, y + h / 2);
+        if (on) { ctx.textAlign = 'right'; ctx.fillStyle = '#9dff5c'; ctx.font = '600 16px ' + MONO; ctx.fillText('shown ✓', x + w - 16, y + h / 2); }
+        return;
+      }
+      if (r.tiers) {   // a tiered group: pips I–V, a bar to the next tier
+        const done = r.tiers.filter(a => achS.done[a.id]).length, next = r.tiers[done], prog = r.tiers[0].prog();
+        ctx.fillStyle = '#fff'; ctx.font = '700 22px ' + MONO; ctx.fillText(r.label, x + 18, y + 26);
+        r.tiers.forEach((a, i) => { const px = x + w - 18 - (r.tiers.length - i) * 30 + 12, py = y + 26;
+          ctx.fillStyle = achS.done[a.id] ? TIER_COLOR[i] : '#1d2333'; ctx.beginPath(); ctx.arc(px, py, 11, 0, Math.PI * 2); ctx.fill();
+          ctx.strokeStyle = TIER_COLOR[i]; ctx.lineWidth = 2; ctx.stroke();
+          ctx.fillStyle = achS.done[a.id] ? '#10131c' : '#8a93a6'; ctx.font = '700 11px ' + MONO; ctx.textAlign = 'center'; ctx.fillText(ROMAN[i], px, py + 1); ctx.textAlign = 'left'; });
+        const bx = x + 18, by = y + 50, bw = w - 36, bh = 12, f = next ? Math.min(1, prog / next.need) : 1;
+        ctx.fillStyle = '#1d2333'; rr(bx, by, bw, bh, 6); ctx.fill();
+        ctx.fillStyle = next ? TIER_COLOR[next.tier] : '#9dff5c'; if (f > 0) { rr(bx, by, Math.max(bh, bw * f), bh, 6); ctx.fill(); }
+        ctx.font = '16px ' + MONO; ctx.fillStyle = '#cfcfcf';
+        ctx.fillText(next ? `${Math.min(prog, next.need).toLocaleString('en')} / ${next.need.toLocaleString('en')}` : `${prog.toLocaleString('en')} · complete`, x + 18, y + 80);
+        if (next) { ctx.textAlign = 'right'; ctx.fillStyle = '#8a93a6'; ctx.fillText(`${ROMAN[next.tier]}: +${next.pts} pts${next.marks ? ` · +${next.marks} ⬢` : ''}${next.title ? ` · "${next.title}"` : ''}`, x + w - 18, y + 80); }
+        return;
+      }
+      const a = r.single, got = !!achS.done[a.id], hid = a.hidden && !got;
+      ctx.fillStyle = got ? '#f5c542' : hid ? '#5c6478' : '#fff'; ctx.font = '700 21px ' + MONO; ctx.fillText(hid ? '???' : a.name, x + 18, y + 26);
+      ctx.fillStyle = hid ? '#5c6478' : '#9aa3b5'; ctx.font = '16px ' + MONO;
+      wrapText(hid ? 'A hidden achievement. Keep playing.' : a.desc, w - 36).slice(0, 2).forEach((l, i) => ctx.fillText(l, x + 18, y + 52 + i * 20));
+      ctx.textAlign = 'right'; ctx.fillStyle = got ? '#9dff5c' : '#8a93a6'; ctx.font = '600 15px ' + MONO;
+      ctx.fillText(got ? '✓ done' : `${a.pts} pts${a.marks ? ` · ${a.marks} ⬢` : ''}`, x + w - 16, y + 26);
+    }
+    function drawAchWindow() {
+      const list = rows(), pw = Math.min(canvas.width - 24, 1180), ph = Math.min(canvas.height - 24, 860), px = (canvas.width - pw) / 2, py = (canvas.height - ph) / 2;
+      winFrames.push({ id: 'window', x: px, y: py, w: pw, h: ph });
+      ctx.save();
+      ctx.fillStyle = 'rgba(0, 0, 0, 0.6)'; ctx.fillRect(0, 0, canvas.width, canvas.height);
+      ctx.fillStyle = '#000'; rr(px, py, pw, ph, UI_R); ctx.fill();
+      ctx.strokeStyle = '#fff'; ctx.lineWidth = 2; rr(px + 1, py + 1, pw - 2, ph - 2, UI_R - 1); ctx.stroke();
+      drawCloseX(px + pw - 62, py + 14, null);
+      ctx.textAlign = 'left'; ctx.textBaseline = 'middle'; ctx.fillStyle = '#fff'; ctx.font = '600 40px ' + MONO; ctx.fillText('Achievements', px + 40, py + 46);
+      ctx.textAlign = 'right'; ctx.font = '600 20px ' + MONO;
+      ctx.fillStyle = '#f5c542'; ctx.fillText(`${achS.points.toLocaleString('en')} pts`, px + pw - 330, py + 40);
+      ctx.fillStyle = '#ff5fd2'; ctx.fillText(`${achS.marks} Neon Marks`, px + pw - 140, py + 40);
+      ctx.fillStyle = '#8a8a8a'; ctx.font = '16px ' + MONO; ctx.fillText(`${achCount()} / ${ACH.length} earned${achS.title ? ` · title: ${achS.title}` : ''}`, px + pw - 80, py + 70);
+      // tabs
+      const tabs = ACH_TABS, tw = (pw - 80) / tabs.length, ty = py + 92, th = 46;
+      tabs.forEach((t, i) => { const tx = px + 40 + i * tw, on = i === tabOf();
+        ctx.fillStyle = on ? '#1d2333' : '#0b0e16'; rr(tx + 3, ty, tw - 6, th, 10); ctx.fill();
+        ctx.strokeStyle = on ? '#fff' : '#2a3350'; ctx.lineWidth = 2; rr(tx + 4, ty + 1, tw - 8, th - 2, 9); ctx.stroke();
+        ctx.fillStyle = on ? '#fff' : '#8a8a8a'; ctx.font = `${on ? 700 : 500} 20px ${MONO}`; ctx.textAlign = 'center'; ctx.fillText(t.name, tx + tw / 2, ty + th / 2 + 1);
+        rowRects.push({ x: tx + 3, y: ty, w: tw - 6, h: th, tab: i }); });
+      // cards: two columns (titles: one column), scrolled so the cursor stays in view
+      const titles = ACH_TABS[tabOf()].key === 'titles', cols = titles ? 1 : 2, ch = titles ? 56 : 100, gap = 12, top = ty + th + 18, bottom = py + ph - 56;
+      const cw = (pw - 80 - (cols - 1) * gap) / cols, perView = Math.max(1, Math.floor((bottom - top + gap) / (ch + gap))) * cols;
+      const cur = Math.max(0, Math.min(list.length - 1, ui.cursor || 0)); let first = ui.achFirst || 0;
+      if (cur < first) first = cur - (cur % cols); if (cur >= first + perView) first = cur - (cur % cols) - perView + cols; first = Math.max(0, first); ui.achFirst = first;
+      list.slice(first, first + perView).forEach((r, k) => { const i = first + k, cx = px + 40 + (k % cols) * (cw + gap), cy = top + Math.floor(k / cols) * (ch + gap);
+        drawAchCard(r, cx, cy, cw, ch, i === cur); rowRects.push({ x: cx, y: cy, w: cw, h: ch, i }); });
+      if (titles && list.length === 1) { ctx.fillStyle = '#8a8a8a'; ctx.font = '18px ' + MONO; ctx.textAlign = 'left'; ctx.fillText('Earn titles from kill tiers III and V, boss kills, "Every corner" and "Legend".', px + 40, top + ch + 30); }
+      ctx.fillStyle = '#8a8a8a'; ctx.font = '16px ' + MONO; ctx.textAlign = 'left';
+      ctx.fillText(ui.msg ? ui.msg : `A/D tab · W/S choose${titles ? ' · Space: show this title' : ''} · K or X/Esc close`, px + 40, py + ph - 26);
+      if (list.length > perView) { ctx.textAlign = 'right'; ctx.fillText(`${first + 1}–${Math.min(list.length, first + perView)} of ${list.length}`, px + pw - 40, py + ph - 26); }
+      ctx.restore();
+    }
+    // ---- Hall of Fame booth: spends Neon Marks (consumables now; unique gear later) ----
+    const HOF_ITEMS = [
+      { key: 'exp', name: 'Exp Booster', price: 3, desc: '+50% exp for 30 min of game time (buying again adds 30 min, up to 2 h).',
+        buy() { expBoostUntil = Math.max(gameTime, expBoostUntil) + 30 * 60000; expBoostUntil = Math.min(expBoostUntil, gameTime + 120 * 60000); return 'Exp Booster active: +50% exp.'; } },
+      { key: 'tele', name: 'Tele-pad Recharge', price: 2, desc: 'Your Tele-pad is ready again at once.',
+        can() { return !hasTelePad() ? 'You need the Tele-pad (Vesper gives it with The Queen).' : telePadReadyAt <= gameTime ? 'Your Tele-pad is already charged.' : ''; },
+        buy() { telePadReadyAt = 0; return 'Tele-pad recharged.'; } },
+      { key: 'surge', name: 'Neon Surge', price: 2, desc: 'Full health and full energy at once.',
+        can() { return stats.health >= CAPS.health && stats.energy >= CAPS.energy ? 'You are already at full health and energy.' : ''; },
+        buy() { stats.health = CAPS.health; stats.energy = CAPS.energy; return 'Full health and energy.'; } },
+    ];
+    let expBoostUntil = gameTime + (saved.expBoostLeft || 0);
+    const expBoost = () => gameTime < expBoostUntil ? 1.5 : 1;
+    function hofRows() {
+      return [...HOF_ITEMS.map(it => ({ hof: it, left: it.name, right: `${it.price} ⬢`, act() {
+        const no = it.can ? it.can() : ''; if (no) return no;
+        if (achS.marks < it.price) return `Not enough Neon Marks (${it.price} needed, you have ${achS.marks}). Earn them with achievements (K).`;
+        achS.marks -= it.price; const m = it.buy(); playSfx('money'); renderStats(); return `${m} (${achS.marks} Neon Mark${achS.marks === 1 ? '' : 's'} left)`;
+      } })), { left: 'Unique gear', right: 'coming soon', dim: true, act() { return 'Special gear for Neon Marks is coming soon.'; } }];
     }
     // ---- Tele-pad: hold still TELEPAD.castMs, then he's in the city (the TelePort's pad once it is built; HomeDome until then) ----
     let telePadReadyAt = gameTime + (saved.teleLeft || 0), teleCast = null;   // teleCast: { start, px, py }
@@ -5969,7 +6304,7 @@
       teleCast = null; telePadReadyAt = gameTime + TELEPAD.rechargeMs; heroPullUntil = 0;
       const d = teleDest(); teleFlash = { at: gameTime, zone: '0:0' };
       enterArea('0:0', d.x, d.y, 1);
-      playSfx('questAccept'); float('TELEPORTED', '#00e5ff', player.x + 0.5, player.y - 1.3);
+      achAward('u:teleport'); playSfx('questAccept'); float('TELEPORTED', '#00e5ff', player.x + 0.5, player.y - 1.3);
     }
     let teleFlash = null;
     function drawTeleFx() {   // charging: cyan rings rising around him + a progress ring; arriving: a flash
@@ -6053,7 +6388,7 @@
     }
     function winchPull(d) {   // Winch Hook: hookChance per landed main hit to drag the enemy hookPull m toward the hero and stagger it (not 2 x 2 ones)
       const w = swordDef();
-      if (!w || !w.hookChance || d.dead || foeSize(d) === 2 || isFlyer(d) || Math.random() >= w.hookChance) return;
+      if (!w || !w.hookChance || d.dead || foeSize(d) === 2 || isFlyer(d) || !luckRoll('hookPull', w.hookChance)) return;
       const c = foeGC(d), f = heroFeet(), L = Math.hypot(f.x - c.x, f.y - c.y) || 1, dist = Math.min(w.hookPull, Math.max(0, feetGap(d) - 0.05));
       d.kb = dist > 0.05 ? { at: gameTime, dx: (f.x - c.x) / L, dy: (f.y - c.y) / L, dist, done: 0, ms: 180 } : null;
       d.staggerUntil = gameTime + 180 + w.hookStaggerMs; d.hitAt = 0; d.nextAttack = Math.max(d.nextAttack || 0, gameTime + w.hookStaggerMs);
@@ -6165,11 +6500,11 @@
     function shotHit(e, S) {
       const keep = drip; drip = e;
       if (!heroHits()) { heroMissed(e); drip = keep; return; }
-      const crit = Math.random() < critChance(), dmg = Math.max(1, Math.round(heroStr() * S.strPct * (crit ? 2 + critBonus() : 1)));   // a crit doubles it (+ Quick Hands), like a swing
+      const crit = luckRoll('crit', critChance()), dmg = Math.max(1, Math.round(heroStr() * S.strPct * (crit ? 2 + critBonus() : 1)));   // a crit doubles it (+ Quick Hands), like a swing
       if (crit) onHeroCrit();
       e.flashAt = gameTime;
-      damageDrip(dmg, crit ? `-${dmg} crit!` : `-${dmg}`, crit ? '#ffe600' : '#d9a6ff');
-      if (!e.dead && Math.random() < S.poisonChance) {   // poisoned: refreshes if it already is
+      damageDrip(dmg, crit ? `-${dmg} crit!` : `-${dmg}`, crit ? '#ffe600' : '#d9a6ff'); achCrit(crit); if (e.kind === 'g0') e.pistolHit = true;
+      if (!e.dead && luckRoll('pistolPoison', S.poisonChance)) {   // poisoned: refreshes if it already is
         if (!e.poison) float('poisoned!', '#9dff5c', e.x + foeSize(e) / 2, e.y - foeHeadY(e) - 0.3);
         e.poison = { left: S.poisonTicks, next: gameTime + S.poisonTickMs, tickMs: S.poisonTickMs, dmg: Math.max(1, Math.round(heroStr() * S.poisonPct)) };
       }
@@ -6243,7 +6578,7 @@
       const sw = pendingSwing; if (!sw || gameTime < sw.at) return;
       pendingSwing = null;
       if (sw.zone !== areaName || stats.health <= 0) return;   // left the zone or died during the wind-up
-      const crit = Math.random() < critChance(), dmg = Math.round(heroStr() * (crit ? 2 + critBonus() : 1));   // a crit adds strength once more (+ Quick Hands)
+      const crit = luckRoll('crit', critChance()), dmg = Math.round(heroStr() * (crit ? 2 + critBonus() : 1));   // a crit adds strength once more (+ Quick Hands)
       let landed = false;
       const inCone = meleeTargets(sw.dir); if (!inCone.length) return;
       const ho = heroOval(), gap = d => { const B = foeBody(d); return ellEllDist(ho, B) + Math.hypot(B.x - ho.x, B.y - ho.y) * 1e-3; };   // touching: the nearer centre wins
@@ -6254,7 +6589,8 @@
         drip = d; if (!heroHits()) { heroMissed(d); continue; }   // the first one dodging wastes the main hit; the others still roll
         landed = true; d.flashAt = gameTime; const main = d === first, n = Math.round((main ? dmg : half) * (SPORE_FOES.includes(d.kind) ? 1 + swordBonus('sporeBonus') : 1));   // MK-II: +25% to spore foes
         burstHit(d, crit, main ? 1 : 0.5); knock(d, crit, main ? 1 : 0.5); damageDrip(n, crit ? `-${n} crit!` : `-${n}`, crit ? '#ffe600' : '#fff');
-        if (main) winchPull(d);
+        if (main) { winchPull(d); achCrit(crit); }
+        if (d.kind === 'g0') d.nonPistol = true;
       }
       if (landed) { hitImpact(crit); playSfx(hasMeleeWeapon() && SFX.hitBlade ? 'hitBlade' : 'hitFist'); }   // once per swing, however many it hits
       if (crit && landed) onHeroCrit();
@@ -6329,7 +6665,7 @@
         drip.fleeing = drip.fled = true; drip.act = null; drip.dash = null; float('fleeing!', '#b06cff', drip.x + 0.5, drip.y - 2.2);
       }
       if (drip.hp <= 0) {   // nothing is given yet: the loot waits on his puddle
-        drip.dead = true; drip.deadAt = gameTime; drip.hitAt = 0; drip.dot = null; drip.poison = null; drip.stunUntil = 0; kills++; lbEarn('kills', 1); if ((drip.kind || 'drip') === 'drip' && !drip.summoned) dripKills++; if (drip.kind === 'queen') queenKills++; if (drip.kind === 'hloader') hloaderKills++; if (drip.kind === 'g0') g0Kills++; if (drip.kind === 'loader') loaderKills++; if (drip.kind === 'scav') scavKills++; if (drip.kind === 'toxicScav') toxicKills++; if (drip.kind === 'drone') droneKills++;
+        drip.dead = true; drip.deadAt = gameTime; drip.hitAt = 0; drip.dot = null; drip.poison = null; drip.stunUntil = 0; kills++; lbEarn('kills', 1); if ((drip.kind || 'drip') === 'drip' && !drip.summoned) dripKills++; if (drip.kind === 'queen') queenKills++; if (drip.kind === 'hloader') hloaderKills++; if (drip.kind === 'g0') g0Kills++; if (drip.kind === 'loader') loaderKills++; if (drip.kind === 'scav') scavKills++; if (drip.kind === 'toxicScav') toxicKills++; if (drip.kind === 'drone') droneKills++; if (!drip.summoned) achKill(drip.kind || 'drip'); if (['queen', 'hloader', 'g0'].includes(drip.kind)) achBossDied(drip);
         if (drip.kind === 'drone') {   // falls: the wreck lands on the nearest walkable tile (it may have been over a building)
           drip.cloakUntil = 0; drip.dash = null;
           if (!free(Math.round(drip.x), Math.round(drip.y))) {
@@ -6343,38 +6679,39 @@
         }
         const T = ET(drip); drip.spray = null; drip.act = null; drip.dash = null; drip.fleeing = false;
         if (drip.kind === 'spore') sporeClouds.push({ zone: areaName, x: drip.x, y: drip.y, at: gameTime, until: gameTime + SPORE.cloudMs });   // bursts into a spore cloud
-        drip.respawnAt = gameTime + rand(T.respawnMs[0], T.respawnMs[1]);   // respawn timer starts now
+        drip.respawnAt = gameTime + luckInt((drip.kind || 'drip') + ':respawn', Math.round(T.respawnMs[0] / 1000), Math.round(T.respawnMs[1] / 1000)) * 1000;   // whole seconds, from a bag   // respawn timer starts now
         if (drip.summoned) { drip.loot = null; if (target === drip) retarget(); return; }   // the Queen's Drips: no exp, no loot
         if (drip.kind === 'hloader') { drip.act = null; drip.hook = null; heroPullUntil = 0; float('HACKED LOADER DEFEATED', '#ffb020', drip.x + 1, drip.y - 3.2); }
         if (drip.kind === 'g0') { drip.act = null; drip.lunge = null; float('SPECIMEN G-0 DEFEATED', '#c86bff', drip.x + 1, drip.y - 3.8); for (const o of drips) if (o.summoned && o.g0 === drip && !o.dead) { o.dead = true; o.deadAt = gameTime; o.loot = null; } }
         if (drip.kind === 'queen') { drip.act = null; float('PUMP QUEEN DEFEATED', '#ff9a2e', drip.x + 1, drip.y - 3); for (const o of drips) if (o.summoned && !o.dead) { o.dead = true; o.deadAt = gameTime; o.loot = null; } }   // her Drips melt with her
         const L = T.loot, items = [];
-        const tars = L.tar ? rand(L.tar[0], L.tar[1]) : 0;
+        const K = drip.kind || 'drip';   // each enemy kind has its own loot bags
+        const tars = L.tar ? luckInt(K + ':tar', L.tar[0], L.tar[1]) : 0;
         if (tars) items.push({ name: 'Tar', count: tars });
-        if (L.magicTarChance && Math.random() < L.magicTarChance) items.push({ name: 'Magic tar', count: 1 });
-        if (L.mutagenChance && Math.random() < L.mutagenChance) items.push({ name: 'MutaGen', count: 1 });
-        if (L.aiChipChance && Math.random() < L.aiChipChance) items.push({ name: 'AI chip', count: 1 });
-        if (L.sporeSacChance && Math.random() < L.sporeSacChance) items.push({ name: 'Spore Sac', count: 1 });
-        if (L.coreChance && Math.random() < L.coreChance) items.push({ name: 'Loader Core', count: 1 });
-        if (L.copper) { const n = rand(L.copper[0], L.copper[1]); if (n) items.push({ name: 'Copper Wire', count: n }); }   // Dispatch Runner
-        if (L.shellChance && Math.random() < L.shellChance) items.push({ name: 'Damaged Courier Shell', count: 1 });
+        if (L.magicTarChance && luckRoll(K + ':magicTarChance', L.magicTarChance)) items.push({ name: 'Magic tar', count: 1 });
+        if (L.mutagenChance && luckRoll(K + ':mutagenChance', L.mutagenChance)) items.push({ name: 'MutaGen', count: 1 });
+        if (L.aiChipChance && luckRoll(K + ':aiChipChance', L.aiChipChance)) items.push({ name: 'AI chip', count: 1 });
+        if (L.sporeSacChance && luckRoll(K + ':sporeSacChance', L.sporeSacChance)) items.push({ name: 'Spore Sac', count: 1 });
+        if (L.coreChance && luckRoll(K + ':coreChance', L.coreChance)) items.push({ name: 'Loader Core', count: 1 });
+        if (L.copper) { const n = luckInt(K + ':copper', L.copper[0], L.copper[1]); if (n) items.push({ name: 'Copper Wire', count: n }); }   // Dispatch Runner
+        if (L.shellChance && luckRoll(K + ':shellChance', L.shellChance)) items.push({ name: 'Damaged Courier Shell', count: 1 });
         if (L.tag && (!rogueDone.has('theTag') || (rogueDone.has('path:sparky') && !rogueDone.has('newCode'))) && !carriedCount('Specimen Tag') && !inventory.some(x => x.name === 'Specimen Tag') && !itemLying('Specimen Tag')) items.push({ name: 'Specimen Tag', count: 1 });   // Specimen G-0
-        if (L.sporeSacs) items.push({ name: 'Spore Sac', count: rand(L.sporeSacs[0], L.sporeSacs[1]) });
-        if (L.forest) items.push({ name: Math.random() < 0.5 ? 'Glowcap Truffle' : 'Neon Moss', count: rand(L.forest[0], L.forest[1]) });
+        if (L.sporeSacs) items.push({ name: 'Spore Sac', count: luckInt(K + ':sporeSacs', L.sporeSacs[0], L.sporeSacs[1]) });
+        if (L.forest) items.push({ name: luckPick(K + ':forestKind', ['Glowcap Truffle', 'Neon Moss']), count: luckInt(K + ':forest', L.forest[0], L.forest[1]) });
         if (L.hackedCore) items.push({ name: 'Hacked Core', count: 1 });   // Hacked Loader: his core, Scrap, the Winch Hook (pity: certain on the 4th kill without it)
-        if (L.scrap) items.push({ name: 'Scrap', count: rand(L.scrap[0], L.scrap[1]) });
-        if (L.hookChance) { if (Math.random() < L.hookChance || hookMisses + 1 >= L.hookPity) { items.push({ name: 'Winch Hook', count: 1 }); hookMisses = 0; } else hookMisses++; }
-        if (L.pistolChance) { if (Math.random() < L.pistolChance || pistolMisses + 1 >= L.pistolPity) { items.push({ name: 'Spore Pistol', count: 1 }); pistolMisses = 0; } else pistolMisses++; }   // Specimen G-0
+        if (L.scrap) items.push({ name: 'Scrap', count: luckInt(K + ':scrap', L.scrap[0], L.scrap[1]) });
+        if (L.hookChance) { if (luckRoll('winchHook', L.hookChance) || hookMisses + 1 >= L.hookPity) { items.push({ name: 'Winch Hook', count: 1 }); hookMisses = 0; } else hookMisses++; }
+        if (L.pistolChance) { if (luckRoll('sporePistol', L.pistolChance) || pistolMisses + 1 >= L.pistolPity) { items.push({ name: 'Spore Pistol', count: 1 }); pistolMisses = 0; } else pistolMisses++; }   // Specimen G-0
         if (drip.kind === 'toxicScav' && keycardDue()) items.push({ name: 'Keycard', count: 1 });   // Every tenth: the 10th Toxic Scav (and the next, while it's missed)
         if (drip.kind === 'loader' && infectedCoreDue()) items.push({ name: 'Infected Core', count: 1 });
         else if (drip.kind === 'loader' && rogueDone.has('infectedCore')) {   // after the quest: INF_CORE.chance a kill, certain on the pity-th without one
-          if (Math.random() < INF_CORE.chance || infCoreMisses + 1 >= INF_CORE.pity) { items.push({ name: 'Infected Core', count: 1 }); infCoreMisses = 0; } else infCoreMisses++;
+          if (luckRoll('infectedCore', INF_CORE.chance) || infCoreMisses + 1 >= INF_CORE.pity) { items.push({ name: 'Infected Core', count: 1 }); infCoreMisses = 0; } else infCoreMisses++;
         }   // the 3rd Loader after Loading... (again if it was missed or thrown away)
-        if (L.queenRare) items.push({ name: Math.random() < (L.queenTarShare ?? 0.5) ? 'Magic tar' : 'Magic Nozzle', count: 1 });   // Pump Queen: one spell, Magic tar 75% / Magic Nozzle 25%
-        if (L.commonItem && SCAV_POOL.common.length && Math.random() < L.commonItem) items.push({ name: pick(SCAV_POOL.common), count: 1 });   // Scav: his backpack
-        if (L.rareItem && SCAV_POOL.rare.length && Math.random() < L.rareItem) items.push({ name: pick(SCAV_POOL.rare), count: 1 });
+        if (L.queenRare) items.push({ name: luckRoll('queenSpell', L.queenTarShare ?? 0.5) ? 'Magic tar' : 'Magic Nozzle', count: 1 });   // Pump Queen: one spell, Magic tar 75% / Magic Nozzle 25%
+        if (L.commonItem && SCAV_POOL.common.length && luckRoll(K + ':commonItem', L.commonItem)) items.push({ name: luckPick('scavCommon', SCAV_POOL.common), count: 1 });   // Scav: his backpack
+        if (L.rareItem && SCAV_POOL.rare.length && luckRoll(K + ':rareItem', L.rareItem)) items.push({ name: luckPick('scavRare', SCAV_POOL.rare), count: 1 });
         const zm = L.zoneMoney ? zoneCoords(areaName).reduce((a, b) => a + b, 0) : 0;   // Loader: + |x| + |y| of its zone
-        drip.loot = { money: rand(L.money[0] + zm, L.money[1] + zm), items };
+        drip.loot = { money: luckInt(K + ':money', L.money[0] + zm, L.money[1] + zm), items };
         if (drip.carry) {   // a Scav's stolen goods come back with him
           drip.loot.money += drip.carry.money;
           for (const it of drip.carry.items) { const o = items.find(i => i.name === it.name); if (o) o.count += it.count; else items.push({ ...it }); }
@@ -6388,7 +6725,7 @@
     }
 
     // ---- spells -----------------------------------------------------------------
-    const critChance = () => Math.min(CRIT_CAP, stats.charisma * CRIT_PER_CHA) + LEVEL_CRIT * (hero.level - 1) + talentCrit();   // +0.1% per level on top
+    const critChance = () => levelCrit(hero.level) + Math.min(CRIT_CAP, Math.max(0, stats.charisma - START_STATS.charisma) * CRIT_PER_CHA) + talentCrit();   // level base + CHSM above the start + talents
     // experience: level ups raise the caps, restore health, mana and energy, and show a banner over the hero
     // ---- level up (LEVEL_FX): a light pillar + ground ring + rising sparkles on the hero, and a banner: the screen dims,
     // "LEVEL n" zooms in huge to a big readable size with the gains popping in under it one by one, holds, then the title
@@ -6480,6 +6817,7 @@
     }
     function gainExp(n) {
       if (!n || hero.level >= MAX_LEVEL) return;
+      n = Math.round(n * expBoost());   // Hall of Fame Exp Booster
       hero.exp += n; lbEarn('exp', n);
       float(`+${n}${G.exp}`, '#b58cff', player.x + 0.5, player.y - 1.1);
       let up = 0;
@@ -6487,6 +6825,7 @@
       while (hero.level < MAX_LEVEL && hero.exp >= expNeed(hero.level)) { hero.exp -= expNeed(hero.level); hero.level++; up++; }
       if (hero.level >= MAX_LEVEL) hero.exp = 0;
       if (up) {
+        achCheck();
         const capsBefore = { ...CAPS }, strBefore = stats.strength;
         stats.strength += levelStrength(hero.level) - levelStrength(before);   // equipment and other bonuses stay on top
         recalcCaps();
@@ -6500,10 +6839,11 @@
 
     // a spell's damage lands: roll a critical strike (adds strength)
     function spellHit(base) {
-      const crit = Math.random() < critChance();
+      const crit = luckRoll('crit', critChance());
       const dmg = base + (crit ? Math.round(heroStr() * (1 + critBonus())) : 0);
       if (crit) onHeroCrit();
-      damageDrip(dmg, crit ? `-${dmg} crit!` : `-${dmg}`, crit ? '#ffe600' : '#ff2bd6');
+      if (drip.kind === 'g0') drip.nonPistol = true;
+      damageDrip(dmg, crit ? `-${dmg} crit!` : `-${dmg}`, crit ? '#ffe600' : '#ff2bd6'); achCrit(crit);
     }
 
     // ---- target (Tab) ----------------------------------------------------------------
@@ -6596,7 +6936,7 @@
     // damage over time on the hero (enemy Magic Tar)
     function updateHeroDot() {
       while (heroDot && gameTime >= heroDot.next && stats.health > 0) {
-        if (heroDot.boss) hurtHero(bossDamage(heroDot.mult), heroDot.color, true);   // Pump Queen's Fuel Spray
+        if (heroDot.boss) { const q = drips.find(o => o.kind === 'queen' && !o.dead); if (q) q.hitHero = true; hurtHero(bossDamage(heroDot.mult), heroDot.color, true); }   // Pump Queen's Fuel Spray
         else hurtHero(npcDamage(DRIP.tarMult, heroDot.lvl || zoneLevel(areaName)), '#ff2bd6', true);   // Drip's Magic Tar: 8% of a same-level hero's max HP per second
         if (stats.health <= 0) { heroDot = null; return; }
         if (--heroDot.left <= 0) heroDot = null; else heroDot.next += heroDot.spell.tickMs;
@@ -6679,6 +7019,7 @@
     // The pile stays PILE_MS of game time (fading out at the end); walking onto it takes back whatever fits.
     // He respawns in the city below HomeDome with 1 HP, 0 mana, 0 energy and 1$; level and exp stay.
     function gameOver() {
+      achAward('u:die');
       closePanels(); deathStart = performance.now(); moving = false;
       const keep = Math.floor(Math.max(0, stats.money) * Math.max(0, ...wornBags().map(n => (itemDef(n) || {}).keepMoney || 0)));   // Vault Pack: 10% stays with him (two don't add up)
       keptMoney = keep;
@@ -7074,6 +7415,7 @@
     function frame(now) {
       watchNavigation();
       if (tut >= 1 && tut <= TUT.length && TUT[tut - 1].ev === 'money' && stats.money >= TUT[tut - 1].need) { tutN = 0; tut++; }   // task 3: holds 30$
+      tutGuideTick();
       phFaceEl.classList.toggle('tut-glow', tut >= 1 && tut <= TUT.length && TUT[tut - 1].ev === 'hero' && !panels.hero);
       if (!ui && focus === 'window') focus = panels.inventory ? 'inventory' : panels.hero ? 'hero' : null;   // the window closed: back to a panel
       syncTouchButtons();
@@ -7089,7 +7431,7 @@
       lastFrame = now;
       syncChef();
       if (dt) { checkDeliveries(); checkRogueQuests(); checkPromoReady(); for (let i = piles.length - 1; i >= 0; i--) if (gameTime >= piles[i].until) piles.splice(i, 1);
-        updateDrips(); updateQueenFx(); updateHLWaves(); updateG0Fx(); updateHarvest(); updatePowering(); updateProjectiles(dt); updateShots(dt); updateHeroDot(); updatePoison(); updateHeroMana(); updateHeroHealth(); updateHitParts(dt); updateSwing(); }
+        updateDrips(); withBoss('queen', updateQueenFx); withBoss('hloader', updateHLWaves); withBoss('g0', updateG0Fx); updateHarvest(); updatePowering(); updateProjectiles(dt); updateShots(dt); updateHeroDot(); updatePoison(); updateHeroMana(); updateHeroHealth(); updateHitParts(dt); updateSwing(); }
       updateHeroMove(dt);   // free movement (game time: stops behind windows)
       sealedNotice(); if (dt) updateTeleCast(); syncTeleBtn();
       updateMouseAim();
@@ -7112,7 +7454,7 @@
     let areaFade = 0, areaBanner = 0;   // timestamps for the transition fade and the area name banner
     function enterArea(name, x, y, face, instant, faceY = 0) {
       const firstVisit = !discovered.has(name);   // discovering a zone gives |a| + |b| exp (the city 0:0 gives none)
-      areaName = name; WALLS = AREAS[name].walls; discovered.add(name);
+      areaName = name; WALLS = AREAS[name].walls; discovered.add(name); achZone(name);
       player.x = x; player.y = y; fromX = x; fromY = y; hpos.x = x; hpos.y = y; lastTile.x = x; lastTile.y = y;
       setAim(face || 0, faceY || 0); if (face) lookX = face; moving = false;
       groundLayer = null;
@@ -7619,7 +7961,7 @@
         }
       }
       // tutorial: a bobbing arrow over the building of the current task
-      const arrowAt = tut === TUT_READY ? 'rogue' : tut >= 1 && tut <= TUT.length ? TUT[tut - 1].target : null;
+      const arrowAt = tutTarget();   // the tutorial's next building, then (after it) the way to the first fight
       if (arrowAt) for (const w of WALLS) if (w.opens === arrowAt) {
         const x = footCX(w) * TILE, y = (w.opens === 'rest' ? (foot(w).y1 + 0.15) * TILE : Math.max(60, wallTop(w) - 14)) + Math.sin(performance.now() / 300) * 6;
         ctx.fillStyle = '#9b5cff'; ctx.strokeStyle = '#000'; ctx.lineWidth = 4;
@@ -7669,6 +8011,8 @@
         if (ui) drawWindow();
       }
       if (ui && (ui.kind === 'quests' || (ui.kind === 'shop' && itemMenu && itemMenu.shop))) drawItemMenu();   // quest cancel menu / shop sell menu on top of the window
+      drawTutPointer();
+      drawAchBanner();
       drawDeliveryHud();
       drawTaskIntro();
       drawLevelUpBanner();
@@ -9011,7 +9355,8 @@
       const tx = x + 54 + sz + 14;
       ctx.textAlign = 'left'; ctx.fillStyle = me ? '#00e5ff' : '#fff'; ctx.font = '600 22px ' + MONO; ctx.fillText(e.hero_name || '?', tx, y + h * 0.33);
       ctx.fillStyle = '#ffe600'; ctx.font = '600 15px ' + MONO; ctx.fillText(`lvl ${e.level}`, tx, y + h * 0.75);
-      if (r.rank === 1 && r.period === 'month') { ctx.fillStyle = '#9dff5c'; ctx.font = '14px ' + MONO; ctx.fillText(`#1 bonus: ${buffText(r.tab.key)}`, tx + 70, y + h * 0.75); }
+      if (e.title) { ctx.font = '600 22px ' + MONO; const nw = ctx.measureText(e.hero_name || '?').width; ctx.fillStyle = '#f5c542'; ctx.font = 'italic 15px ' + MONO; ctx.fillText(e.title, tx + nw + 14, y + h * 0.33 + 2); }   // the title they picked, after the name
+      if (r.rank === 1 && r.period === 'month' && LB_BUFFS[r.tab.key]) { ctx.fillStyle = '#9dff5c'; ctx.font = '14px ' + MONO; ctx.fillText(`#1 bonus: ${buffText(r.tab.key)}`, tx + 70, y + h * 0.75); }
       ctx.textAlign = 'right'; ctx.fillStyle = '#fff'; ctx.font = '700 24px ' + MONO;
       ctx.fillText(`${Number(e[r.period === 'month' ? r.tab.mcol : r.tab.col]).toLocaleString('en')} ${r.tab.unit}`, x + w - 16, y + h / 2);
     }
@@ -9119,6 +9464,8 @@
       if (ui.kind === 'gameover') { drawGameOver(); return; }
       if (ui.kind === 'start' || ui.kind === 'loading') { drawStartScreen(); return; }
       if (ui.kind === 'techversity') { drawTalentWindow(); return; }
+      if (ui.kind === 'intro') { drawIntroWindow(); return; }
+      if (ui.kind === 'achievements') { drawAchWindow(); return; }
       const list = rows();
       const info = ui.kind === 'controls';          // read-only list, nothing to select
       const rowH = info ? 38 : list.some(r => r.news) ? 186 : list.some(r => r.rq) ? 150 : ui.kind === 'shop' || ui.kind === 'work' || ui.kind === 'rest' ? 150 : ui.kind === 'quests' ? 96 : ui.kind === 'leaderboard' ? 60 : ui.kind === 'loot' || ui.kind === 'scrap' ? 88 : ui.kind === 'cheat' ? 50 : ui.kind === 'spelltech' ? 262 : 64;   // shop and loot rows are taller for the item pictures
@@ -9874,6 +10221,74 @@
       ctx.moveTo(x + r, y); ctx.arcTo(x + w, y, x + w, y + h, r); ctx.arcTo(x + w, y + h, x, y + h, r); ctx.arcTo(x, y + h, x, y, r); ctx.arcTo(x, y, x + w, y, r); ctx.closePath();
     }
     const UI_R = 18;   // corner radius of windows and panels
+    // the first controls window (new game, before the Rogue): key caps in cards, then a big "let's go" button
+    function keyCap(x, y, label, w = 52, accent = '#00e5ff', h = 52) {   // a keyboard key: returns its right edge
+      ctx.fillStyle = '#0b0e16'; rr(x, y + 5, w, h, 10); ctx.fill();   // the key's side (3D)
+      ctx.fillStyle = '#1d2333'; rr(x, y, w, h, 10); ctx.fill();
+      ctx.strokeStyle = accent; ctx.lineWidth = 2; rr(x + 1, y + 1, w - 2, h - 2, 9); ctx.stroke();
+      ctx.fillStyle = '#fff'; ctx.font = `700 ${label.length > 3 ? 20 : 24}px ${MONO}`; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+      ctx.fillText(label, x + w / 2, y + h / 2 + 1); ctx.textAlign = 'left';
+      return x + w;
+    }
+    function touchCap(x, y, label, color) {   // a round phone button
+      const r = 28, cx = x + r, cy = y + r;
+      ctx.fillStyle = color + '33'; ctx.beginPath(); ctx.arc(cx, cy, r, 0, Math.PI * 2); ctx.fill();
+      ctx.strokeStyle = color; ctx.lineWidth = 3; ctx.beginPath(); ctx.arc(cx, cy, r - 1.5, 0, Math.PI * 2); ctx.stroke();
+      if (label === 'stick') { ctx.fillStyle = color + '99'; ctx.beginPath(); ctx.arc(cx + 6, cy - 4, 11, 0, Math.PI * 2); ctx.fill(); }
+      else { ctx.fillStyle = color; ctx.font = `700 26px ${MONO}`; ctx.textAlign = 'center'; ctx.textBaseline = 'middle'; ctx.fillText(label, cx, cy + 1); }
+      return x + 2 * r;
+    }
+    function drawIntroWindow() {
+      const touch = phoneView;
+      const main = touch ? [
+        { caps: () => [['stick', '#00e5ff']], name: 'Move', what: 'drag the joystick (bottom left)' },
+        { caps: () => [['A', '#ffe600']], name: 'Interact', what: 'talk, go in, attack, confirm' },
+        { caps: () => [['✕', '#ffffff']], name: 'Close', what: 'tap ✕ in a window\'s corner' },
+      ] : [
+        { caps: 'wasd', name: 'Move', what: 'or the arrow keys' },
+        { caps: () => [['Space', 150]], name: 'Interact', what: 'talk, go in, attack, confirm' },
+        { caps: () => [['Esc', 64], ['X', 52]], name: 'Close', what: 'any window' },
+      ];
+      const more = [['H', 'hero'], ['I', 'bag'], ['M', 'map'], ['Q', 'quests']];
+      const pw = Math.min(canvas.width - 24, 900), cardH = 96, gap = 14, ph = 96 + main.length * (cardH + gap) + 120 + 110;
+      const px = (canvas.width - pw) / 2, py = Math.max(10, (canvas.height - ph) / 2);
+      winFrames.push({ id: 'window', x: px, y: py, w: pw, h: ph });
+      ctx.save();
+      ctx.fillStyle = 'rgba(0, 0, 0, 0.6)'; ctx.fillRect(0, 0, canvas.width, canvas.height);
+      ctx.fillStyle = '#000'; rr(px, py, pw, ph, UI_R); ctx.fill();
+      ctx.strokeStyle = '#fff'; ctx.lineWidth = 2; rr(px + 1, py + 1, pw - 2, ph - 2, UI_R - 1); ctx.stroke();
+      drawCloseX(px + pw - 62, py + 14, null);
+      ctx.textAlign = 'left'; ctx.textBaseline = 'middle'; ctx.fillStyle = '#fff'; ctx.font = '600 40px ' + MONO; ctx.fillText('Controls', px + 40, py + 46);
+      ctx.fillStyle = '#8a8a8a'; ctx.font = '20px ' + MONO; ctx.fillText('the only three you need to start', px + 40, py + 82);
+      let y = py + 104;
+      for (const m of main) {   // one card per control: the keys on the left, what they do on the right
+        const cx = px + 32, cw = pw - 64;
+        ctx.fillStyle = '#0f1420'; rr(cx, y, cw, cardH, 14); ctx.fill();
+        ctx.strokeStyle = '#2a3350'; ctx.lineWidth = 2; rr(cx + 1, y + 1, cw - 2, cardH - 2, 13); ctx.stroke();
+        let kx = cx + 24; const ky = y + (cardH - 56) / 2;
+        if (m.caps === 'wasd') {   // W above A S D
+          const c = '#00e5ff'; keyCap(kx + 44, y + 7, 'W', 40, c, 36); keyCap(kx, y + 50, 'A', 40, c, 36); keyCap(kx + 44, y + 50, 'S', 40, c, 36); kx = keyCap(kx + 88, y + 50, 'D', 40, c, 36);
+        } else for (const [label, w] of m.caps()) kx = (touch ? touchCap(kx, ky, label, w) : keyCap(kx, ky + 2, label, w)) + 12;
+        const tx = cx + (touch ? 120 : 270);
+        ctx.textAlign = 'left'; ctx.fillStyle = '#fff'; ctx.font = '700 30px ' + MONO; ctx.fillText(m.name, tx, y + cardH / 2 - 15);
+        ctx.fillStyle = '#9aa3b5'; ctx.font = '22px ' + MONO; ctx.fillText(m.what, tx, y + cardH / 2 + 18);
+        y += cardH + gap;
+      }
+      // the rest, small: one row of keys
+      ctx.fillStyle = '#8a8a8a'; ctx.font = '20px ' + MONO; ctx.textAlign = 'left'; ctx.fillText('later:', px + 40, y + 30);
+      if (touch) { ctx.fillStyle = '#cfcfcf'; ctx.font = '22px ' + MONO; ctx.fillText('hero plate (top left) · top row: bag, menu', px + 130, y + 30); }
+      else { let mx = px + 130;
+        for (const [k, what] of more) { mx = keyCap(mx, y + 10, k, 40, '#5c6478', 40) + 10; ctx.fillStyle = '#cfcfcf'; ctx.font = '22px ' + MONO; ctx.textAlign = 'left'; ctx.fillText(what, mx, y + 30); mx += ctx.measureText(what).width + 28; } }
+      ctx.fillStyle = '#6f7a8f'; ctx.font = '18px ' + MONO; ctx.fillText(touch ? 'all controls: menu → settings → controls' : 'all controls: Menu → Settings → Controls', px + 40, y + 70);
+      // the button
+      const bw = Math.min(420, pw - 80), bh = 64, bx = px + (pw - bw) / 2, by = py + ph - bh - 30, pul = 0.5 + 0.5 * Math.sin(performance.now() / 400);
+      ctx.fillStyle = '#2b2400'; rr(bx, by, bw, bh, 14); ctx.fill();
+      ctx.shadowColor = 'rgba(255, 220, 0, 0.7)'; ctx.shadowBlur = 8 + 8 * pul; ctx.strokeStyle = '#ffdc00'; ctx.lineWidth = 3; rr(bx + 1.5, by + 1.5, bw - 3, bh - 3, 13); ctx.stroke(); ctx.shadowBlur = 0;
+      ctx.fillStyle = '#fff'; ctx.font = '700 28px ' + MONO; ctx.textAlign = 'center'; ctx.fillText("Got it, let's go!", bx + bw / 2, by + bh / 2 + 1);
+      ctx.fillStyle = '#6f7a8f'; ctx.font = '16px ' + MONO; ctx.fillText(touch ? 'tap the button or A' : 'Space or click', bx + bw / 2, by + bh + 16);
+      rowRects.push({ x: bx, y: by, w: bw, h: bh, i: 0 });
+      ctx.restore();
+    }
     function drawCloseX(x, y, panel) {
       const s = 48;
       ctx.save();
@@ -10017,7 +10432,6 @@
       }
       // slots: melee / ranged / trinket left of the picture, head / chest / boots right of it, then the stats
       const bw = 170, size = 74, gap = 8, px = x + 24 + size + 10;
-      ctx.fillStyle = '#1B2233'; ctx.fillRect(px, top, bw, bh);
       const full = skinned('heroFull');
       if (ready(full)) {   // full-body art, fitted into the box
         const ih = bh - 24, iw = Math.min(bw - 16, ih * full.naturalWidth / full.naturalHeight), ih2 = iw * full.naturalHeight / full.naturalWidth;
@@ -10046,7 +10460,7 @@
         const sx = ci ? px + bw + 10 : x + 24, sy = sy0 + ri * (size + gap), worn = inSlot(i);
         drawSlot(sx, sy, size, worn);
         if (!worn) {   // empty: a faint outline of what goes there
-          if (ready(outl)) { const cw = outl.naturalWidth / 6, ch = outl.naturalHeight, d = size * 0.66; ctx.save(); ctx.globalAlpha = 0.5; ctx.imageSmoothingQuality = 'high'; ctx.drawImage(outl, SLOT_OUTLINE[i] * cw, 0, cw, ch, sx + (size - d) / 2, sy + (size - d) / 2, d, d); ctx.restore(); }
+          if (ready(outl)) { const cw = outl.naturalWidth / 6, ch = outl.naturalHeight, d = size * 0.72; ctx.save(); ctx.globalAlpha = 0.85; ctx.imageSmoothingQuality = 'high'; ctx.drawImage(outl, SLOT_OUTLINE[i] * cw, 0, cw, ch, sx + (size - d) / 2, sy + (size - d) / 2, d, d); ctx.restore(); }
           else { ctx.fillStyle = 'rgba(255, 255, 255, 0.35)'; ctx.font = '600 13px ' + MONO; ctx.textAlign = 'center'; ctx.textBaseline = 'middle'; ctx.fillText(SLOT_LABEL[i], sx + size / 2, sy + size / 2); }
         }
         rowRects.push({ x: sx, y: sy, w: size, h: size, i, panel: 'hero' });
@@ -10277,7 +10691,7 @@
     // keys are read by their physical position (e.code), so WASD, H, I, P and 1-3 work on any keyboard layout
     // (Cyrillic, AZERTY, Greek…). Arrow keys also move, and the number pad works for numbers.
     const CODE_KEYS = { KeyW: 'w', KeyA: 'a', KeyS: 's', KeyD: 'd', ArrowUp: 'w', ArrowLeft: 'a', ArrowDown: 's', ArrowRight: 'd',
-                        KeyH: 'h', KeyI: 'i', KeyP: 'p', KeyM: 'm', KeyQ: 'q', KeyL: 'l', KeyE: 'e', KeyT: 't' };
+                        KeyH: 'h', KeyI: 'i', KeyP: 'p', KeyM: 'm', KeyQ: 'q', KeyL: 'l', KeyE: 'e', KeyT: 't', KeyK: 'k' };
     const keyOf = e => CODE_KEYS[e.code] || (/^(Digit|Numpad)[0-9]$/.test(e.code) ? e.code.slice(-1) : (e.key || '').toLowerCase());   // e.key can be missing (e.g. Chrome autofill fires a keydown without it)
     addEventListener('keydown', e => {
       if (naming() || e.metaKey || e.ctrlKey || e.altKey) return;
@@ -10294,6 +10708,7 @@
       if (k === 'h') { e.preventDefault(); if (!e.repeat && (!ui || (fillView && !locked()))) togglePanel('hero'); return; }
       if (e.key === 'Escape') { e.preventDefault(); if (!e.repeat) escPressed(); return; }
       if (k === 'x') { e.preventDefault(); if (!e.repeat && (itemMenu || anyOpen())) escPressed(); return; }   // X: another close key (never opens the menu)
+      if (k === 'k') { e.preventDefault(); if (!e.repeat && !locked()) { if (ui && ui.kind === 'achievements') closeWindow(); else if (!ui) { closePanels(); openWindow('achievements'); } } return; }   // achievements
       if (k === 'l') { e.preventDefault(); if (!e.repeat && !locked()) { if (ui && ui.kind === 'leaderboard') closeWindow(); else if (!ui) openLeaderboard(); } return; }
       if (k === 'q') { e.preventDefault(); if (!e.repeat && !locked()) { if (ui && ui.kind === 'quests') closeWindow(); else if (!ui) openWindow('quests'); } return; }
       if (e.code === 'Tab') { e.preventDefault(); if (!e.repeat && !anyOpen()) cycleTarget(); return; }
@@ -10613,7 +11028,7 @@
     function renderPhud() {
       if (!mobUI()) return;
       const pct = (a, b) => Math.max(0, Math.min(100, b ? a / b * 100 : 0)) + '%';
-      $('ph-name').textContent = heroName || DEFAULT_NAME; $('ph-lvl').textContent = `lvl ${hero.level}`;
+      $('ph-name').textContent = heroName || DEFAULT_NAME; $('ph-title').textContent = achS.title || ''; $('ph-title').hidden = !achS.title; $('ph-lvl').textContent = `lvl ${hero.level}`;
       $('ph-hp').style.width = pct(stats.health, CAPS.health); $('ph-hpt').textContent = `${stats.health}/${CAPS.health}`;
       $('ph-mana').style.width = pct(stats.mana, CAPS.mana); $('ph-manat').textContent = `${stats.mana}/${CAPS.mana}`;
       const need = expNeed(hero.level); $('ph-xp').style.width = need ? pct(hero.exp, need) : '100%';
@@ -10622,7 +11037,7 @@
       $('ph-money').parentNode.title = `Money: ${stats.money.toLocaleString('en')}`; $('ph-deals').parentNode.title = `Deals made at work: ${dealsDone.toLocaleString('en')}`;
     }
     $('ph-face').style.backgroundImage = `url(${ART_SRC.heroPortrait})`;
-    $('t-quest-img').src = ART_SRC.questIcon; $('t-lb-img').src = ART_SRC.trophy; renderBagTile();
+    $('t-quest-img').src = ART_SRC.questIcon; $('t-lb-img').src = ART_SRC.trophy; $('t-ach-img').src = ART_SRC.achievements; renderBagTile();
     addEventListener('resize', layoutView); addEventListener('orientationchange', () => setTimeout(layoutView, 150));
     new ResizeObserver(() => { if (!phoneView) touchEl.style.setProperty('--u', canvas.clientHeight / 100 + 'px'); }).observe(canvas);
     [...touchEl.querySelectorAll('button[data-code]'), $('phud')].forEach(b => {   // the hero plate: H
