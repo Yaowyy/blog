@@ -1,4 +1,5 @@
 <!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover"><title>Neon Hustle</title>
+<meta name="description" content="A cyberpunk browser RPG: hustle, trade and fight through a neon city. Play free on desktop or phone."><meta property="og:type" content="website"><meta property="og:site_name" content="andrii.blog"><meta property="og:title" content="Neon Hustle: my cyberpunk browser RPG"><meta property="og:description" content="Built in JavaScript with AI-assisted development. Play it in your browser on desktop or mobile."><meta property="og:url" content="https://andrii.blog/game.html"><meta property="og:image" content="https://andrii.blog/art/ui/og-game.jpg"><meta property="og:image:width" content="1200"><meta property="og:image:height" content="627"><meta property="og:image:alt" content="Neon Hustle: two characters on a rainy neon street"><meta name="twitter:card" content="summary_large_image"><meta name="twitter:image" content="https://andrii.blog/art/ui/og-game.jpg">
 <meta name="mobile-web-app-capable" content="yes"><meta name="apple-mobile-web-app-capable" content="yes"><meta name="apple-mobile-web-app-status-bar-style" content="black-translucent"><meta name="theme-color" content="#000000">
 <script>if (!document.querySelector('meta[name=viewport]')) { const m = document.createElement('meta'); m.name = 'viewport'; m.content = 'width=device-width, initial-scale=1, viewport-fit=cover'; document.head.appendChild(m); }</script>
 <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Crect width='64' height='64' rx='12' fill='%231B2233'/%3E%3Crect x='6' y='6' width='52' height='52' rx='9' fill='none' stroke='%2300E5FF' stroke-width='4'/%3E%3Cpath d='M22 16v32h20' fill='none' stroke='%23FF2BD6' stroke-width='8' stroke-linecap='square'/%3E%3C/svg%3E">
@@ -241,6 +242,7 @@
   .acc-form a { color: #00e5ff; }
   .acc-links { display: grid; gap: 8px; }
   .acc-links p { margin: 0; }
+  .acc-links .acc-legal { font-size: 12px; }
   @media (max-width: 720px) {   /* phone portrait: boss strip on top, form below */
     .account { align-items: flex-start; padding: 12px; }
     .acc-card { grid-template-columns: 1fr; }
@@ -343,6 +345,7 @@
         <p id="acc-resend-row" hidden><a href="#" id="acc-resend">Resend the confirmation email</a></p>
         <p><a href="#" id="acc-switch">Already have an account? Log in</a></p>
         <p><a href="#" id="acc-guest">Play as guest (no saving)</a></p>
+        <p class="acc-legal">13+ only · <a href="/privacy" target="_blank" rel="noopener">Privacy notice</a></p>
       </div>
       <p id="acc-hint">Name: letters only, up to 10, not used by another player · password: 6+ characters. You'll get an email to confirm it's yours.</p>
     </form>
@@ -739,6 +742,11 @@
     { name: 'Sludge Crystal', class: 'resource', stack: 64, gain: {}, value: 6, rarity: 'common', art: 'sludgeCrystal', desc: 'A toxic crystal grown out of the lakeshore sludge. Still warm.' },
     { name: 'Glowcap Truffle', class: 'resource', stack: 16, gain: {}, value: 45, rarity: 'rare', art: 'glowcapTruffle', desc: 'A rare glowing truffle dug up from under the deep forest trees.' },
     { name: 'Specimen Vial', class: 'resource', stack: 16, gain: {}, value: 58, rarity: 'rare', art: 'specimenVial', desc: 'A sealed vial of glowing mutagen, left behind when the Quarantine Labs were abandoned. Handle with care.' },
+    { name: 'Sealed Sample', class: 'questItem', keep: true, noPool: true, stack: 1, gain: {}, value: 0, rarity: 'rare', art: 'sealedSample', desc: 'One of the Specimen Vials, sealed by Sparky for the Ripperdoc Clinic in the city. Don\'t drop it.' },
+    { name: 'Strength Vial', class: 'boost', noPool: true, stack: 5, gain: {}, value: 120, rarity: 'rare', art: 'strengthVial', consume: { boost: 'strVial' },
+      desc: 'The Ripperdoc\'s mutagen shot: +5 max HP and +3 STR for 10 minutes (another one restarts the timer).' },
+    { name: 'Truffle Extract', class: 'boost', noPool: true, stack: 5, gain: {}, value: 120, rarity: 'rare', art: 'truffleExtract', consume: { boost: 'truffle' },
+      desc: 'Distilled Glowcap Truffle: regenerates 10 HP a minute for 5 minutes (another one restarts the timer).' },
     { name: 'Hacked Core', class: 'resource', noPool: true, questUntil: 'sporeCode', stack: 4, gain: {}, value: 120, rarity: 'rare', art: 'hackedCore', desc: 'The Hacked Loader\'s core. Something green and alive is growing through its circuits. Sparky will want to see this.' },
     // Infected Core: a quest item (starts "Infected core") until that quest is handed in; then Overgrown Loaders keep dropping it
     // (INF_CORE: chance per kill, certain on the pity-th without one) and it is a normal rare resource (the Filter Chip needs one)
@@ -1026,11 +1034,16 @@
   const zoneCoords = id => coordOf(id).map(Math.abs);
   const zoneSum = id => zoneCoords(id)[0] + zoneCoords(id)[1];   // exp for discovering a zone: |a| + |b|
   const zoneLevel = id => Math.max(...zoneCoords(id));           // level of every enemy living there: the bigger of |a|, |b|
+  // passages added later (after the world was first rolled out): left out while the world is built, so every zone comes out
+  // exactly as before; at the very end they're added and whatever stands in front of them is cleared (see LATE_PASSAGES below)
+  const LATE_PASSAGES = [
+    ['-3:0', '-4:0', 0.17],   // 21 Oct 2026: slums -3:0 (the Grid's through road, columns 7-8) down into the forest -4:0
+  ];
   // a passage is 2 tiles wide on the shared edge; each side gets exit tiles (0-based) and a direction
-  function buildExits() {
+  function buildExits(list = PASSAGES) {
     const exits = {};
     for (const id in ZONE_LIST) exits[id] = [];
-    for (const [A, B, f] of PASSAGES) {
+    for (const [A, B, f] of list) {
       const [a1, b1] = coordOf(A), [a2, b2] = coordOf(B);
       let dirA;
       if (a1 === a2 && b2 === b1 + 1) dirA = 'right'; else if (a1 === a2 && b2 === b1 - 1) dirA = 'left';
@@ -1927,6 +1940,18 @@
         spots.sort((a, b) => Math.hypot(a[0] + 1 - COLS / 2, a[1] - ROWS / 2) - Math.hypot(b[0] + 1 - COLS / 2, b[1] - ROWS / 2));
         const at = spots.find(([x, y]) => [[0, 0], [1, 0], [0, -1], [1, -1]].every(([dx, dy]) => tileOk(A, x + dx, y + dy) && !behindTall('-6:-6', x + dx, y + dy)));
         if (at) addFoe(A, 'g0', at[0], at[1]); } }
+    // ---- LATE_PASSAGES: added last; walls, trees, decorations and enemies within 3 tiles of them are cleared ----
+    const late = buildExits(LATE_PASSAGES);
+    for (const id in late) for (const e of late[id]) {
+      const A = AREAS[id]; if (!A) continue;
+      A.exits.push(e); if (ZONE_EXITS[id] !== A.exits) ZONE_EXITS[id].push(e);
+      const near = (x, y) => e.tiles.some(([tx, ty]) => Math.max(Math.abs(tx - x), Math.abs(ty - y)) <= 3);
+      const blocks = o => { const f = foot(o); for (let y = f.y0; y <= f.y1; y++) for (let x = f.x0; x <= f.x1; x++) if (near(x, y)) return true; return false; };
+      A.walls = A.walls.filter(o => !blocks(o));
+      if (A.decos) A.decos = A.decos.filter(o => !blocks(o));
+      if (A.extraFoes) A.extraFoes = A.extraFoes.filter(f => !foeTiles(f).some(([x, y]) => near(x, y)));
+      if (A.foes) A.foes = A.foes.filter(f => !f.kind || !foeTiles(f).some(([x, y]) => near(x, y)));
+    }
   }
   const footCX = w => { const f = foot(w); return (f.x0 + f.x1 + 1) / 2; };   // footprint centre, in tiles
   const START = { x: 21, y: 11 };   // 0-based: just below HomeDome
@@ -2278,7 +2303,7 @@
     heroWinchSide: 'art/hero/heroWinchSide.webp', heroWinchDown: 'art/hero/heroWinchDown.webp', heroWinchUp: 'art/hero/heroWinchUp.webp',   // Winch Hook attacks
     g0Idle: 'art/enemies/specimenG0/specimenG0Idle.webp', g0Lash: 'art/enemies/specimenG0/specimenG0Lash.webp', g0Roots: 'art/enemies/specimenG0/specimenG0Roots.webp', g0Spit: 'art/enemies/specimenG0/specimenG0Spit.webp', g0Uproot: 'art/enemies/specimenG0/specimenG0Uproot.webp', g0Idle2: 'art/enemies/specimenG0/specimenG0Idle2.webp', g0Walk2: 'art/enemies/specimenG0/specimenG0Walk2.webp', g0Lash2: 'art/enemies/specimenG0/specimenG0Lash2.webp', g0Heart: 'art/enemies/specimenG0/specimenG0Heart.webp', g0Hurt: 'art/enemies/specimenG0/specimenG0Hurt.webp', g0Spike: 'art/enemies/specimenG0/specimenG0Spike.webp', g0Portrait: 'art/enemies/specimenG0/specimenG0Portrait.webp', g0Pod: 'art/enemies/specimenG0/specimenG0Pod.webp', specimenTag: 'art/items/loot/specimenTag.webp',
     loaderHurt: 'art/enemies/overgrownLoader/overgrownLoaderHurt.webp', loaderPortrait: 'art/enemies/overgrownLoader/overgrownLoaderPortrait.webp', sporeSac: 'art/items/loot/sporeSac.webp', copperWire: 'art/items/loot/copperWire.webp', neonMoss: 'art/items/loot/neonMoss.webp', sludgeCrystal: 'art/items/loot/sludgeCrystal.webp', glowcapTruffle: 'art/items/loot/glowcapTruffle.webp',
-    copperWireNode: 'art/world/harvest/copperWireNode.webp', neonMossNode: 'art/world/harvest/neonMossNode.webp', sludgeCrystalNode: 'art/world/harvest/sludgeCrystalNode.webp', glowcapNode: 'art/world/harvest/glowcapNode.webp', specimenVialNode: 'art/world/harvest/specimenVialNode.webp', specimenVial: 'art/items/loot/specimenVial.webp', loaderCore: 'art/items/loot/loaderCore.webp', hackedCore: 'art/items/loot/hackedCore.webp', infectedCore: 'art/items/loot/infectedCore.webp',   // Hacked Loader loot / the Infected core quest item
+    copperWireNode: 'art/world/harvest/copperWireNode.webp', neonMossNode: 'art/world/harvest/neonMossNode.webp', sludgeCrystalNode: 'art/world/harvest/sludgeCrystalNode.webp', glowcapNode: 'art/world/harvest/glowcapNode.webp', specimenVialNode: 'art/world/harvest/specimenVialNode.webp', specimenVial: 'art/items/loot/specimenVial.webp', sealedSample: 'art/items/loot/sealedSample.webp', strengthVial: 'art/items/boosts/strengthVial.webp', truffleExtract: 'art/items/boosts/truffleExtract.webp', loaderCore: 'art/items/loot/loaderCore.webp', hackedCore: 'art/items/loot/hackedCore.webp', infectedCore: 'art/items/loot/infectedCore.webp',   // Hacked Loader loot / the Infected core quest item
    
     toxicScavPortrait: 'art/enemies/toxicScav/toxicScavPortrait.png', toxicScavSpray: 'art/enemies/toxicScav/toxicScavSpray.png',   // portrait, toxic spray cone (points left, nozzle at the right end)
     mutagen: 'art/items/loot/mutagen.png', tarOrb: 'art/items/loot/tarOrb.png', aiChip: 'art/items/loot/aiChip.png',   // item icons
@@ -2496,7 +2521,14 @@
     const talentRegenMult = () => (1 + 0.05 * branchPts('chrome')) * (gameTime < rezeroUntil ? 2 : 1);
     const ocActive = () => gameTime < ocUntil ? ocStacks : 0;
     const bonusStr = () => (gameTime < avUntil ? avStr : 0) + ocActive() * [1, 1, 1, 2][Math.max(0, ocRank - 1)];
-    const heroStr = () => stats.strength + bonusStr();
+    // Ripperdoc boosts (20 Oct 2026): timed, game time, saved as boostLeft. Using one while it runs restarts its timer.
+    const BOOSTS = { strVial: { ms: 10 * 60000, hp: 5, str: 3 }, truffle: { ms: 5 * 60000, regenPerMin: 10 } };
+    const boostUntil = Object.fromEntries(Object.keys(BOOSTS).map(k => [k, gameTime0() + ((saved.boostLeft || {})[k] || 0)]));
+    function gameTime0() { return 0; }   // the game clock starts at 0 (gameTime is declared later)
+    let boostReady = false;   // true once the game clock exists (caps are worked out before that)
+    const boostOn = k => boostReady && gameTime < boostUntil[k];
+    let boostHpWas = false, truffleBuf = 0;
+    const heroStr = () => stats.strength + bonusStr() + (boostOn('strVial') ? BOOSTS.strVial.str : 0);
     const talentAttackSpeed = () => ocActive() * [0.03, 0.03, 0.05, 0.05][Math.max(0, ocRank - 1)];
     const critBonus = () => tal('overclock', 0) ? [0.25, 0.5, 0.75, 1][tal('overclock', 0) - 1] : 0;   // Quick Hands
     const ceoEvery = () => tal('hustler', 2) ? [12, 11, 10, 9][tal('hustler', 2) - 1] : 0;
@@ -2538,7 +2570,9 @@
     }
     const activeSets = new Set(saved.sets || []);   // sets whose bonus is in the stats right now (saved, so it's never added twice)
     capExtra = () => { const ex = {}; for (const [st, n] of Object.entries(talentCapFlat())) ex[st] = n; for (const it of equipped) for (const [st, n] of Object.entries((itemDef(it.name) || {}).capGain || {})) ex[st] = (ex[st] || 0) + n;
-      for (const st of SETS) if (activeSets.has(st.name)) for (const [k, n] of Object.entries(st.capGain || {})) ex[k] = (ex[k] || 0) + n; return ex; };
+      for (const st of SETS) if (activeSets.has(st.name)) for (const [k, n] of Object.entries(st.capGain || {})) ex[k] = (ex[k] || 0) + n;
+      if (boostOn('strVial')) ex.health = (ex.health || 0) + BOOSTS.strVial.hp;   // Strength Vial
+      return ex; };
     const setCount = st => st.items.filter(n => equipped.some(e => e.name === n)).length;
     // a set just got complete: add its bonus; a piece came off: take it away. Returns a note for the message ('' if nothing changed)
     function syncSets() {
@@ -2855,9 +2889,15 @@
         goal: 'Bring Sparky 3 Specimen Vials from the Quarantine Labs (the airlock at -7:3).',
         talk: '"With that card the airlock at -7:3 opens. Behind it: the Quarantine Labs, spilled specimen racks everywhere. Bring me 3 Specimen Vials. I want to know what MutaTech was growing in there."',
         talkSold: '"The card opens the airlock at -7:3. Go in and bring me 3 Specimen Vials from the spilled racks. And this time, bring them to ME, not to MutaTech."',
-        done: '"Seeds. All of them. G-0 wasn\'t the source, it was just one that got out. And the labels point to a sealed wing deeper in: the Breach. Vesper has been sniffing around that place. Go talk to her."',
+        gives: 'Sealed Sample',
+        done: '"Seeds. All of them. G-0 wasn\'t the source, it was just one that got out. I sealed one for you: take it to the Ripperdoc in the city. His clinic has been shut for months, but for this he\'ll open the door."',
         prog: () => Math.min(3, carriedCount('Specimen Vial')) },
-      { id: 'breachTalk', giver: 'sparky', name: 'The sealed wing', lvl: 8, after: 'specimenRun', rarity: 'common', need: 1, talkTo: 'vesper', gives: 'Special Keycard',
+      { id: 'freshSample', giver: 'sparky', name: 'Fresh sample', lvl: 8, after: 'specimenRun', rarity: 'common', need: 1, talkTo: 'ripperdoc',
+        goal: 'Take the Sealed Sample to the Ripperdoc Clinic in the city.',
+        talk: '"The Ripperdoc in the city can read mutagen like a book. Bring him the Sealed Sample. And be nice: he\'s the only doc who still works on people like us."',
+        done: '"Hm. Live MutaTech seed, still twitching. You know what, choom: my clinic is open again. Here, one on the house." He hands you a Strength Vial. "And Sparky says the labels point to a sealed wing: the Breach. Vesper has been sniffing around it. Go talk to her."',
+        prog: () => 0 },
+      { id: 'breachTalk', giver: 'sparky', name: 'The sealed wing', lvl: 8, after: 'freshSample', rarity: 'common', need: 1, talkTo: 'vesper', gives: 'Special Keycard',
         goal: 'Talk to Vesper about the Breach.',
         talk: '"Vesper\'s been hunting around those labs for weeks. Tell her what we found. If anyone knows how to get into the Breach, it\'s her."',
         done: '"Sparky\'s right. The Breach is where it all started: the labs\' sealed containment wing, -8:8. I took this off a dead MutaTech guard. Special clearance: it opens the airlock at -9:8. Something is still alive in there. When I know what it is, you get the contract."',
@@ -2918,6 +2958,10 @@
     const rqGoal = (r, q) => { if (!r.steps || !q) return r.goal; const st = r.steps.find(x => !x.done || !x.done(q)); return (st || r.steps[r.steps.length - 1]).goal; };   // a quest with objectives shows the current one
     migrateQuests(saved);
     // a boss quest pays double its rarity's reward
+    // progress shown on a quest row: the accepted quest's own, else (an offer) what already counts (items carried); kill quests and
+    // step quests start at 0 (their prog needs the accepted quest: calling it without one crashed the window, e.g. Anomaly, 20 Oct)
+    const rqOfferProg = r => { const q = quests.find(x => x.kind === 'rogue' && x.id === r.id); if (q) return r.prog(q);
+      if (r.kill || r.steps) return 0; try { return r.prog({}); } catch (e) { return 0; } };
     const rqPay = r => { const p = questPay(r.lvl, r.rarity), k = r.boss ? 2 : 1; return { exp: p.exp * k, money: p.money * k }; };
     const rqTag = r => questTag(r.lvl, r.rarity) + (r.boss ? ' · boss' : '');
     const rqComplete = q => { const r = rqDef(q.id); return !!r && !r.talkTo && r.prog(q) >= r.need; };
@@ -2955,6 +2999,8 @@
       if (!rogueDone.has('item:telePad') && (rogueDone.has('queen') || quests.some(q => q.kind === 'rogue' && q.id === 'queen')) && inventory.length < invSlots()) {   // older saves: Vesper's Tele-pad
         inventory.push({ name: 'Tele-pad', count: 1 }); rogueDone.add('item:telePad'); showHint('Vesper left you a Tele-pad: hold T (or use it from your bag) to teleport back to the city. 20 min recharge.'); }
       for (const D of DOORS) if (!rogueDone.has(D.flag) && carriedCount(D.item) > 0) { rogueDone.add(D.flag); showHint(`${D.item}: the ${D.key === 'labs' ? 'Quarantine Labs airlock (slums, -7:3)' : 'Breach airlock (-9:8)'} opens for you now.`); }
+      if (rogueDone.has('specimenRun') && !rogueDone.has('freshSample') && !rogueDone.has('item:sealedSample') && !countOf('Sealed Sample') && inventory.length < invSlots()) {
+        inventory.push({ name: 'Sealed Sample', count: 1 }); rogueDone.add('item:sealedSample'); showHint('Sparky left you a Sealed Sample: Fresh sample, take it to the Ripperdoc Clinic in the city.'); }
       for (const q of quests) if (q.kind === 'rogue' && q.id === 'anomaly' && !q.seen && ZONE_LIST[areaName] === 'pit') {   // Anomaly objective 1: being in the pit after accepting
         q.seen = true; playSfx('questAccept'); showHint(`Objective done: scouted the Industrial Pit. ${rqDef('anomaly').steps[0].msg} Next: destroy the Hacked Loader.`); }
       for (const q of quests) if (q.kind === 'rogue' && !q.told && rqComplete(q)) { q.told = true; playSfx('questComplete'); showHint(`Quest done: ${q.name}. Hand it in to ${GIVERS[giverOf(q.id)].name}.`); }
@@ -3190,7 +3236,8 @@
           ...quests.map((q, i) => ({ quest: q, left: q.name, right: '', act() { menuAt(i, i + off); } }))];
       }
       if (ui.kind === 'cancelQuest') return [   // "are you sure?" for cancelling a quest (same as throwing an item away)
-        { left: 'Yes', right: '', act() { const q = quests[ui.questIdx], back = ui.back, name = ui.questName; if (q && q.name === name) quests.splice(ui.questIdx, 1);
+        { left: 'Yes', right: '', act() { const q = quests[ui.questIdx], back = ui.back, name = ui.questName; if (q && q.name === name) { quests.splice(ui.questIdx, 1);
+            if (q.kind === 'delivery') { const it = questItemOf(q); if (it) { if ((it.count || 1) > 1) it.count--; else inventory.splice(inventory.indexOf(it), 1); renderStats(); } } }   // its parcel goes too
           openWindow('quests', Math.max(0, Math.min(back.cursor, quests.length - 1))); ui.msg = `Quest cancelled: ${name}.`; } },
         { left: 'No', right: '', act() { goBack(); } },
       ];
@@ -3217,7 +3264,9 @@
         { left: 'fps counter', right: settings.fps ? 'on' : 'off', act() {
           settings.fps = !settings.fps; store.set(SETTINGS_KEY, { ...settings }); fpsStat.frames = []; fpsStat.draws = [];
           return `FPS counter: ${settings.fps ? 'on (under the minimap)' : 'off'}.`; } },
-      ];
+        { left: 'privacy notice', right: '', gapBefore: true, act() { window.open('/privacy', '_blank'); } },
+        account ? { left: 'delete account', right: '', act() { openWindow('deleteAcc', 1, fromHere()); } } : null,
+      ].filter(Boolean);
       if (ui.kind === 'sound') return [
         { left: 'background music', right: volumeBar(settings.music), vol: 'music', act() { stepVolume('music', 1); } },
         { left: 'sound effects', right: volumeBar(settings.sfx), vol: 'sfx', act() { stepVolume('sfx', 1); } },
@@ -3242,6 +3291,10 @@
       if (ui.kind === 'restart') return [
         { left: 'yes', right: '', act() { newGame(); autosave(true); showStartScreen(); } },
         { left: 'no', right: '', act() { goBack(); } },
+      ];
+      if (ui.kind === 'deleteAcc') return [   // GDPR: players can erase their account (server: delete_my_account)
+        { left: 'delete forever', right: '', act() { deleteAccount(); } },
+        { left: 'keep my account', right: '', act() { goBack(); } },
       ];
       if (ui.kind === 'logout') return [
         { left: 'log out', right: '', act() { logOut(); } },
@@ -3285,7 +3338,8 @@
           showHint(`Delivered! "Still warm. You're a lifesaver, hon."`);
         } }];
       }
-      if (['metro', 'ripperdoc'].includes(ui.kind)) return [{ left: 'ok', right: '', act() { ui = null; } }];
+      if (ui.kind === 'ripperdoc') return ripperRows();
+      if (['metro'].includes(ui.kind)) return [{ left: 'ok', right: '', act() { ui = null; } }];
       if (ui.kind === 'pixi') return [...PIXI_FEED.map((n, i) => ({ news: n, fresh: i === 0 && ui.fresh, left: n.title, right: '', act() { ui = null; } })),
         { left: 'Yay, thanks Pixi!', right: '', short: true, act() { ui = null; } }];
       if (ui.kind === 'bank') {   // Vault tab: rows 0-3 = the sockets, 4+ = the Vault's storage slots (drawn as a grid: drawVault)
@@ -3363,7 +3417,7 @@
     }
     function newGame() {
       Object.assign(talents, newTalents()); ceoCalls = 0;
-      Object.assign(achS, { done: {}, kills: {}, zones: [], harvests: 0, critRun: 0, points: 0, marks: 0, title: '' }); achQueue.length = 0; expBoostUntil = 0;
+      Object.assign(achS, { done: {}, kills: {}, zones: [], harvests: 0, critRun: 0, points: 0, marks: 0, title: '' }); achQueue.length = 0; expBoostUntil = 0; for (const k in BOOSTS) boostUntil[k] = 0;
       officeChips.fill(null); resetTracker(); promoWasReady = null; clearLbBuffs(); Object.assign(stats, START_STATS); dealsDone = 0; foodBought = 0; promotion = 0; kills = 0; dripKills = 0; queenKills = 0; scavKills = 0; droneKills = 0; hloaderKills = 0; hookMisses = 0; loaderKills = 0; loadingK0 = null; g0Kills = 0; pistolMisses = 0; infCoreMisses = 0; toxicKills = 0; telePadReadyAt = 0; teleCast = null; weaponBought = false; rogueDone.clear(); gridPowered.clear(); powering = null; runCheated = false; Object.assign(prices, startPrices());
       discovered.clear();
       quests.length = 0;
@@ -3489,7 +3543,7 @@
     function snapshot() {
       return { x: player.x, y: player.y, fx: facing.x, fy: facing.y, stats: statsNoBuffs(), deals: deals.map(({ boost, boostUntil, boostMs, ...d }) => d), prices: { ...prices }, dealsDone, foodBought, itemsV2: true, questsV2: true, droneKills, hloaderKills, hookMisses, loaderKills, loadingK0, g0Kills, pistolMisses, infCoreMisses, toxicKills, teleLeft: Math.max(0, telePadReadyAt - gameTime), officeChips: [...officeChips], sets: [...activeSets], promotion, kills, dripKills, queenKills, scavKills, weaponBought, rogueDone: [...rogueDone], gridPowered: [...gridPowered], cheated: runCheated, quests: quests.map(q => q.kind === 'delivery' ? { ...q, left: Math.max(0, q.until - gameTime) } : { ...q }),
                inventory: inventory.map(it => ({ ...it })), equipped: equipped.map(it => ({ ...it })), skills: [...skills],
-               weaponsV: 2, areaName, restReadyAt, levels: { ...levels }, manaCap: CAP_BASE.mana, energyCap: CAP_BASE.energy, level: hero.level, exp: hero.exp, strengthLevel: hero.level, bags: [...bags], vault: { open: vault.open, bags: [...vault.bags], items: vault.items.map(it => ({ ...it })) }, talents: JSON.parse(JSON.stringify(talents)), ceoCalls, tut, tutV: 3, pixiSeen, tutN, tutQuiz: { ...tutQuiz }, tutReplay, luck: JSON.parse(JSON.stringify(LUCK)), ach: JSON.parse(JSON.stringify(achS)), expBoostLeft: Math.max(0, expBoostUntil - gameTime), discovered: [...discovered], enemies: saveEnemies(), runner: saveRunner(), harvest: saveHarvest(),
+               weaponsV: 2, areaName, restReadyAt, levels: { ...levels }, manaCap: CAP_BASE.mana, energyCap: CAP_BASE.energy, level: hero.level, exp: hero.exp, strengthLevel: hero.level, bags: [...bags], vault: { open: vault.open, bags: [...vault.bags], items: vault.items.map(it => ({ ...it })) }, talents: JSON.parse(JSON.stringify(talents)), ceoCalls, tut, tutV: 3, pixiSeen, tutN, tutQuiz: { ...tutQuiz }, tutReplay, luck: JSON.parse(JSON.stringify(LUCK)), ach: JSON.parse(JSON.stringify(achS)), expBoostLeft: Math.max(0, expBoostUntil - gameTime), boostLeft: Object.fromEntries(Object.keys(BOOSTS).map(k => [k, Math.max(0, boostUntil[k] - gameTime)])), discovered: [...discovered], enemies: saveEnemies(), runner: saveRunner(), harvest: saveHarvest(),
                piles: piles.map(p => ({ ...p, gear: p.gear.map(it => ({ ...it })), items: p.items.map(it => ({ ...it })), left: Math.max(0, p.until - gameTime), until: undefined })) };
     }
     let capNotice = 0;   // the level the hero had before the cap (the window shows once it's safe to open)
@@ -3538,7 +3592,8 @@
       piles.length = 0; for (const p of s.piles || []) piles.push({ ...pileOf(p), until: gameTime + (p.left || 0) });
       for (const k in LUCK) delete LUCK[k]; Object.assign(LUCK, s.luck || {});
       { const a = s.ach || {}; Object.assign(achS, { done: a.done || {}, kills: a.kills || {}, zones: a.zones || [], harvests: a.harvests || 0, critRun: a.critRun || 0, points: a.points || 0, marks: a.marks || 0, title: a.title || '' }); achQueue.length = 0; }
-      expBoostUntil = gameTime + (s.expBoostLeft || 0);   // the bags as they were
+      expBoostUntil = gameTime + (s.expBoostLeft || 0);
+      for (const k in BOOSTS) boostUntil[k] = gameTime + ((s.boostLeft || {})[k] || 0); boostHpWas = !boostOn('strVial'); syncBoosts();   // the bags as they were
       tut = s.tut ?? 0; tutReplay = !!s.tutReplay; pixiSeen = s.pixiSeen ?? null;
       if (s.tutV !== 3) { if (tut >= (s.tutV === 2 ? 6 : 5)) tut = TUT_DONE; else if (tut > 0) tut = 1; }   // older, shorter tutorials: finished stays finished, running restarts
       tutN = s.tutV === 3 ? s.tutN || 0 : 0; tutQuiz = s.tutV === 3 && s.tutQuiz ? { ...s.tutQuiz } : { i: 0, wrong: 0 };
@@ -3828,7 +3883,7 @@
     const vesperTalk = () => quests.some(q => q.kind === 'rogue' && rqDef(q.id)?.talkTo === 'vesper');   // the Rogue sent you to her
     const vesperBountyReady = () => vesperTalk() || rogueReady('vesper').length > 0 || rogueOffers('vesper').length > 0;   // hologram up: something to take, finish or hand in
     const TITLES = { capped: 'Potential contained', hof: 'Hall of Fame', achievements: 'Achievements', pixi: 'Pixi', sparky: 'Sparky', vesper: 'Vesper', techversity: 'TechVersity · Talents', chef: 'Netizen Chef', intro: 'Controls', rogue: 'Rogue', metro: 'Metro Station', bank: 'CredBank', ripperdoc: 'Ripperdoc Clinic', spelltech: 'MutaTech', shop: 'ATB-Market', work: 'TradeCorp', menu: 'Menu', controls: 'Controls', hero: 'Hero', inventory: 'Inventory', gameover: 'Game over', loot: 'Loot · Drip', rest: 'HomeDome', cheat: 'Cheats (testing)', scrap: 'Scrap Dealer',
-                     map: 'Map', settings: 'Settings', sound: 'Sound', video: 'Video', decals: 'Decal density', restart: 'Restart', throw: 'Throw away', cancelQuest: 'Cancel quest', quests: 'Quests', leaderboard: 'Leaderboard', save: 'Save', load: 'Load game', logout: 'Log out', guest: 'Playing as guest' };
+                     map: 'Map', settings: 'Settings', sound: 'Sound', video: 'Video', decals: 'Decal density', restart: 'Restart', throw: 'Throw away', cancelQuest: 'Cancel quest', quests: 'Quests', leaderboard: 'Leaderboard', save: 'Save', load: 'Load game', deleteAcc: 'Delete account', logout: 'Log out', guest: 'Playing as guest' };
     // windows with a paragraph above their options
     const WINDOW_TEXT = {
       capped: () => `Some unexplainable force has contained your potential. You are level ${LEVEL_CAP} again, and your talents have been reset: spend your ${freePts()} points at TechVersity. Don't give up: eventually you will grow again.`,
@@ -3844,7 +3899,7 @@
         : quests.some(q => q.kind === 'rogue' && giverOf(q.id) === 'sparky') ? '"Still on it? No rush! Okay, a little rush."'
         : '"Name\'s Sparky. I keep the lights on around here. Well, I try."',
       metro: 'The gates are down and the departure board is blank. "Opening soon," says a flickering sign.',
-      ripperdoc: 'The ripperdoc is still unpacking chrome. "Come back soon, choom."',
+      ripperdoc: () => clinicOpen() ? '"Welcome back, choom. Chrome, meat or mutagen?" For now he mixes boosts: they go into your bag, use them whenever you like.' : quests.some(q => q.kind === 'rogue' && q.id === 'freshSample') ? 'The shutter is down, but a voice crackles from the intercom: "Closed. ...Wait. Is that a MutaTech sample you\'re carrying? Come in."' : 'The shutter is down. A sign says: CLOSED. NO WALK-INS. A tiny camera follows you.',
       chef: () => { const q = quests.find(q => q.kind === 'delivery' && q.dest === areaName);
         return q ? `"TradeCorp sent you? Finally! My customers have been waiting. Hand it over before it gets cold." (${clockText(q.until - gameTime)} left)`
           : '"Nothing on order today, hon. Come back when TradeCorp sends something my way."'; },
@@ -3859,10 +3914,11 @@
         : '"You learn fast. Come back soon: I\'ll have real work for someone like you."',
       restart: 'Are you sure?',
       quests: () => quests.length || tutQuest() ? '' : 'No active quests yet. Take a Scheduled delivery at TradeCorp (Deals).',
-      cancelQuest: () => `Are you sure? ${ui.questName} will be gone forever.`,
-      throw: () => `Are you sure? ${ui.throwN > 1 ? ui.throwN + ' × ' : ''}${ui.throwName} will be gone forever.`,
+      cancelQuest: () => `Are you sure? ${ui.questName} will be gone forever${quests[ui.questIdx] && quests[ui.questIdx].kind === 'delivery' ? `, and so will its ${quests[ui.questIdx].item}` : ''}.`,
+      throw: () => parcelQuest(ui.throwName) ? `Are you sure? The ${ui.throwName} goes and the delivery "${parcelQuest(ui.throwName).name}" is cancelled (no pay).` : `Are you sure? ${ui.throwN > 1 ? ui.throwN + ' × ' : ''}${ui.throwName} will be gone forever.`,
       sound: 'A / D (or ← →) to change, Space to step up. Each step is 20%.',
       decals: 'Floor details per zone quarter: each density step = 2 large + 10 small decals. A / D (or ← →) to change, Space to step up.',
+      deleteAcc: 'This permanently deletes your account, all three save slots, your hero name and your leaderboard entries. It can’t be undone.',
       guest: 'Guests can’t save. Create a free account to keep this run, or log in to continue a saved one.',
       logout: 'Log out? Sure. Leave your hero alone in a neon city crawling with gangs, killer drones, and things lurking in dark alleys. Without you, they’ll be robbed, hunted, and probably found face-down in a puddle under a flickering noodle sign. But hey, I’m sure you have VERY important things to do.',
     };
@@ -4238,7 +4294,7 @@
         pn.msg = `Learned ${item.name}: spell slot ${skills.length}, key ${skills.length}.`;
         renderStats(); return;
       }
-      if (item.quest) { pn.msg = `That ${item.name} is for a delivery. Bring it to the Netizen Chef.`; return; }
+      if (item.quest) { pn.msg = parcelQuest(item.name) ? `That ${item.name} is for a delivery. Bring it to the Netizen Chef (or throw it away from its menu to cancel the delivery).` : `The delivery for this ${item.name} is over: throw it away from its menu.`; return; }
       if (def.startsQuest && !rogueDone.has(def.startsQuest)) { pn.msg = itemQuestMark(item.name) === '!' ? startItemQuest(item.name) : `Bring the ${item.name} to ${GIVERS[giverOf(def.startsQuest)].name}.`; return; }
       if (def.class === 'food') {   // eat one: its gains, up to the caps (refused when nothing would go up)
         const up = Object.entries(def.gain || {}).filter(([st]) => !(st in CAPS) || stats[st] < CAPS[st]);
@@ -4249,6 +4305,12 @@
       }
       if (questLocked(item.name)) { pn.msg = `Sparky wants to see the ${item.name}: it's a quest item until you bring it to her.`; return; }
       if (def.class === 'resource') { pn.msg = `${item.name} is a resource, used for crafting later.`; return; }
+      if (def.consume && def.consume.boost) {   // Ripperdoc boost: starts (or restarts) its timer
+        const k = def.consume.boost; boostUntil[k] = gameTime + BOOSTS[k].ms; syncBoosts();
+        if (k === 'strVial') stats.health = capped('health', stats.health + BOOSTS.strVial.hp);   // the new max HP comes filled
+        if ((item.count || 1) > 1) item.count--; else inventory.splice(pn.cursor, 1);
+        pn.msg = `Used ${item.name}: ${k === 'strVial' ? '+5 max HP, +3 STR' : '+10 HP a minute'} for ${BOOSTS[k].ms / 60000} min.`; playSfx('itemCrunchy'); renderStats(); return;
+      }
       if (def.consume) {   // consumable: use one (Tar Orb: +1 mana cap)
         if (def.consume.manaCap) { CAP_BASE.mana += def.consume.manaCap; recalcCaps(); }
         if ((item.count || 1) > 1) item.count--; else inventory.splice(pn.cursor, 1);
@@ -4347,7 +4409,8 @@
       if (use) opts.push({ label: use, act: 'use' });
       if (ui && ui.kind === 'scrap') { const row = scrapRows().find(r => r.idx === idx); if (row && row.right !== "won't buy") opts.push({ label: `Scrap  ${row.right}`, act: 'sell' }); }
       if (ui && ui.kind === 'shop' && SHOP_TABS[tabOf()].key === 'resources' && sellable(it)) opts.push(...sellOpts(idx));
-      if (!it.quest && !def.keep) { if (n > 1) opts.push({ label: 'Throw away 1', n: 1 }, { label: `Throw away all (${n})`, n }); else opts.push({ label: 'Throw away', n: 1 }); }
+      if (it.quest) opts.push({ label: 'Throw away (cancel delivery)', n: 1 });   // a delivery parcel: dropping it cancels its delivery
+      else if (!def.keep) { if (n > 1) opts.push({ label: 'Throw away 1', n: 1 }, { label: `Throw away all (${n})`, n }); else opts.push({ label: 'Throw away', n: 1 }); }
       if (!opts.length) { if (panels.inventory) panels.inventory.msg = def.keep ? `The ${it.name} opens a door: it stays with you.` : `That ${it.name} is for a delivery. Bring it to the Netizen Chef.`; itemMenu = null; return; }
       itemMenu = { idx, name: it.name, x, y, cursor: 0, opts };
     }
@@ -4390,6 +4453,7 @@
       const it = inventory[idx]; if (!it || it.name !== name) return;
       const left = (it.count || 1) - n;
       if (left > 0) it.count = left; else inventory.splice(idx, 1);
+      if (it.quest) { const q = parcelQuest(name); if (q) { quests.splice(quests.indexOf(q), 1); showHint(`Delivery cancelled: ${q.name}.`); } }   // a parcel: its delivery ends with it
       if (panels.inventory) { panels.inventory.cursor = Math.min(panels.inventory.cursor, Math.max(0, invSlots() - 1)); panels.inventory.msg = `Threw away ${n > 1 ? n + ' × ' : ''}${name}.`; }
       renderStats();
     }
@@ -4423,6 +4487,7 @@
 
     // ---- combat -----------------------------------------------------------------
     let gameTime = 0, lastFrame = performance.now();   // game clock: stops while a window is open
+    boostReady = true;
     let drips = [];    // the Drips in this zone (alive or lying as puddles)
     let drip = null;   // the Drip currently being updated / drawn / hit (the enemy code works on this one)
     let lootTarget = null;   // the beaten Drip whose loot window is open
@@ -4442,13 +4507,15 @@
                      lb_exp: { label: 'Top 1 Exp', icon: 'buffTopExp', color: '#b58cff', symbol: '★' },
                      lb_deals: { label: 'Top 1 Dealer', icon: 'buffTopDeals', color: '#f5c542', symbol: '$' },
                      lb_kills: { label: 'Top 1 Slayer', icon: 'buffTopKills', color: '#e5484d', symbol: '⚔' },
-                     lb_ach: { label: 'Top 1 Achiever', icon: 'buffTopAch', color: '#f5c542', symbol: '★' },
+                     lb_ach: { label: 'Top 1 Achiever', icon: 'buffTopAch', color: '#00e5ff', symbol: '★' },
                      injured: { label: 'injured', icon: 'statusInjured', color: '#e5484d', symbol: '♥', healthShare: 0.1, speed: 0.6 },
                      rezero: { label: 'ReZero', icon: 'talentReZero', color: '#4ea1ff', symbol: '⟲' },
                      arcane: { label: 'Arcane Violence', icon: 'talentArcaneViolence', color: '#e5484d', symbol: '✊' },
                      overclock: { label: 'Overclock', icon: 'talentSystemOverclock', color: '#e5484d', symbol: '⚡' },
                      poison: { label: 'poisoned', icon: 'statusPoison', color: '#9dff5c', symbol: '☠' },
                      rezeroCd: { label: 'ReZero recharging', icon: 'talentReZero', color: '#6f7d99', symbol: '⟲', dim: true },
+                     strVial: { label: 'Strength Vial', icon: 'strengthVial', color: '#e5484d', symbol: '+' },
+                     truffle: { label: 'Truffle Extract', icon: 'truffleExtract', color: '#9dff5c', symbol: '♥' },
                      expBoost: { label: 'Exp Booster', icon: 'achievements', color: '#f5c542', symbol: '★' },
                      telePad: { label: 'Tele-pad recharging', icon: 'telePad', color: '#6f7d99', symbol: '⌁', dim: true },
                      ceo: { label: 'free call ready', icon: 'talentCeoMindset', color: '#9dff5c', symbol: '☎' } };
@@ -4464,6 +4531,7 @@
       if (ocActive()) s.push({ key: 'overclock', left: (ocUntil - gameTime) / 1000, count: ocStacks });
       if (ceoFree()) s.push({ key: 'ceo' });
       if (gameTime < expBoostUntil) s.push({ key: 'expBoost', left: (expBoostUntil - gameTime) / 1000 });
+      for (const k in BOOSTS) if (boostOn(k)) s.push({ key: k, left: (boostUntil[k] - gameTime) / 1000 });
       if (gameTime < telePadReadyAt && hasTelePad()) s.push({ key: 'telePad', left: (telePadReadyAt - gameTime) / 1000 });
       for (const k in LB_BUFFS) if (lbActive[k]) s.push({ key: 'lb_' + k });   // leaderboard Top-1 buffs, while they last
       return s;
@@ -4687,6 +4755,8 @@
         case 'slowed': return `You walk ${Math.round(slowAmt * 100)}% slower.`;
         case 'injured': return `HP at ${Math.round(STATES.injured.healthShare * 100)}% or less: you walk ${Math.round((1 - STATES.injured.speed) * 100)}% slower.`;
         case 'expBoost': return 'Hall of Fame Exp Booster: +50% exp from everything.';
+        case 'strVial': return 'Ripperdoc Strength Vial: +5 max HP and +3 STR.';
+        case 'truffle': return 'Ripperdoc Truffle Extract: +10 HP a minute.';
         case 'telePad': return 'The Tele-pad is recharging: it can take you back to the city again when this runs out.';
         case 'poison': return `You lose ${Math.round(SPORE.poisonPct * 100)}% of your max HP every second, and your HP doesn't regenerate.`;
         case 'lb_exp': return `#1 in exp this month: ${buffText('exp')} while you hold the spot.`;
@@ -6265,6 +6335,32 @@
     ];
     let expBoostUntil = gameTime + (saved.expBoostLeft || 0);
     const expBoost = () => gameTime < expBoostUntil ? 1.5 : 1;
+    // ---- Ripperdoc Clinic: closed until Fresh sample is handed in (the Sealed Sample), then sells boosts for money + an ingredient ----
+    const clinicOpen = () => rogueDone.has('freshSample');
+    const RIPPER_ITEMS = [{ name: 'Strength Vial', price: 500, needs: 'Specimen Vial' }, { name: 'Truffle Extract', price: 500, needs: 'Glowcap Truffle' }];
+    function ripperRows() {
+      const q = quests.find(x => x.kind === 'rogue' && x.id === 'freshSample');
+      if (q) { const r = rqDef('freshSample'), pay = rqPay(r);
+        return [{ left: 'hand over the Sealed Sample', right: `+${pay.exp}${G.exp} +${pay.money}${G.money} + Strength Vial`, act() {
+          if (!countOf('Sealed Sample')) return '"No sample, no service." (You need the Sealed Sample from Sparky.)';
+          takeItems('Sealed Sample', 1);
+          addItem('Strength Vial', 1);   // the sample's slot is free now, so it always fits
+          quests.splice(quests.indexOf(q), 1); rogueDone.add('freshSample'); stats.money += pay.money; gainExp(pay.exp); coinBurst(coinOrigin(14, 70), pay.money);
+          playSfx('questComplete'); renderStats(); ui.cursor = 0;
+          return `${r.done} Quest complete: Fresh sample. +${pay.exp}${G.exp}, +${pay.money}${G.money}. New quest from Sparky: The sealed wing.`;
+        } }];
+      }
+      if (!clinicOpen()) return [{ left: 'ok', right: '', act() { ui = null; } }];
+      return RIPPER_ITEMS.map(it => { const def = itemDef(it.name);
+        return { left: it.name, right: `${it.price}${G.money} + 1 ${it.needs}`, act() {
+          if (stats.money < it.price) return `Not enough money: ${it.price}${G.money} needed.`;
+          if (!countOf(it.needs)) return `"I need 1 ${it.needs} for that." (${it.needs === 'Specimen Vial' ? 'Quarantine Labs piles' : 'deep forest, dug up under the trees'})`;
+          const room = inventory.length < invSlots() || inventory.some(x => x.name === it.name && (x.count || 1) < def.stack) || countOf(it.needs) === 1;   // the last ingredient frees its slot
+          if (!room) return fullMsg();
+          stats.money -= it.price; takeItems(it.needs, 1); addItem(it.name, 1); playSfx('money'); renderStats();
+          return `Bought ${it.name}. ${def.desc}`;
+        } }; });
+    }
     function hofRows() {
       return [...HOF_ITEMS.map(it => ({ hof: it, left: it.name, right: `${it.price} ⬢`, act() {
         const no = it.can ? it.can() : ''; if (no) return no;
@@ -6973,6 +7069,15 @@
     // regen per minute grows with level (health × 1.06, mana × 1.09 per level); fractions are saved up until they make a whole point
     const healthRegen = () => (levelMult('healthRegen', hero.level) + equipSum('hpRegen')) * talentRegenMult(), manaRegen = () => levelMult('manaRegen', hero.level);
     let healthRegenBuf = 0, manaRegenBuf = 0;
+    function syncBoosts() {   // max HP follows the Strength Vial (on, and when it runs out)
+      const on = boostOn('strVial'); if (on === boostHpWas) return;
+      boostHpWas = on; recalcCaps(); stats.health = Math.min(stats.health, CAPS.health); renderStats();
+    }
+    function updateTruffle(dt) {   // Truffle Extract: its own regen, on top of the normal one (poison doesn't stop it)
+      if (!boostOn('truffle') || stats.health <= 0 || stats.health >= CAPS.health) return;
+      truffleBuf += dt * BOOSTS.truffle.regenPerMin / 60000; const n = Math.floor(truffleBuf); if (!n) return;
+      truffleBuf -= n; stats.health = capped('health', stats.health + n); renderStats();
+    }
     function updateHeroHealth() {
       if (stats.health <= 0 || stats.health >= CAPS.health || gameTime < poisonUntil) { heroHealthT = gameTime + HERO_HEALTH_REGEN_MS; return; }   // poison stops regen
       if (gameTime >= heroHealthT) {
@@ -6998,6 +7103,7 @@
       if (inventory.length >= invSlots()) return 1;
       const def = itemDef(name) || {}; inventory.push({ name, class: def.class, kind: def.kind, count: 1, quest: true }); return 0;
     }
+    const parcelQuest = name => quests.find(q => q.kind === 'delivery' && q.item === name);   // the delivery a parcel belongs to (none: a leftover)
     const questItemOf = q => inventory.find(x => x.name === q.item && x.quest) || inventory.find(x => x.name === q.item);   // (older saves: unflagged)
     // put n of an item into the inventory: fills existing stacks first, then empty slots. Returns what didn't fit.
     function addItem(name, n) {
@@ -7461,6 +7567,7 @@
       syncChef();
       if (dt) { checkDeliveries(); checkRogueQuests(); checkPromoReady(); for (let i = piles.length - 1; i >= 0; i--) if (gameTime >= piles[i].until) piles.splice(i, 1);
         updateDrips(); withBoss('queen', updateQueenFx); withBoss('hloader', updateHLWaves); withBoss('g0', updateG0Fx); updateHarvest(); updatePowering(); updateProjectiles(dt); updateShots(dt); updateHeroDot(); updatePoison(); updateHeroMana(); updateHeroHealth(); updateHitParts(dt); updateSwing(); }
+      syncBoosts(); if (dt) updateTruffle(dt);
       updateHeroMove(dt);   // free movement (game time: stops behind windows)
       sealedNotice(); if (dt) updateTeleCast(); syncTeleBtn();
       updateMouseAim();
@@ -9186,7 +9293,7 @@
       ctx.fillStyle = col; lines.slice(0, 2).forEach((l, i, a) => ctx.fillText(l, nameX, sy + big / 2 - 14 + (i - (a.length - 1) / 2) * (fs + 4)));
       fit(rqTag(r), nameW, 18); ctx.fillStyle = r.boss ? '#ff9a2e' : '#8a8a8a'; ctx.fillText(rqTag(r), nameX, sy + big - 10);
       // goal + progress (middle)
-      const talk = rq.mode === 'talk', done = rq.mode === 'ready' || talk, n = done ? r.need : Math.min(r.need, r.prog());
+      const talk = rq.mode === 'talk', done = rq.mode === 'ready' || talk, n = done ? r.need : Math.min(r.need, rqOfferProg(r)) || 0;
       ctx.font = `600 22px ${MONO}`; ctx.fillStyle = '#fff';
       const goal = wrapText(r.goal, midW).slice(0, 2);
       goal.forEach((l, i) => ctx.fillText(l, midX, sy + 14 + i * 28));
@@ -9523,7 +9630,7 @@
       const info = ui.kind === 'controls';          // read-only list, nothing to select
       const rowH = info ? 38 : list.some(r => r.news) ? 186 : list.some(r => r.rq) ? 150 : ui.kind === 'shop' || ui.kind === 'work' || ui.kind === 'rest' ? 150 : ui.kind === 'quests' ? 96 : ui.kind === 'leaderboard' ? 60 : ui.kind === 'loot' || ui.kind === 'scrap' ? 88 : ui.kind === 'cheat' ? 50 : ui.kind === 'spelltech' ? 262 : 64;   // shop and loot rows are taller for the item pictures
       const hero = ui.kind === 'hero', inv = ui.kind === 'inventory';
-      const wide = hero || inv || ['leaderboard', 'quests', 'shop', 'scrap', 'bank', 'save', 'load', 'logout', 'guest', 'sound', 'decals', 'spelltech', 'rogue', 'sparky', 'pixi', 'vesper'].includes(ui.kind);
+      const wide = hero || inv || ['leaderboard', 'quests', 'shop', 'scrap', 'bank', 'save', 'load', 'logout', 'deleteAcc', 'guest', 'sound', 'decals', 'spelltech', 'rogue', 'sparky', 'pixi', 'vesper'].includes(ui.kind);
       const pw = (ui.kind === 'spelltech' || ui.kind === 'shop' || ui.kind === 'work' || ui.kind === 'rest' || ui.kind === 'rogue' || ui.kind === 'sparky' || ui.kind === 'pixi' || ui.kind === 'vesper' ? 15 : wide ? 11 : 9) * TILE;
       ctx.font = '26px ' + MONO;
       const wtext = typeof WINDOW_TEXT[ui.kind] === 'function' ? WINDOW_TEXT[ui.kind]() : WINDOW_TEXT[ui.kind];
@@ -10703,6 +10810,27 @@
       else showStartScreen();   // a new account's first run
       lastAutosave = Date.now();
       refreshLeaderboard();
+    }
+    // delete the account (GDPR erasure): one more "are you sure", then the server removes the user; saves, leaderboards,
+    // hero name and session rows go with it (on delete cascade + delete_my_account). Without the SQL the player is told to ask by email.
+    async function deleteAccount() {
+      if (!sb || !account) return;
+      ui = null; closePanels();
+      const name = (heroName || 'your hero').replace(/[<>&]/g, '');
+      const sure = await askConfirm({ title: 'Delete account?', icon: '✕',
+        text: `Last check: <b>${name}</b>, every save and every leaderboard entry will be gone for good.`, yes: 'Delete forever', no: 'Keep it' });
+      if (!sure || !account) return;
+      const { error } = await sb.rpc('delete_my_account');
+      if (error) {
+        await askConfirm({ title: 'Couldn’t delete the account', icon: '!', text: `The server said: ${String(error.message).replace(/[<>&]/g, '')}. Try again later, or ask for deletion using the contact details in the privacy notice.`, yes: 'OK', no: '' });
+        return;
+      }
+      if (sessionHeld) { sessionHeld = false; clearInterval(sessionTimer); }
+      try { await sb.auth.signOut({ scope: 'local' }); } catch {}
+      store.set(STORE.last, null); store.set(GUEST_RUN, null);
+      account = null; heroName = null; slotInfo = { state: 'loading', slots: {} }; cheatsUnlocked = false;
+      stopMusic(); newGame(); renderStats();
+      showAccount('create', 'Your account and all its data were deleted.', true);
     }
     async function logOut() {
       ui = null; closePanels(); cheatsUnlocked = false;

@@ -8,6 +8,7 @@ const logos = {
   portfolio: 'andrii.portfolio',
   contact: 'andrii.contact',
   hk: 'andrii.香港',
+  privacy: 'andrii.privacy',
 };
 
 // the archived Hong Kong planner is not linked from anywhere (it still works at /hk-planner)
@@ -100,7 +101,7 @@ const navLinks = [
     <!-- Footer -->
     <footer class:list={['border-t border-line px-4 py-6', !feed && 'mt-16']}>
       <div class="max-w-2xl mx-auto flex items-center justify-between text-xs text-muted">
-        <span>© 2026 Andrii Kashevskyi</span>
+        <span>© 2026 Andrii Kashevskyi · <a href="/privacy" class="hover:text-fg transition-colors">privacy</a></span>
         <label class="toggle-switch" aria-label="Toggle dark mode">
           <input type="checkbox" id="dark-toggle" />
           <span class="slider"></span>

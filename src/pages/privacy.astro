@@ -1,0 +1,67 @@
+---
+import Layout from '../layouts/Layout.astro';
+// Privacy notice for andrii.blog and Neon Hustle (UK GDPR). Update "Last updated" whenever this page changes.
+const CONTACT_EMAIL = '';   // TODO: add the contact email for privacy requests
+---
+
+<Layout page="privacy">
+  <h1>Privacy notice</h1>
+  <p class="text-sm text-muted">Last updated: 22 October 2026</p>
+
+  <p>This notice explains what personal data this website (andrii.blog) and the game on it, Neon Hustle, collect, why, and what your rights are. I keep it as short as I can, and I don't use analytics, advertising or tracking cookies.</p>
+
+  <h2>Who is responsible</h2>
+  <p>Andrii Kashevskyi, an individual based in London, United Kingdom, is the controller of the personal data described here.</p>
+  {CONTACT_EMAIL
+    ? <p>For any privacy question or request, email <a href={`mailto:${CONTACT_EMAIL}`}>{CONTACT_EMAIL}</a>.</p>
+    : <p>A contact email for privacy questions and requests will be added here shortly.</p>}
+
+  <h2>Visiting the website</h2>
+  <p>When you open any page, your browser connects to these services, which receive your IP address and basic browser information as part of delivering the page:</p>
+  <ul>
+    <li><strong>GitHub Pages</strong> (GitHub, Inc.) hosts the website and keeps server logs for security.</li>
+    <li><strong>Google Fonts</strong> (Google) supplies the website's font.</li>
+    <li><strong>Credly</strong> shows the IBM certificate badge on the portfolio page, using its own script.</li>
+    <li><strong>jsDelivr</strong> supplies a code library the game needs to connect to its server.</li>
+  </ul>
+  <p>I don't receive or store this information myself. The lawful basis is my legitimate interest in running and securing the website.</p>
+
+  <h2>Neon Hustle game accounts</h2>
+  <p>You can play as a guest without giving any personal data. If you create an account, I keep:</p>
+  <ul>
+    <li><strong>Your email address and password</strong>, to log you in and send the confirmation email. The password is stored only in encrypted (hashed) form.</li>
+    <li><strong>Your hero name</strong>, which is shown to other players on the leaderboards.</li>
+    <li><strong>Your game saves</strong> (up to three).</li>
+    <li><strong>Leaderboard results</strong>: level, experience, deals, enemies defeated and achievement points, shown publicly next to your hero name.</li>
+    <li><strong>The device you're playing on</strong>, as a short label such as "iPhone (Safari)", a random session ID and when you were last active. This stops two devices overwriting each other's progress.</li>
+    <li><strong>Technical logs</strong> kept by the account server, including IP addresses, for security.</li>
+  </ul>
+  <p>The lawful basis for your account, saves and login is the agreement to provide you the game (contract). For the leaderboards, the one-device check and security logs, it's my legitimate interest in running a fair, working game.</p>
+  <p>Accounts and game data are stored by <strong>Supabase</strong>, on servers in the UK/EU region. Supabase processes the data on my behalf.</p>
+  <p>I never sell your data, send marketing emails or use your data for automated decisions about you.</p>
+
+  <h2>Storage on your device</h2>
+  <p>The website and the game store a few items in your browser (local and session storage). Each one is needed for something you've asked for:</p>
+  <ul>
+    <li>Your light or dark theme choice.</li>
+    <li>Game settings (sound, graphics, controls).</li>
+    <li>Your login session, so you stay logged in.</li>
+    <li>The email you last logged in with, to fill in the login form.</li>
+    <li>A guest run waiting for you to create an account, kept for up to 7 days.</li>
+    <li>A random ID for the current browser tab.</li>
+  </ul>
+  <p>None of these are used for tracking or advertising, so they don't need consent. You can clear them at any time in your browser settings. The Credly badge script on the portfolio page may set its own cookies; see Credly's privacy policy.</p>
+
+  <h2>How long data is kept</h2>
+  <p>Your account data is kept until you delete your account, or until the game is shut down. You can delete your account at any time in the game: <em>Menu → Settings → delete account</em>. This removes your account, saves, hero name, leaderboard entries and session record straight away. Copies may remain in server backups for a short time before they're overwritten.</p>
+
+  <h2>Transfers outside the UK</h2>
+  <p>GitHub, Google, Credly and jsDelivr may process data outside the UK, including in the United States. Where that happens, they rely on safeguards recognised under UK law, such as the UK-US data bridge or standard contractual clauses.</p>
+
+  <h2>Children</h2>
+  <p>You must be 13 or older to create a game account. If you believe a child under 13 has created an account, please get in touch so it can be deleted.</p>
+
+  <h2>Your rights</h2>
+  <p>Under UK data protection law, you can ask to access, correct or delete your personal data, to restrict or object to how it's used, and to receive your data in a portable format. Most of this you can do yourself in the game; for anything else, use the contact details above.</p>
+  <p>If you're unhappy with how your data is handled, you can complain to the Information Commissioner's Office at <a href="https://ico.org.uk/make-a-complaint/" target="_blank" rel="noopener">ico.org.uk</a>.</p>
+</Layout>
