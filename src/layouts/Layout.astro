@@ -1,6 +1,36 @@
 ---
 import '../styles/global.css';
 const { page = 'home', feed = false } = Astro.props;   // feed: the blog list, one post per screen with scroll snapping
+// SEO: description, link preview (Open Graph) and structured data. A blog post passes its own title, description and date.
+const { description, ogTitle, image = '/art/ui/og-game.jpg', type = 'website', published } = Astro.props;
+const DESCRIPTIONS = {
+  home: 'Andrii Kashevskyi, a Digital Marketing student in London. I build Neon Hustle, a cyberpunk browser game, run a Rust server community and write about marketing, games and AI.',
+  blog: 'Blog posts by Andrii Kashevskyi: building Neon Hustle, marketing experiments and the AI tools I use.',
+  portfolio: 'Portfolio of Andrii Kashevskyi: Digital Marketing at Anglia Ruskin University, certificates and work experience in sales, hospitality and e-commerce.',
+  contact: 'How to get in touch with Andrii Kashevskyi.',
+  privacy: 'Privacy notice for andrii.blog and the Neon Hustle browser game.',
+};
+const OG_TITLES = {
+  home: 'Andrii Kashevskyi: Digital Marketing student and game builder',
+  blog: 'Blog · Andrii Kashevskyi',
+  portfolio: 'Portfolio · Andrii Kashevskyi',
+  contact: 'Contact · Andrii Kashevskyi',
+  privacy: 'Privacy notice · andrii.blog',
+};
+const metaDesc = description || DESCRIPTIONS[page] || DESCRIPTIONS.home;
+const metaTitle = ogTitle || OG_TITLES[page] || 'Andrii Kashevskyi';
+const canonical = new URL(Astro.url.pathname, Astro.site).href;
+const imageUrl = new URL(image, Astro.site).href;
+const LINKEDIN = 'https://www.linkedin.com/in/andrii-kashevskyi/';
+const person = { '@type': 'Person', name: 'Andrii Kashevskyi', url: 'https://andrii.blog/', sameAs: [LINKEDIN],
+  jobTitle: 'Digital Marketing student', affiliation: { '@type': 'CollegeOrUniversity', name: 'Anglia Ruskin University' } };
+const jsonLd = page === 'home'
+  ? { '@context': 'https://schema.org', '@graph': [{ ...person, '@id': 'https://andrii.blog/#me' },
+      { '@type': 'WebSite', name: 'andrii.blog', url: 'https://andrii.blog/', author: { '@id': 'https://andrii.blog/#me' } }] }
+  : type === 'article'
+  ? { '@context': 'https://schema.org', '@type': 'BlogPosting', headline: metaTitle, description: metaDesc, url: canonical, image: imageUrl,
+      datePublished: published ? new Date(published).toISOString().slice(0, 10) : undefined, author: person }
+  : null;
 
 const logos = {
   home: 'andrii.kashevskyi',
@@ -20,7 +50,7 @@ const navLinks = [
 ---
 
 <!doctype html>
-<html lang="en" class:list={[feed && 'feed']}>
+<html lang="en-GB" class:list={[feed && 'feed']}>
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
@@ -28,6 +58,17 @@ const navLinks = [
     <meta name="generator" content={Astro.generator} />
     {page === 'hk' && <meta name="robots" content="noindex, nofollow" />}
     <title>{logos[page]}</title>
+    <meta name="description" content={metaDesc} />
+    <link rel="canonical" href={canonical} />
+    <meta property="og:type" content={type} />
+    <meta property="og:site_name" content="andrii.blog" />
+    <meta property="og:title" content={metaTitle} />
+    <meta property="og:description" content={metaDesc} />
+    <meta property="og:url" content={canonical} />
+    <meta property="og:image" content={imageUrl} />
+    <meta property="og:locale" content="en_GB" />
+    <meta name="twitter:card" content="summary_large_image" />
+    {jsonLd && <script type="application/ld+json" set:html={JSON.stringify(jsonLd)} />}
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet" />

@@ -3,7 +3,7 @@ import Layout from './Layout.astro';
 const { frontmatter } = Astro.props;
 ---
 
-<Layout page="blog">
+<Layout page="blog" ogTitle={frontmatter.title} description={frontmatter.description} type="article" published={frontmatter.date}>
   <div class="not-prose mb-8 flex justify-end">
     <a href="/blog" class="text-faint hover:text-fg transition-colors text-xl leading-none">✕</a>
   </div>
