@@ -7,7 +7,7 @@ export const GET: APIRoute = ({ site }) => {
   const day = (d: string | Date) => new Date(d).toISOString().slice(0, 10);
   const pages: { path: string; lastmod?: string }[] = [
     { path: '/' }, { path: '/blog/' }, { path: '/portfolio/' }, { path: '/contact/' }, { path: '/privacy/' },
-    { path: '/game.html' }, { path: '/hustlepedia.html' },
+    { path: '/game.html' }, { path: '/game3d/' }, { path: '/hustlepedia.html' },
     ...posts.map(p => ({ path: `${p.url}/`, lastmod: p.frontmatter.date ? day(p.frontmatter.date) : undefined })),
   ];
   const body = `<?xml version="1.0" encoding="UTF-8"?>

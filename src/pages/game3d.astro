@@ -1,0 +1,73 @@
+---
+// Neon Hustle 3D: the Unity web build, full window. The build itself lives in /public/neonhustle3d/ (Unity: Build Profiles → Web,
+// template "NeonHustle", build folder blog/public/neonhustle3d; Unity adds a NeonHustle3D subfolder). Until a build is there, the page says it's coming soon.
+const title = 'Neon Hustle 3D (early build) · andrii.blog';
+const description = 'Neon Hustle rebuilt in 3D with Unity: the same rainy neon city, deals, shops and fights. Early build, play in your browser on a computer.';
+const canonical = new URL('/game3d/', Astro.site).href;
+const image = new URL('/art/ui/og-game.jpg', Astro.site).href;
+---
+<!doctype html>
+<html lang="en-GB">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <link rel="icon" type="image/png" href="/favicon.png" />
+  <title>{title}</title>
+  <meta name="description" content={description} />
+  <link rel="canonical" href={canonical} />
+  <meta property="og:type" content="website" />
+  <meta property="og:site_name" content="andrii.blog" />
+  <meta property="og:title" content="Neon Hustle 3D: my cyberpunk game, rebuilt in Unity" />
+  <meta property="og:description" content={description} />
+  <meta property="og:url" content={canonical} />
+  <meta property="og:image" content={image} />
+  <meta name="twitter:card" content="summary_large_image" />
+  <style>
+    :root { color-scheme: dark; }
+    html, body { margin: 0; height: 100%; background: #000; color: #cfcfcf; font: 14px/1.4 ui-monospace, "SF Mono", Menlo, Consolas, monospace; }
+    body { display: flex; flex-direction: column; }
+    header { display: flex; align-items: center; gap: 16px; padding: 8px 16px; border-bottom: 2px solid rgba(255,255,255,0.15); flex: none; }
+    header a { color: #00e5ff; text-decoration: none; }
+    header a:hover { color: #fff; }
+    header .title { color: #fff; font-weight: 600; }
+    header .hint { color: #8a8a8a; margin-left: auto; font-size: 12px; text-align: right; }
+    main { flex: 1; position: relative; }
+    iframe { position: absolute; inset: 0; width: 100%; height: 100%; border: 0; background: #000; }
+    .soon { position: absolute; inset: 0; display: none; place-items: center; text-align: center; padding: 24px; }
+    .soon .box { border: 2px solid #fff; border-radius: 18px; padding: 32px 40px; max-width: 520px; }
+    .soon h1 { color: #fff; font-size: 28px; margin: 0 0 12px; }
+    .soon a { color: #00e5ff; }
+    .phone { display: none; color: #f5c542; }
+    @media (max-width: 760px) { header .hint { display: none; } .phone { display: inline; } }
+  </style>
+</head>
+<body>
+  <header>
+    <a href="/">← andrii.blog</a>
+    <span class="title">Neon Hustle 3D</span>
+    <span>early build</span>
+    <span class="phone">· best on a computer</span>
+    <span class="hint">WASD move · Shift run · mouse look · click punch · E use · I bag · Esc menu<br />same account as the <a href="/game.html">2D game</a></span>
+  </header>
+  <main>
+    <iframe id="game" title="Neon Hustle 3D" allow="fullscreen; autoplay; gamepad" allowfullscreen></iframe>
+    <div class="soon" id="soon">
+      <div class="box">
+        <h1>Coming soon</h1>
+        <p>The 3D version isn't uploaded yet. Meanwhile, play the original: <a href="/game.html">Neon Hustle</a>.</p>
+      </div>
+    </div>
+  </main>
+  <script is:inline>
+    // load the Unity build if it's there; otherwise show "coming soon"
+    // Unity puts the build in a folder named after the product (public/neonhustle3d/NeonHustle3D/); older layout as a fallback
+    const BUILDS = ['/neonhustle3d/NeonHustle3D/index.html', '/neonhustle3d/index.html'];
+    (async () => {
+      for (const b of BUILDS) {
+        try { const r = await fetch(b, { method: 'HEAD' }); if (r.ok) { document.getElementById('game').src = b; return; } } catch {}
+      }
+      document.getElementById('soon').style.display = 'grid';
+    })();
+  </script>
+</body>
+</html>
