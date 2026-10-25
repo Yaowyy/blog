@@ -7,7 +7,12 @@
   <!-- Neon Hustle 3D web template: full window, black, monospace, a neon loading bar (the web game's style) -->
   <style>
     html, body { margin: 0; height: 100%; overflow: hidden; background: #000; }
-    #unity-canvas { width: 100%; height: 100%; display: block; background: #000; outline: none; }
+    #unity-canvas { width: 100%; height: 100%; display: block; background: #000; outline: none; touch-action: none; }
+    /* phones held upright: ask to turn sideways (the game is laid out for landscape) */
+    #turn { position: fixed; inset: 0; display: none; place-items: center; text-align: center; background: #000; z-index: 5;
+            font: 18px/1.5 ui-monospace, "SF Mono", Menlo, Consolas, monospace; color: #cfcfcf; padding: 24px; }
+    #turn b { color: #fff; font-size: 22px; }
+    @media (orientation: portrait) and (pointer: coarse) { #turn { display: grid; } }
     #loader { position: fixed; inset: 0; display: grid; place-items: center; background: #000;
               font: 16px/1.4 ui-monospace, "SF Mono", Menlo, Consolas, monospace; color: #cfcfcf; }
     #loader .box { width: min(520px, 86vw); border: 2px solid #fff; border-radius: 18px; padding: 28px 32px; }
@@ -21,6 +26,7 @@
 </head>
 <body>
   <canvas id="unity-canvas" tabindex="-1"></canvas>
+  <div id="turn"><div><b>↻ Turn your phone sideways</b><br>Neon Hustle 3D plays in landscape.</div></div>
   <div id="loader">
     <div class="box">
       <h1>NEON HUSTLE 3D</h1>
